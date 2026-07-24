@@ -1,5 +1,648 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from math import ceil
+from typing import Any
+
 from sqlalchemy import text
+
 from app.db.database import engine
+
+
+DOSSIER_STATUSES = {
+    "LEAD",
+    "DRAFT",
+    "QUOTED",
+    "WAITING_PACKAGES",
+    "IN_WAREHOUSE",
+    "READY_TO_SHIP",
+    "IN_TRANSIT",
+    "ARRIVED",
+    "CUSTOMS",
+    "READY_FOR_DELIVERY",
+    "DELIVERED",
+    "COMPLETED",
+    "CLOSED",
+    "CANCELLED",
+}
+DOSSIER_CASE_TYPES = {
+    "UNKNOWN",
+    "IMPORT",
+    "EXPORT",
+    "PURCHASE",
+    "QUOTE",
+    "PERSONAL_EFFECTS",
+    "COMMERCIAL_CARGO",
+}
+DOSSIER_INTAKE_STATUSES = {"PARTIAL", "COMPLETE", "WAITING_CLIENT", "WAITING_PACKAGE"}
+DOSSIER_VALIDATION_STATUSES = {"PENDING", "VALIDATED", "REJECTED", "NEEDS_REVIEW"}
+DOSSIER_PAYMENT_STATUSES = {"PENDING", "WAITING", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"}
+
+
+def _safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_safe(item) for item in value]
+    return value
+
+
+def _one(row) -> dict | None:
+    return _safe(dict(row._mapping)) if row else None
+
+
+def _table_exists(conn, table_name: str) -> bool:
+    return bool(conn.execute(text("select to_regclass(:table_name)"), {"table_name": f"public.{table_name}"}).scalar())
+
+
+def _dossier_reference_sql() -> str:
+    return "coalesce(d.tracking_id, 'DOS-' || upper(left(d.id::text, 8)))"
+
+
+def _client_display_sql() -> str:
+    return "coalesce(to_jsonb(c)->>'display_name', c.name, to_jsonb(c)->>'company_name', c.phone, c.email, 'Client sans nom')"
+
+
+def _build_dossier_filters(
+    org_id: str,
+    *,
+    q: str | None,
+    status_global: str | None,
+    case_type: str | None,
+    intake_status: str | None,
+    validation_status: str | None,
+    payment_status: str | None,
+    client_id: str | None,
+) -> tuple[str, dict]:
+    filters = ["d.org_id = :org_id"]
+    params: dict[str, Any] = {"org_id": org_id}
+
+    if q:
+        filters.append(
+            f"""(
+                {_dossier_reference_sql()} ilike :q
+                or coalesce(d.goods_type, '') ilike :q
+                or coalesce(d.origin_city, '') ilike :q
+                or coalesce(d.origin_country, '') ilike :q
+                or coalesce(d.destination_city, '') ilike :q
+                or coalesce(d.destination_country, '') ilike :q
+                or {_client_display_sql()} ilike :q
+                or coalesce(c.phone, '') ilike :q
+                or coalesce(c.email, '') ilike :q
+            )"""
+        )
+        params["q"] = f"%{q.strip()}%"
+    if status_global:
+        filters.append("d.status_global = :status_global")
+        params["status_global"] = status_global
+    if case_type:
+        filters.append("d.case_type = :case_type")
+        params["case_type"] = case_type
+    if intake_status:
+        filters.append("d.intake_status = :intake_status")
+        params["intake_status"] = intake_status
+    if validation_status:
+        filters.append("d.validation_status = :validation_status")
+        params["validation_status"] = validation_status
+    if payment_status:
+        filters.append("d.payment_status = :payment_status")
+        params["payment_status"] = payment_status
+    if client_id:
+        filters.append("d.client_id = :client_id")
+        params["client_id"] = client_id
+
+    return " and ".join(filters), params
+
+
+def list_dossiers(
+    org_id: str,
+    *,
+    q: str | None = None,
+    status_global: str | None = None,
+    case_type: str | None = None,
+    intake_status: str | None = None,
+    validation_status: str | None = None,
+    payment_status: str | None = None,
+    client_id: str | None = None,
+    page: int = 1,
+    page_size: int = 30,
+    sort: str = "updated_desc",
+) -> dict:
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+    offset = (page - 1) * page_size
+    where_clause, params = _build_dossier_filters(
+        org_id,
+        q=q,
+        status_global=status_global,
+        case_type=case_type,
+        intake_status=intake_status,
+        validation_status=validation_status,
+        payment_status=payment_status,
+        client_id=client_id,
+    )
+    order_by = {
+        "created_asc": "d.created_at asc",
+        "created_desc": "d.created_at desc",
+        "updated_asc": "d.updated_at asc nulls last, d.created_at asc",
+        "reference_asc": "dossier_reference asc",
+        "reference_desc": "dossier_reference desc",
+        "client_asc": "client_name asc nulls last",
+        "amount_desc": "coalesce(d.final_total, d.quoted_total, 0) desc",
+    }.get(sort, "d.updated_at desc nulls last, d.created_at desc")
+
+    with engine.connect() as conn:
+        total = conn.execute(
+            text(f"""
+                select count(*)::int
+                from dossiers d
+                left join clients c on c.id = d.client_id and c.org_id = d.org_id
+                where {where_clause}
+            """),
+            params,
+        ).scalar() or 0
+
+        rows = conn.execute(
+            text(f"""
+                select
+                    d.id::text,
+                    d.org_id,
+                    d.client_id::text,
+                    {_dossier_reference_sql()} dossier_reference,
+                    {_client_display_sql()} client_name,
+                    c.phone client_phone,
+                    c.email client_email,
+                    d.case_type,
+                    d.status_global,
+                    d.intake_status,
+                    d.validation_status,
+                    d.primary_channel,
+                    d.origin_country,
+                    d.origin_city,
+                    d.destination_country,
+                    d.destination_city,
+                    d.goods_type,
+                    d.estimated_weight_kg,
+                    d.estimated_volume_cbm,
+                    d.shipping_mode,
+                    d.tracking_id,
+                    d.quoted_total,
+                    d.quoted_currency,
+                    d.pricing_status,
+                    d.final_total,
+                    d.final_currency,
+                    d.payment_status,
+                    d.client_full_name,
+                    d.supplier_payment_amount,
+                    d.supplier_payment_currency,
+                    d.created_at,
+                    d.updated_at,
+                    coalesce(m.message_count, 0)::int message_count,
+                    coalesce(e.event_count, 0)::int event_count,
+                    coalesce(s.shipment_count, 0)::int shipment_count
+                from dossiers d
+                left join clients c on c.id = d.client_id and c.org_id = d.org_id
+                left join (
+                    select dossier_id, count(*) message_count
+                    from messages_raw
+                    where org_id = :org_id and dossier_id is not null
+                    group by dossier_id
+                ) m on m.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) event_count
+                    from dossier_events
+                    where org_id = :org_id
+                    group by dossier_id
+                ) e on e.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) shipment_count
+                    from shipments
+                    where org_id = :org_id and dossier_id is not null
+                    group by dossier_id
+                ) s on s.dossier_id = d.id
+                where {where_clause}
+                order by {order_by}
+                limit :limit offset :offset
+            """),
+            dict(params, limit=page_size, offset=offset),
+        ).fetchall()
+
+    return {
+        "items": [_safe(dict(row._mapping)) for row in rows],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": ceil(total / page_size) if total else 0,
+        },
+    }
+
+
+def dossier_stats(org_id: str) -> dict:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("""
+                select
+                    count(*)::int total,
+                    count(*) filter (where status_global not in ('COMPLETED', 'CLOSED', 'CANCELLED'))::int active,
+                    count(*) filter (where status_global in ('LEAD', 'DRAFT'))::int leads,
+                    count(*) filter (where status_global = 'QUOTED')::int quoted,
+                    count(*) filter (where status_global in ('WAITING_PACKAGES', 'IN_WAREHOUSE', 'READY_TO_SHIP'))::int waiting_packages,
+                    count(*) filter (where status_global = 'IN_TRANSIT')::int in_transit,
+                    count(*) filter (where status_global in ('DELIVERED', 'COMPLETED', 'CLOSED'))::int delivered,
+                    count(*) filter (where payment_status in ('PENDING', 'WAITING', 'PARTIAL', 'OVERDUE'))::int payment_pending,
+                    coalesce(sum(coalesce(final_total, quoted_total, 0)), 0) total_value
+                from dossiers
+                where org_id = :org_id
+            """),
+            {"org_id": org_id},
+        ).fetchone()
+    return _one(row) or {
+        "total": 0,
+        "active": 0,
+        "leads": 0,
+        "quoted": 0,
+        "waiting_packages": 0,
+        "in_transit": 0,
+        "delivered": 0,
+        "payment_pending": 0,
+        "total_value": 0,
+    }
+
+
+def get_dossier(org_id: str, dossier_id: str) -> dict | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(f"""
+                select
+                    d.id::text,
+                    d.org_id,
+                    d.client_id::text,
+                    {_dossier_reference_sql()} dossier_reference,
+                    {_client_display_sql()} client_name,
+                    c.phone client_phone,
+                    c.whatsapp_phone client_whatsapp_phone,
+                    c.email client_email,
+                    c.country client_country,
+                    c.city client_city,
+                    d.case_type,
+                    d.status_global,
+                    d.intake_status,
+                    d.validation_status,
+                    d.primary_channel,
+                    d.origin_country,
+                    d.origin_city,
+                    d.destination_country,
+                    d.destination_city,
+                    d.goods_type,
+                    d.estimated_weight_kg,
+                    d.estimated_volume_cbm,
+                    d.shipping_mode,
+                    d.tracking_id,
+                    d.quoted_total,
+                    d.quoted_currency,
+                    d.pricing_status,
+                    d.final_total,
+                    d.final_currency,
+                    d.payment_status,
+                    d.client_full_name,
+                    d.supplier_payment_amount,
+                    d.supplier_payment_currency,
+                    d.created_at,
+                    d.updated_at,
+                    coalesce(m.message_count, 0)::int message_count,
+                    coalesce(e.event_count, 0)::int event_count,
+                    coalesce(s.shipment_count, 0)::int shipment_count
+                from dossiers d
+                left join clients c on c.id = d.client_id and c.org_id = d.org_id
+                left join (
+                    select dossier_id, count(*) message_count
+                    from messages_raw
+                    where org_id = :org_id and dossier_id = :dossier_id
+                    group by dossier_id
+                ) m on m.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) event_count
+                    from dossier_events
+                    where org_id = :org_id and dossier_id = :dossier_id
+                    group by dossier_id
+                ) e on e.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) shipment_count
+                    from shipments
+                    where org_id = :org_id and dossier_id = :dossier_id
+                    group by dossier_id
+                ) s on s.dossier_id = d.id
+                where d.org_id = :org_id and d.id = :dossier_id
+                limit 1
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchone()
+
+        dossier = _one(row)
+        if not dossier:
+            return None
+
+        messages = conn.execute(
+            text("""
+                select id::text, sender_phone, message_text, raw_payload, created_at
+                from messages_raw
+                where org_id = :org_id and dossier_id = :dossier_id
+                order by created_at desc
+                limit 30
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
+        events = conn.execute(
+            text("""
+                select id::text, event_type, payload, created_at
+                from dossier_events
+                where org_id = :org_id and dossier_id = :dossier_id
+                order by created_at desc
+                limit 40
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
+        notifications = conn.execute(
+            text("""
+                select id::text, channel, recipient_phone, notification_type, message, status, provider, created_at, sent_at, failed_at, error_message
+                from notification_outbox
+                where org_id = :org_id and dossier_id = :dossier_id
+                order by created_at desc
+                limit 30
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
+        shipments = conn.execute(
+            text("""
+                select
+                    id::text,
+                    tracking_id,
+                    status,
+                    origin_country,
+                    origin_city,
+                    destination_country,
+                    destination_city,
+                    weight_kg as total_weight_kg,
+                    volume_cbm as total_volume_cbm,
+                    created_at,
+                    updated_at
+                from shipments
+                where org_id = :org_id and dossier_id = :dossier_id
+                order by created_at desc
+                limit 30
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
+
+    dossier["messages"] = [_safe(dict(row._mapping)) for row in messages]
+    dossier["events"] = [_safe(dict(row._mapping)) for row in events]
+    dossier["notifications"] = [_safe(dict(row._mapping)) for row in notifications]
+    dossier["shipments"] = [_safe(dict(row._mapping)) for row in shipments]
+    return dossier
+
+
+def _client_exists(conn, org_id: str, client_id: str) -> bool:
+    return bool(conn.execute(
+        text("select 1 from clients where org_id = :org_id and id = :client_id limit 1"),
+        {"org_id": org_id, "client_id": client_id},
+    ).scalar())
+
+
+def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
+    client_id = payload.get("client_id")
+    if not client_id:
+        raise ValueError("client_required")
+
+    with engine.begin() as conn:
+        if not _client_exists(conn, org_id, client_id):
+            raise ValueError("client_not_found")
+        row = conn.execute(
+            text("""
+                insert into dossiers (
+                    org_id, client_id, case_type, status_global, intake_status,
+                    validation_status, primary_channel, origin_country, origin_city,
+                    destination_country, destination_city, goods_type,
+                    estimated_weight_kg, estimated_volume_cbm, shipping_mode,
+                    tracking_id, quoted_total, quoted_currency, pricing_status,
+                    final_total, final_currency, payment_status, client_full_name,
+                    supplier_payment_amount, supplier_payment_currency
+                )
+                values (
+                    :org_id, :client_id, :case_type, :status_global, :intake_status,
+                    :validation_status, :primary_channel, :origin_country, :origin_city,
+                    :destination_country, :destination_city, :goods_type,
+                    :estimated_weight_kg, :estimated_volume_cbm, :shipping_mode,
+                    :tracking_id, :quoted_total, :quoted_currency, :pricing_status,
+                    :final_total, :final_currency, :payment_status, :client_full_name,
+                    :supplier_payment_amount, :supplier_payment_currency
+                )
+                returning id::text
+            """),
+            {
+                "org_id": org_id,
+                "client_id": client_id,
+                "case_type": payload.get("case_type") or "UNKNOWN",
+                "status_global": payload.get("status_global") or "LEAD",
+                "intake_status": payload.get("intake_status") or "PARTIAL",
+                "validation_status": payload.get("validation_status") or "PENDING",
+                "primary_channel": payload.get("primary_channel") or "manual",
+                "origin_country": payload.get("origin_country"),
+                "origin_city": payload.get("origin_city"),
+                "destination_country": payload.get("destination_country"),
+                "destination_city": payload.get("destination_city"),
+                "goods_type": payload.get("goods_type"),
+                "estimated_weight_kg": payload.get("estimated_weight_kg"),
+                "estimated_volume_cbm": payload.get("estimated_volume_cbm"),
+                "shipping_mode": payload.get("shipping_mode"),
+                "tracking_id": payload.get("tracking_id"),
+                "quoted_total": payload.get("quoted_total"),
+                "quoted_currency": payload.get("quoted_currency"),
+                "pricing_status": payload.get("pricing_status"),
+                "final_total": payload.get("final_total"),
+                "final_currency": payload.get("final_currency"),
+                "payment_status": payload.get("payment_status") or "PENDING",
+                "client_full_name": payload.get("client_full_name"),
+                "supplier_payment_amount": payload.get("supplier_payment_amount"),
+                "supplier_payment_currency": payload.get("supplier_payment_currency"),
+            },
+        ).fetchone()
+        dossier_id = row[0]
+        conn.execute(
+            text("""
+                insert into dossier_events (org_id, dossier_id, event_type, payload)
+                values (:org_id, :dossier_id, 'DOSSIER_CREATED', cast(:payload as jsonb))
+            """),
+            {
+                "org_id": org_id,
+                "dossier_id": dossier_id,
+                "payload": _json_payload({"user_id": user_id, "source": "dashboard"}),
+            },
+        )
+
+    created = get_dossier(org_id, dossier_id)
+    return created or {}
+
+
+def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) -> dict | None:
+    existing = get_dossier(org_id, dossier_id)
+    if not existing:
+        return None
+
+    allowed = {
+        "client_id", "case_type", "status_global", "intake_status", "validation_status",
+        "primary_channel", "origin_country", "origin_city", "destination_country",
+        "destination_city", "goods_type", "estimated_weight_kg", "estimated_volume_cbm",
+        "shipping_mode", "tracking_id", "quoted_total", "quoted_currency", "pricing_status",
+        "final_total", "final_currency", "payment_status", "client_full_name",
+        "supplier_payment_amount", "supplier_payment_currency",
+    }
+    data = {key: payload.get(key, existing.get(key)) for key in allowed}
+
+    with engine.begin() as conn:
+        if data.get("client_id") and not _client_exists(conn, org_id, data["client_id"]):
+            raise ValueError("client_not_found")
+        conn.execute(
+            text("""
+                update dossiers set
+                    client_id = :client_id,
+                    case_type = :case_type,
+                    status_global = :status_global,
+                    intake_status = :intake_status,
+                    validation_status = :validation_status,
+                    primary_channel = :primary_channel,
+                    origin_country = :origin_country,
+                    origin_city = :origin_city,
+                    destination_country = :destination_country,
+                    destination_city = :destination_city,
+                    goods_type = :goods_type,
+                    estimated_weight_kg = :estimated_weight_kg,
+                    estimated_volume_cbm = :estimated_volume_cbm,
+                    shipping_mode = :shipping_mode,
+                    tracking_id = :tracking_id,
+                    quoted_total = :quoted_total,
+                    quoted_currency = :quoted_currency,
+                    pricing_status = :pricing_status,
+                    final_total = :final_total,
+                    final_currency = :final_currency,
+                    payment_status = :payment_status,
+                    client_full_name = :client_full_name,
+                    supplier_payment_amount = :supplier_payment_amount,
+                    supplier_payment_currency = :supplier_payment_currency,
+                    updated_at = now()
+                where org_id = :org_id and id = :dossier_id
+            """),
+            dict(data, org_id=org_id, dossier_id=dossier_id),
+        )
+        conn.execute(
+            text("""
+                insert into dossier_events (org_id, dossier_id, event_type, payload)
+                values (:org_id, :dossier_id, 'DOSSIER_UPDATED', cast(:payload as jsonb))
+            """),
+            {
+                "org_id": org_id,
+                "dossier_id": dossier_id,
+                "payload": _json_payload({"user_id": user_id, "changes": payload}),
+            },
+        )
+    return get_dossier(org_id, dossier_id)
+
+
+def _json_payload(payload: dict) -> str:
+    import json
+
+    return json.dumps(payload, default=str, ensure_ascii=False)
+
+
+def export_dossiers(
+    org_id: str,
+    *,
+    q: str | None = None,
+    status_global: str | None = None,
+    case_type: str | None = None,
+    intake_status: str | None = None,
+    validation_status: str | None = None,
+    payment_status: str | None = None,
+    sort: str = "updated_desc",
+) -> list[dict]:
+    return list_dossiers(
+        org_id,
+        q=q,
+        status_global=status_global,
+        case_type=case_type,
+        intake_status=intake_status,
+        validation_status=validation_status,
+        payment_status=payment_status,
+        page=1,
+        page_size=5000,
+        sort=sort,
+    )["items"]
+
+
+def dossier_timeline(org_id: str, dossier_id: str, *, limit: int = 80) -> list[dict]:
+    dossier = get_dossier(org_id, dossier_id)
+    if not dossier:
+        return []
+
+    events: list[dict] = [
+        {
+            "id": f"dossier-created-{dossier_id}",
+            "type": "dossier",
+            "title": "Dossier créé",
+            "description": dossier.get("dossier_reference") or "Dossier créé",
+            "occurred_at": dossier.get("created_at"),
+            "metadata": {"status": dossier.get("status_global")},
+        }
+    ]
+
+    for item in dossier.get("events", []):
+        events.append({
+            "id": f"event-{item.get('id')}",
+            "type": "event",
+            "title": item.get("event_type") or "Événement dossier",
+            "description": "Événement opérationnel enregistré sur ce dossier.",
+            "occurred_at": item.get("created_at"),
+            "metadata": item.get("payload") or {},
+        })
+    for item in dossier.get("messages", []):
+        events.append({
+            "id": f"message-{item.get('id')}",
+            "type": "message",
+            "title": "Message client",
+            "description": item.get("message_text") or "Message reçu",
+            "occurred_at": item.get("created_at"),
+            "metadata": {"sender_phone": item.get("sender_phone")},
+        })
+    for item in dossier.get("shipments", []):
+        route = " → ".join(filter(None, [item.get("origin_city") or item.get("origin_country"), item.get("destination_city") or item.get("destination_country")]))
+        events.append({
+            "id": f"shipment-{item.get('id')}",
+            "type": "shipment",
+            "title": "Expédition liée",
+            "description": f"{item.get('tracking_id') or 'Expédition'}{f' · {route}' if route else ''}",
+            "occurred_at": item.get("created_at"),
+            "metadata": {"status": item.get("status")},
+        })
+    for item in dossier.get("notifications", []):
+        events.append({
+            "id": f"notification-{item.get('id')}",
+            "type": "notification",
+            "title": "Notification client",
+            "description": item.get("message") or item.get("notification_type") or "Notification",
+            "occurred_at": item.get("created_at"),
+            "metadata": {"status": item.get("status"), "channel": item.get("channel")},
+        })
+
+    return sorted(
+        [event for event in events if event.get("occurred_at")],
+        key=lambda event: str(event.get("occurred_at")),
+        reverse=True,
+    )[:limit]
 
 
 def get_dossier_detail(org_id: str, dossier_id: str):

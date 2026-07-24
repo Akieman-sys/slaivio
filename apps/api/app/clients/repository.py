@@ -13,6 +13,26 @@ from app.db.database import engine
 CLIENT_STATUSES = {"lead", "active", "pending", "inactive", "blocked"}
 CLIENT_TYPES = {"individual", "business", "agent", "partner"}
 CLIENT_SOURCES = {"manual", "whatsapp", "website", "referral", "import", "api"}
+CLIENT_EXPORT_COLUMNS = [
+    "display_name",
+    "name",
+    "company_name",
+    "phone",
+    "whatsapp_phone",
+    "email",
+    "country",
+    "city",
+    "customer_type",
+    "lifecycle_status",
+    "source",
+    "preferred_language",
+    "preferred_currency",
+    "credit_enabled",
+    "credit_limit",
+    "current_balance",
+    "total_spent",
+    "notes",
+]
 
 
 def _safe(value: Any) -> Any:
@@ -29,6 +49,10 @@ def _safe(value: Any) -> Any:
 
 def _one(row) -> dict | None:
     return _safe(dict(row._mapping)) if row else None
+
+
+def _table_exists(conn, table_name: str) -> bool:
+    return bool(conn.execute(text("select to_regclass(:table_name)"), {"table_name": f"public.{table_name}"}).scalar())
 
 
 def normalize_phone(value: str | None) -> str | None:
@@ -430,3 +454,295 @@ def client_stats(org_id: str) -> dict:
             {"org_id": org_id},
         ).fetchone()
     return _one(row) or {"total": 0, "leads": 0, "active": 0, "pending": 0, "inactive": 0, "blocked": 0, "new_this_month": 0}
+
+
+def find_client_duplicates(
+    org_id: str,
+    *,
+    client_id: str | None = None,
+    phone: str | None = None,
+    email: str | None = None,
+    name: str | None = None,
+    limit: int = 12,
+) -> list[dict]:
+    normalized_phone = normalize_phone(phone)
+    normalized_email = normalize_email(email)
+    normalized_name = (name or "").strip()
+
+    if client_id and (not normalized_phone and not normalized_email and not normalized_name):
+        client = get_client(org_id, client_id)
+        if not client:
+            return []
+        normalized_phone = normalize_phone(client.get("phone") or client.get("whatsapp_phone"))
+        normalized_email = normalize_email(client.get("email"))
+        normalized_name = (client.get("display_name") or client.get("name") or client.get("company_name") or "").strip()
+
+    clauses = ["org_id = :org_id", "deleted_at is null"]
+    params: dict[str, Any] = {"org_id": org_id, "limit": min(max(limit, 1), 30)}
+    signals: list[str] = []
+
+    if client_id:
+        clauses.append("id <> :client_id")
+        params["client_id"] = client_id
+    if normalized_phone:
+        signals.append("(phone = :phone or whatsapp_phone = :phone)")
+        params["phone"] = normalized_phone
+    if normalized_email:
+        signals.append("email = :email")
+        params["email"] = normalized_email
+    if normalized_name:
+        signals.append("(coalesce(display_name, '') ilike :name or coalesce(name, '') ilike :name or coalesce(company_name, '') ilike :name)")
+        params["name"] = f"%{normalized_name}%"
+
+    if not signals:
+        return []
+    clauses.append("(" + " or ".join(signals) + ")")
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(f"""
+                select
+                    id::text,
+                    coalesce(display_name, name, company_name, phone, email) display_name,
+                    name,
+                    company_name,
+                    phone,
+                    whatsapp_phone,
+                    email,
+                    country,
+                    city,
+                    customer_type,
+                    lifecycle_status,
+                    case
+                        when :phone is not null and (phone = :phone or whatsapp_phone = :phone) then 'phone'
+                        when :email is not null and email = :email then 'email'
+                        else 'name'
+                    end match_reason,
+                    created_at
+                from clients
+                where {" and ".join(clauses)}
+                order by
+                    case
+                        when :phone is not null and (phone = :phone or whatsapp_phone = :phone) then 1
+                        when :email is not null and email = :email then 2
+                        else 3
+                    end,
+                    updated_at desc
+                limit :limit
+            """),
+            params,
+        ).fetchall()
+    return [_safe(dict(row._mapping)) for row in rows]
+
+
+def client_timeline(org_id: str, client_id: str, *, limit: int = 50) -> list[dict]:
+    client = get_client(org_id, client_id)
+    if not client:
+        return []
+
+    events: list[dict] = [
+        {
+            "id": f"client-created-{client_id}",
+            "type": "client",
+            "title": "Client créé",
+            "description": client.get("display_name") or client.get("name") or "Fiche client créée",
+            "occurred_at": client.get("created_at"),
+            "metadata": {"status": client.get("lifecycle_status"), "source": client.get("source")},
+        }
+    ]
+    if client.get("updated_at") and client.get("updated_at") != client.get("created_at"):
+        events.append(
+            {
+                "id": f"client-updated-{client_id}",
+                "type": "client",
+                "title": "Client mis à jour",
+                "description": "Les informations de la fiche client ont été modifiées.",
+                "occurred_at": client.get("updated_at"),
+                "metadata": {},
+            }
+        )
+
+    with engine.connect() as conn:
+        if _table_exists(conn, "dossiers"):
+            rows = conn.execute(
+                text("""
+                    select
+                        id::text,
+                        coalesce(tracking_id, id::text) reference,
+                        coalesce(status_global, validation_status, intake_status, 'UNKNOWN') status,
+                        created_at
+                    from dossiers
+                    where org_id = :org_id and client_id = :client_id
+                    order by created_at desc
+                    limit 20
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchall()
+            for row in rows:
+                item = dict(row._mapping)
+                events.append(
+                    {
+                        "id": f"dossier-{item['id']}",
+                        "type": "dossier",
+                        "title": "Dossier créé",
+                        "description": f"{item.get('reference') or 'Dossier'} · {item.get('status') or 'Statut inconnu'}",
+                        "occurred_at": item.get("created_at"),
+                        "metadata": {"dossier_id": item.get("id"), "status": item.get("status")},
+                    }
+                )
+
+        if _table_exists(conn, "shipments"):
+            rows = conn.execute(
+                text("""
+                    select id::text, tracking_id, status, origin_city, origin_country, destination_city, destination_country, created_at
+                    from shipments
+                    where org_id = :org_id and client_id = :client_id
+                    order by created_at desc
+                    limit 20
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchall()
+            for row in rows:
+                item = dict(row._mapping)
+                route = " → ".join(filter(None, [item.get("origin_city") or item.get("origin_country"), item.get("destination_city") or item.get("destination_country")]))
+                events.append(
+                    {
+                        "id": f"shipment-{item['id']}",
+                        "type": "shipment",
+                        "title": "Expédition liée",
+                        "description": f"{item.get('tracking_id') or 'Expédition'}{f' · {route}' if route else ''}",
+                        "occurred_at": item.get("created_at"),
+                        "metadata": {"shipment_id": item.get("id"), "status": item.get("status")},
+                    }
+                )
+
+        if _table_exists(conn, "messages_raw"):
+            rows = conn.execute(
+                text("""
+                    select id::text, sender_phone, left(coalesce(message_text, ''), 140) message_text, created_at
+                    from messages_raw
+                    where org_id = :org_id and client_id = :client_id
+                    order by created_at desc
+                    limit 20
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchall()
+            for row in rows:
+                item = dict(row._mapping)
+                events.append(
+                    {
+                        "id": f"message-{item['id']}",
+                        "type": "message",
+                        "title": "Message reçu",
+                        "description": item.get("message_text") or item.get("sender_phone") or "Message client",
+                        "occurred_at": item.get("created_at"),
+                        "metadata": {"sender_phone": item.get("sender_phone")},
+                    }
+                )
+
+        if _table_exists(conn, "followup_tasks"):
+            rows = conn.execute(
+                text("""
+                    select id::text, followup_type, status, due_at, created_at
+                    from followup_tasks
+                    where org_id = :org_id and client_id = :client_id
+                    order by created_at desc
+                    limit 20
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchall()
+            for row in rows:
+                item = dict(row._mapping)
+                events.append(
+                    {
+                        "id": f"followup-{item['id']}",
+                        "type": "followup",
+                        "title": "Relance planifiée",
+                        "description": f"{item.get('followup_type') or 'Relance'} · {item.get('status') or 'Statut inconnu'}",
+                        "occurred_at": item.get("created_at"),
+                        "metadata": {"due_at": _safe(item.get("due_at")), "status": item.get("status")},
+                    }
+                )
+
+    events = [_safe(event) for event in events if event.get("occurred_at")]
+    events.sort(key=lambda event: event.get("occurred_at") or "", reverse=True)
+    return events[: min(max(limit, 1), 100)]
+
+
+def export_clients(org_id: str, **filters) -> list[dict]:
+    where_clause, params = _build_filters(
+        org_id,
+        filters.get("q"),
+        filters.get("status"),
+        filters.get("customer_type"),
+        filters.get("source"),
+        filters.get("country"),
+        filters.get("city"),
+    )
+    sort = filters.get("sort") or "created_desc"
+    order_by = {
+        "created_asc": "created_at asc",
+        "name_asc": "coalesce(display_name, name, phone, email) asc nulls last",
+        "name_desc": "coalesce(display_name, name, phone, email) desc nulls last",
+        "activity_desc": "last_activity_at desc nulls last, updated_at desc",
+        "activity_asc": "last_activity_at asc nulls last, updated_at asc",
+    }.get(sort, "created_at desc")
+    columns = ", ".join(CLIENT_EXPORT_COLUMNS)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(f"""
+                select {columns}
+                from clients
+                where {where_clause}
+                order by {order_by}
+            """),
+            params,
+        ).fetchall()
+    return [_safe(dict(row._mapping)) for row in rows]
+
+
+def import_clients(org_id: str, user_id: str, rows: list[dict]) -> dict:
+    created = 0
+    skipped = 0
+    errors: list[dict] = []
+    created_clients: list[dict] = []
+
+    for index, row in enumerate(rows, start=1):
+        payload = {
+            "display_name": row.get("display_name") or row.get("nom_affiche"),
+            "name": row.get("name") or row.get("nom") or row.get("client"),
+            "company_name": row.get("company_name") or row.get("entreprise"),
+            "tax_id": row.get("tax_id") or row.get("id_fiscal"),
+            "phone": row.get("phone") or row.get("telephone") or row.get("téléphone"),
+            "whatsapp_phone": row.get("whatsapp_phone") or row.get("whatsapp"),
+            "email": row.get("email"),
+            "country": row.get("country") or row.get("pays"),
+            "city": row.get("city") or row.get("ville"),
+            "address": row.get("address") or row.get("adresse"),
+            "customer_type": row.get("customer_type") or row.get("type") or "individual",
+            "lifecycle_status": row.get("lifecycle_status") or row.get("status") or row.get("statut") or "lead",
+            "source": "import",
+            "preferred_language": row.get("preferred_language") or row.get("langue") or "FR",
+            "preferred_currency": row.get("preferred_currency") or row.get("devise"),
+            "notes": row.get("notes"),
+            "credit_enabled": str(row.get("credit_enabled") or "").lower() in {"true", "1", "yes", "oui"},
+            "credit_limit": row.get("credit_limit") or 0,
+        }
+        if payload["customer_type"] not in CLIENT_TYPES:
+            payload["customer_type"] = "individual"
+        if payload["lifecycle_status"] not in CLIENT_STATUSES:
+            payload["lifecycle_status"] = "lead"
+
+        try:
+            client = create_client(org_id, user_id, payload)
+            created += 1
+            created_clients.append(client)
+        except ValueError as exc:
+            if str(exc) == "duplicate_client":
+                skipped += 1
+                continue
+            errors.append({"row": index, "error": str(exc)})
+        except Exception as exc:  # pragma: no cover - defensive import reporting
+            errors.append({"row": index, "error": str(exc)})
+
+    return {"created": created, "skipped": skipped, "errors": errors, "clients": created_clients[:20]}

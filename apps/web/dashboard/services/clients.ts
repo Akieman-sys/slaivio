@@ -34,6 +34,30 @@ export type ClientRecord = {
   updated_at: string;
 };
 
+export type ClientTimelineEvent = {
+  id: string;
+  type: "client" | "dossier" | "shipment" | "message" | "followup" | string;
+  title: string;
+  description: string;
+  occurred_at: string;
+  metadata: Record<string, unknown>;
+};
+
+export type ClientDuplicate = Pick<
+  ClientRecord,
+  "id" | "display_name" | "name" | "company_name" | "phone" | "whatsapp_phone" | "email" | "country" | "city" | "customer_type" | "lifecycle_status"
+> & {
+  match_reason: "phone" | "email" | "name" | string;
+  created_at: string;
+};
+
+export type ClientImportResult = {
+  created: number;
+  skipped: number;
+  errors: Array<{ row: number; error: string }>;
+  clients: ClientRecord[];
+};
+
 export type ClientStats = {
   total: number;
   leads: number;
@@ -80,6 +104,9 @@ export async function listClients(params: {
   q?: string;
   status?: ClientLifecycleStatus | "";
   customer_type?: ClientCustomerType | "";
+  source?: ClientSource | "";
+  country?: string;
+  city?: string;
   page?: number;
   page_size?: number;
   sort?: string;
@@ -105,4 +132,44 @@ export async function deleteClient(id: string) {
 
 export async function getClientStats() {
   return (await api.get<{ status: "ok"; stats: ClientStats }>("/clients/stats")).data.stats;
+}
+
+export async function getClientTimeline(id: string) {
+  return (await api.get<{ status: "ok"; items: ClientTimelineEvent[] }>(`/clients/${id}/timeline`)).data.items;
+}
+
+export async function findClientDuplicates(params: {
+  client_id?: string;
+  phone?: string;
+  email?: string;
+  name?: string;
+}) {
+  return (await api.get<{ status: "ok"; items: ClientDuplicate[] }>("/clients/duplicates", { params })).data.items;
+}
+
+export async function importClients(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return (
+    await api.post<{ status: "ok"; result: ClientImportResult }>("/clients/import", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+  ).data.result;
+}
+
+export async function exportClients(params: {
+  q?: string;
+  status?: ClientLifecycleStatus | "";
+  customer_type?: ClientCustomerType | "";
+  source?: ClientSource | "";
+  country?: string;
+  city?: string;
+  sort?: string;
+} = {}) {
+  return (
+    await api.get<Blob>("/clients/export", {
+      params,
+      responseType: "blob",
+    })
+  ).data;
 }

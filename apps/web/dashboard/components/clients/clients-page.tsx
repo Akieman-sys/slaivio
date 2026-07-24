@@ -3,32 +3,51 @@
 import axios from "axios";
 import {
   AlertCircle,
-  Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Filter,
+  Clock3,
+  Download,
+  Edit3,
+  FileText,
+  History,
+  Import,
   Mail,
-  MapPin,
+  MessageCircle,
   MoreHorizontal,
+  Package,
   Phone,
-  Plus,
   Search,
+  ShieldAlert,
+  Truck,
+  Upload,
+  UserRound,
   X,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { API_BASE_URL } from "@/services/api";
 import {
   createClient,
+  exportClients,
+  findClientDuplicates,
   getClient,
   getClientStats,
+  getClientTimeline,
+  importClients,
   listClients,
+  updateClient,
   type ClientCustomerType,
+  type ClientDuplicate,
+  type ClientImportResult,
   type ClientLifecycleStatus,
   type ClientPayload,
   type ClientRecord,
+  type ClientSource,
   type ClientStats,
+  type ClientTimelineEvent,
 } from "@/services/clients";
-import { API_BASE_URL } from "@/services/api";
 
 const statusLabels: Record<ClientLifecycleStatus, string> = {
   lead: "Lead",
@@ -41,8 +60,8 @@ const statusLabels: Record<ClientLifecycleStatus, string> = {
 const statusStyles: Record<ClientLifecycleStatus, string> = {
   lead: "bg-blue-50 text-blue-700 ring-blue-100",
   active: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  pending: "bg-amber-50 text-amber-700 ring-amber-100",
-  inactive: "bg-slate-100 text-slate-600 ring-slate-200",
+  pending: "bg-amber-50 text-amber-800 ring-amber-100",
+  inactive: "bg-gray-100 text-gray-700 ring-gray-200",
   blocked: "bg-red-50 text-red-700 ring-red-100",
 };
 
@@ -51,6 +70,15 @@ const typeLabels: Record<ClientCustomerType, string> = {
   business: "Entreprise",
   agent: "Agent",
   partner: "Partenaire",
+};
+
+const sourceLabels: Record<ClientSource, string> = {
+  manual: "Manuel",
+  whatsapp: "WhatsApp",
+  website: "Site web",
+  referral: "Référence",
+  import: "Import",
+  api: "API",
 };
 
 const emptyStats: ClientStats = {
@@ -63,34 +91,76 @@ const emptyStats: ClientStats = {
   new_this_month: 0,
 };
 
+type ClientView = {
+  key: "all" | "lead" | "active" | "pending" | "business";
+  label: string;
+  status?: ClientLifecycleStatus;
+  customerType?: ClientCustomerType;
+};
+
+const views: ClientView[] = [
+  { key: "all", label: "Tous" },
+  { key: "lead", label: "Leads", status: "lead" },
+  { key: "active", label: "Actifs", status: "active" },
+  { key: "pending", label: "À suivre", status: "pending" },
+  { key: "business", label: "Entreprises", customerType: "business" },
+];
+
+const buttonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
+const primaryButtonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#0fb966]";
+const iconButtonClass = "inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[#4f5b67] transition hover:border-[#d8dce2] hover:bg-[#f4f6f8]";
+const pagerButtonClass = "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
+
 type Pagination = { page: number; page_size: number; total: number; total_pages: number };
+type ClientFormMode = "create" | "edit";
+type DetailTab = "summary" | "operations" | "messages" | "payments" | "history" | "duplicates" | "notes";
 
 export function ClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [stats, setStats] = useState<ClientStats>(emptyStats);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, page_size: 20, total: 0, total_pages: 0 });
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, page_size: 30, total: 0, total_pages: 0 });
   const [selected, setSelected] = useState<ClientRecord | null>(null);
+  const [timeline, setTimeline] = useState<ClientTimelineEvent[]>([]);
+  const [duplicates, setDuplicates] = useState<ClientDuplicate[]>([]);
+  const [activeTab, setActiveTab] = useState<DetailTab>("summary");
+  const [activeView, setActiveView] = useState<(typeof views)[number]["key"]>("all");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ClientLifecycleStatus | "">("");
+  const [customerType, setCustomerType] = useState<ClientCustomerType | "">("");
+  const [source, setSource] = useState<ClientSource | "">("");
+  const [sort, setSort] = useState("created_desc");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
   const [error, setError] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [createError, setCreateError] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<ClientFormMode>("create");
+  const [formClient, setFormClient] = useState<ClientRecord | null>(null);
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importResult, setImportResult] = useState<ClientImportResult | null>(null);
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
 
+  const currentView = views.find((view) => view.key === activeView) || views[0];
   const page = pagination.page || 1;
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      loadClients(1);
-    }, 250);
+    const timeout = window.setTimeout(() => loadClients(1), 220);
     return () => window.clearTimeout(timeout);
-  }, [query, status]);
+  }, [query, status, customerType, source, sort, activeView]);
 
   useEffect(() => {
     loadStats();
   }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (activeTab === "history") loadTimeline(selected.id);
+    if (activeTab === "duplicates") loadDuplicates(selected);
+  }, [activeTab, selected?.id]);
 
   async function loadStats() {
     try {
@@ -106,16 +176,16 @@ export function ClientsPage() {
     try {
       const response = await listClients({
         q: query || undefined,
-        status,
+        status: currentView.status || status || undefined,
+        customer_type: currentView.customerType || customerType || undefined,
+        source: source || undefined,
         page: nextPage,
-        page_size: 20,
-        sort: "created_desc",
+        page_size: 30,
+        sort,
       });
       setClients(response.items);
       setPagination(response.pagination);
-      if (response.items.length === 0 || (selected && !response.items.some((item) => item.id === selected.id))) {
-        setSelected(null);
-      }
+      if (selected && !response.items.some((item) => item.id === selected.id)) setSelected(null);
     } catch (err) {
       setError(apiErrorMessage(err));
       setClients([]);
@@ -127,7 +197,10 @@ export function ClientsPage() {
 
   async function selectClient(client: ClientRecord) {
     setSelected(client);
+    setActiveTab("summary");
     setDetailLoading(true);
+    setTimeline([]);
+    setDuplicates([]);
     try {
       setSelected(await getClient(client.id));
     } catch {
@@ -137,155 +210,288 @@ export function ClientsPage() {
     }
   }
 
-  async function submitCreate(event: FormEvent<HTMLFormElement>) {
+  async function loadTimeline(clientId: string) {
+    setTimelineLoading(true);
+    try {
+      setTimeline(await getClientTimeline(clientId));
+    } catch {
+      setTimeline([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }
+
+  async function loadDuplicates(client: ClientRecord) {
+    setDuplicatesLoading(true);
+    try {
+      setDuplicates(await findClientDuplicates({ client_id: client.id }));
+    } catch {
+      setDuplicates([]);
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  }
+
+  function openCreate() {
+    setFormMode("create");
+    setFormClient(null);
+    setFormError("");
+    setFormOpen(true);
+  }
+
+  function openEdit(client: ClientRecord) {
+    setFormMode("edit");
+    setFormClient(client);
+    setFormError("");
+    setFormOpen(true);
+  }
+
+  async function submitClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setCreateError("");
-    setCreating(true);
+    setFormError("");
+    setSaving(true);
     const form = new FormData(event.currentTarget);
     const payload: ClientPayload = {
-      name: String(form.get("name") || "").trim() || undefined,
-      company_name: String(form.get("company_name") || "").trim() || undefined,
-      phone: String(form.get("phone") || "").trim() || undefined,
-      whatsapp_phone: String(form.get("whatsapp_phone") || "").trim() || undefined,
-      email: String(form.get("email") || "").trim() || undefined,
-      country: String(form.get("country") || "").trim() || undefined,
-      city: String(form.get("city") || "").trim() || undefined,
+      display_name: clean(form.get("display_name")),
+      name: clean(form.get("name")),
+      company_name: clean(form.get("company_name")),
+      tax_id: clean(form.get("tax_id")),
+      phone: clean(form.get("phone")),
+      whatsapp_phone: clean(form.get("whatsapp_phone")),
+      email: clean(form.get("email")),
+      country: clean(form.get("country")),
+      city: clean(form.get("city")),
+      address: clean(form.get("address")),
       customer_type: String(form.get("customer_type") || "individual") as ClientCustomerType,
       lifecycle_status: String(form.get("lifecycle_status") || "lead") as ClientLifecycleStatus,
-      source: "manual",
-      notes: String(form.get("notes") || "").trim() || undefined,
+      source: String(form.get("source") || "manual") as ClientSource,
+      preferred_language: clean(form.get("preferred_language")) || "FR",
+      preferred_currency: clean(form.get("preferred_currency")),
+      notes: clean(form.get("notes")),
+      credit_enabled: form.get("credit_enabled") === "on",
+      credit_limit: Number(form.get("credit_limit") || 0),
     };
 
     try {
-      const created = await createClient(payload);
-      setModalOpen(false);
-      setSelected(created);
+      const saved = formMode === "edit" && formClient
+        ? await updateClient(formClient.id, payload)
+        : await createClient(payload);
+      setFormOpen(false);
+      setFormClient(null);
+      setSelected(saved);
+      await Promise.all([loadStats(), loadClients(formMode === "edit" ? page : 1)]);
+    } catch (err) {
+      setFormError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    try {
+      const blob = await exportClients({
+        q: query || undefined,
+        status: currentView.status || status || undefined,
+        customer_type: currentView.customerType || customerType || undefined,
+        source: source || undefined,
+        sort,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "slaivio-clients.csv";
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function submitImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const file = new FormData(event.currentTarget).get("file");
+    if (!(file instanceof File) || !file.name) {
+      setImportError("Sélectionnez un fichier CSV.");
+      return;
+    }
+    setImporting(true);
+    setImportError("");
+    setImportResult(null);
+    try {
+      const result = await importClients(file);
+      setImportResult(result);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
-      setCreateError(apiErrorMessage(err));
+      setImportError(apiErrorMessage(err));
     } finally {
-      setCreating(false);
+      setImporting(false);
     }
   }
 
   const statCards = useMemo(() => [
     { label: "Clients total", value: stats.total, tone: "blue" },
-    { label: "Clients actifs", value: stats.active, tone: "blue" },
+    { label: "Actifs", value: stats.active, tone: "blue" },
     { label: "Leads", value: stats.leads, tone: "blue" },
-    { label: "En attente", value: stats.pending, tone: "amber" },
-    { label: "Inactifs", value: stats.inactive, tone: "neutral" },
+    { label: "À suivre", value: stats.pending, tone: "amber" },
+    { label: "Inactifs", value: stats.inactive + stats.blocked, tone: "neutral" },
   ], [stats]);
 
   return (
-    <div className="min-h-full bg-[#f7f8fa] px-5 py-5 text-[#1f2328] md:px-8 lg:px-10">
-      <div className="mx-auto max-w-[1480px] rounded-xl border border-[#d7dbe0] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.10)]">
-        <header className="flex flex-col gap-5 border-b border-[#dfe3e8] px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-[#6b7280]">
-              <span>Operations</span>
-              <span>›</span>
-              <span className="font-medium text-[#1f2328]">Clients</span>
+    <div className="min-h-full bg-[#f5f6f8] px-4 py-4 text-[#1f2328] md:px-6">
+      <div className="mx-auto max-w-[1520px] overflow-hidden rounded-[10px] border border-[#d8dce2] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.10)]">
+        <header className="border-b border-[#d8dce2]">
+          <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-[13px] text-[#616b77]">
+                <span>Operations</span>
+                <span>›</span>
+                <span className="font-medium text-[#1f2328]">Clients</span>
+              </div>
+              <h1 className="mt-4 text-[32px] font-semibold tracking-[-0.03em]">Clients</h1>
+              <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#616b77]">
+                Répertoire opérationnel des leads, clients et partenaires. Les lignes affichées proviennent uniquement de l’organisation active.
+              </p>
             </div>
-            <h1 className="mt-5 text-[34px] font-semibold tracking-[-0.035em]">Clients</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6b7280]">Répertoire réel des leads, clients et partenaires de votre agence active. Les données viennent uniquement du module Clients et de l’organisation connectée.</p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setImportOpen(true)} className={buttonClass}>
+                <Upload size={16} />
+                Importer
+              </button>
+              <button onClick={handleExport} className={buttonClass}>
+                <Download size={16} />
+                Exporter
+              </button>
+              <button onClick={openCreate} className={primaryButtonClass}>
+                <span className="text-lg leading-none">+</span>
+                Nouveau client
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d7dbe0] bg-white px-3 text-sm font-medium shadow-sm transition hover:bg-[#f7f8fa]">
-              <Filter size={17} />
-              Filtres
-            </button>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0fb966]"
-            >
-              <Plus size={18} />
-              Nouveau client
-            </button>
+
+          <div className="flex items-center gap-1 overflow-x-auto border-t border-[#eef0f3] px-5 py-2">
+            {views.map((view) => (
+              <button
+                key={view.key}
+                onClick={() => setActiveView(view.key)}
+                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition ${
+                  activeView === view.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"
+                }`}
+              >
+                {view.label}
+              </button>
+            ))}
           </div>
         </header>
 
-        <section className="grid gap-3 px-6 py-5 sm:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
           {statCards.map((card) => (
-            <div key={card.label} className={`min-h-[112px] rounded-md border p-5 ${metricCardClass(card.tone)}`}>
+            <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
-                <p className="max-w-[160px] text-[15px] font-medium leading-5">{card.label}</p>
-                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-black/10 bg-white/80 text-lg leading-none text-[#4b5563] shadow-sm">↗</span>
+                <p className="text-[14px] font-medium leading-5">{card.label}</p>
+                <span className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white/80 text-[16px] leading-none text-[#4b5563] shadow-sm">↗</span>
               </div>
-              <p className="mt-3 text-[38px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+              <p className="mt-3 text-[34px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
             </div>
           ))}
         </section>
 
-        <section className="border-t border-[#dfe3e8]">
-          <div className="min-w-0 overflow-hidden bg-white">
-            <div className="flex flex-col gap-2 border-b border-[#dfe3e8] px-6 py-3 lg:flex-row lg:items-center">
-              <button className="h-8 rounded-md border border-[#d7dbe0] bg-white px-3 text-sm font-medium shadow-sm hover:bg-[#f7f8fa]">Type</button>
-              <button className="h-8 rounded-md border border-[#d7dbe0] bg-white px-3 text-sm font-medium shadow-sm hover:bg-[#f7f8fa]">Pays</button>
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as ClientLifecycleStatus | "")}
-                className="h-8 rounded-md border border-[#d7dbe0] bg-white px-3 text-sm font-medium outline-none"
-              >
-                <option value="">Statut</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <label className="ml-auto flex h-8 min-w-0 items-center rounded-md border border-[#d7dbe0] bg-[#f7f8fa] px-2 focus-within:border-[#2563eb] lg:w-[300px]">
-                <Search size={18} className="text-slate-400" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher..."
-                  className="ml-2 min-w-0 flex-1 bg-transparent text-sm outline-none"
-                />
-              </label>
-            </div>
-
-            {error && (
-              <div className="m-4 flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700">
-                <AlertCircle size={18} className="mt-0.5" />
-                <p>{error}</p>
-              </div>
-            )}
-
-            <ClientsTable clients={clients} loading={loading} selectedId={selected?.id} onSelect={selectClient} />
-
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-              <span>{pagination.total === 0 ? "0 client" : `${((page - 1) * pagination.page_size) + 1} - ${Math.min(page * pagination.page_size, pagination.total)} sur ${pagination.total} client(s)`}</span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={page <= 1 || loading}
-                  onClick={() => loadClients(page - 1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-40"
-                >
-                  <ChevronLeft size={17} />
-                </button>
-                <span className="rounded-lg bg-[#12c76f] px-3 py-2 text-sm font-semibold text-white">{page}</span>
-                <button
-                  disabled={page >= pagination.total_pages || loading}
-                  onClick={() => loadClients(page + 1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-40"
-                >
-                  <ChevronRight size={17} />
-                </button>
-              </div>
-            </div>
+        <section>
+          <div className="flex flex-col gap-2 border-b border-[#d8dce2] px-5 py-3 xl:flex-row xl:items-center">
+            <SelectFilter value={customerType} onChange={(value) => setCustomerType(value as ClientCustomerType | "")} label="Type">
+              <option value="">Type</option>
+              {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={status} onChange={(value) => setStatus(value as ClientLifecycleStatus | "")} label="Statut">
+              <option value="">Statut</option>
+              {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={source} onChange={(value) => setSource(value as ClientSource | "")} label="Source">
+              <option value="">Source</option>
+              {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={sort} onChange={setSort} label="Tri">
+              <option value="created_desc">Créés récemment</option>
+              <option value="created_asc">Créés anciennement</option>
+              <option value="name_asc">Nom A-Z</option>
+              <option value="name_desc">Nom Z-A</option>
+              <option value="activity_desc">Activité récente</option>
+            </SelectFilter>
+            <label className="ml-auto flex h-8 min-w-0 items-center rounded-md border border-[#cfd5dd] bg-white px-2 shadow-sm focus-within:border-[#2f7df6] xl:w-[330px]">
+              <Search size={16} className="text-[#6b7280]" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Rechercher..."
+                className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+              />
+            </label>
           </div>
 
+          {error && (
+            <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+              <AlertCircle size={17} className="mt-0.5" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          <ClientsTable clients={clients} loading={loading} selectedId={selected?.id} onSelect={selectClient} />
+
+          <div className="flex flex-col gap-3 border-t border-[#d8dce2] px-5 py-3 text-[13px] text-[#5f6b76] sm:flex-row sm:items-center sm:justify-between">
+            <span>{pagination.total === 0 ? "0 client" : `${(page - 1) * pagination.page_size + 1} - ${Math.min(page * pagination.page_size, pagination.total)} sur ${pagination.total} client(s)`}</span>
+            <div className="flex items-center gap-2">
+              <button disabled={page <= 1 || loading} onClick={() => loadClients(page - 1)} className={pagerButtonClass}>
+                <ChevronLeft size={16} />
+              </button>
+              <span className="rounded-md bg-[#166ee8] px-3 py-1.5 text-[13px] font-semibold text-white">{page}</span>
+              <button disabled={page >= pagination.total_pages || loading} onClick={() => loadClients(page + 1)} className={pagerButtonClass}>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
         </section>
       </div>
 
       {selected && (
-        <ClientDetails client={selected} loading={detailLoading} onClose={() => setSelected(null)} />
+        <ClientDetails
+          client={selected}
+          loading={detailLoading}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          timeline={timeline}
+          timelineLoading={timelineLoading}
+          duplicates={duplicates}
+          duplicatesLoading={duplicatesLoading}
+          onClose={() => setSelected(null)}
+          onEdit={() => openEdit(selected)}
+        />
       )}
 
-      {modalOpen && (
-        <CreateClientModal
-          creating={creating}
-          error={createError}
-          onClose={() => setModalOpen(false)}
-          onSubmit={submitCreate}
+      {formOpen && (
+        <ClientFormModal
+          mode={formMode}
+          client={formClient}
+          saving={saving}
+          error={formError}
+          onClose={() => {
+            setFormOpen(false);
+            setFormClient(null);
+            setFormError("");
+          }}
+          onSubmit={submitClient}
+        />
+      )}
+
+      {importOpen && (
+        <ImportClientsModal
+          importing={importing}
+          error={importError}
+          result={importResult}
+          onClose={() => {
+            setImportOpen(false);
+            setImportError("");
+            setImportResult(null);
+          }}
+          onSubmit={submitImport}
         />
       )}
     </div>
@@ -300,8 +506,8 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
 }) {
   if (loading) {
     return (
-      <div className="space-y-2 p-4">
-        {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-16 animate-pulse rounded-lg bg-slate-100" />)}
+      <div className="space-y-1 p-4">
+        {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="h-11 animate-pulse rounded-md bg-[#eef1f5]" />)}
       </div>
     );
   }
@@ -309,9 +515,9 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
   if (clients.length === 0) {
     return (
       <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-        <h2 className="text-lg font-semibold">Aucun client trouvé</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-          Créez votre premier client ou ajustez la recherche. Cette liste affichera uniquement les clients réels de l’organisation active.
+        <h2 className="text-[18px] font-semibold">Aucun client trouvé</h2>
+        <p className="mt-2 max-w-md text-[13px] leading-6 text-[#617083]">
+          Créez votre premier client ou ajustez la recherche. Cette liste affichera uniquement les données réelles de votre agence.
         </p>
       </div>
     );
@@ -319,17 +525,20 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[920px] w-full border-collapse text-left text-sm">
-        <thead className="border-b border-[#dfe3e8] bg-[#fafbfc] text-xs font-medium text-[#6b7280]">
+      <table className="min-w-[1120px] w-full border-collapse text-left text-[13px]">
+        <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
-            <th className="px-5 py-4">Client</th>
-            <th className="px-5 py-4">Téléphone</th>
-            <th className="px-5 py-4">Pays</th>
-            <th className="px-5 py-4">Type</th>
-            <th className="px-5 py-4">Statut</th>
-            <th className="px-5 py-4">Dossiers</th>
-            <th className="px-5 py-4">Colis</th>
-            <th className="px-5 py-4">Actions</th>
+            <th className="w-10 px-4 py-2"><input type="checkbox" className="rounded border-[#c9d0d8]" aria-label="Sélectionner tous les clients" /></th>
+            <th className="px-3 py-2">Client</th>
+            <th className="px-3 py-2">Téléphone</th>
+            <th className="px-3 py-2">Email</th>
+            <th className="px-3 py-2">Pays</th>
+            <th className="px-3 py-2">Type</th>
+            <th className="px-3 py-2">Statut</th>
+            <th className="px-3 py-2 text-right">Dossiers</th>
+            <th className="px-3 py-2 text-right">Colis</th>
+            <th className="px-3 py-2">Activité</th>
+            <th className="w-10 px-3 py-2" />
           </tr>
         </thead>
         <tbody className="divide-y divide-[#edf0f2]">
@@ -337,21 +546,26 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
             <tr
               key={client.id}
               onClick={() => onSelect(client)}
-              className={`cursor-pointer transition hover:bg-[#f7f8fa] ${selectedId === client.id ? "bg-[#eef2f7]" : ""}`}
+              className={`cursor-pointer transition hover:bg-[#f6f8fb] ${selectedId === client.id ? "bg-[#edf2f8]" : ""}`}
             >
-              <td className="px-5 py-4">
+              <td className="px-4 py-2" onClick={(event) => event.stopPropagation()}>
+                <input type="checkbox" className="rounded border-[#c9d0d8]" aria-label={`Sélectionner ${client.display_name || client.name || "client"}`} />
+              </td>
+              <td className="px-3 py-2">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-[#1f2328]">{client.display_name || client.name || "Sans nom"}</p>
-                  <p className="truncate text-xs text-[#6b7280]">{client.email || client.company_name || "Email non renseigné"}</p>
+                  <p className="truncate font-medium text-[#1f2328]">{client.display_name || client.name || client.company_name || "Sans nom"}</p>
+                  <p className="truncate text-[12px] text-[#687584]">{client.company_name || client.source}</p>
                 </div>
               </td>
-              <td className="px-5 py-4 text-slate-700">{client.phone || client.whatsapp_phone || "Non renseigné"}</td>
-              <td className="px-5 py-4 text-slate-700">{[client.city, client.country].filter(Boolean).join(", ") || "Non renseigné"}</td>
-              <td className="px-5 py-4 text-slate-700">{typeLabels[client.customer_type]}</td>
-              <td className="px-5 py-4"><StatusBadge status={client.lifecycle_status} /></td>
-              <td className="px-5 py-4 font-medium text-slate-800">{client.dossiers_count}</td>
-              <td className="px-5 py-4 font-medium text-slate-800">{client.shipments_count}</td>
-              <td className="px-5 py-4"><MoreHorizontal size={18} className="text-slate-400" /></td>
+              <td className="px-3 py-2 text-[#334155]">{client.phone || client.whatsapp_phone || "-"}</td>
+              <td className="px-3 py-2 text-[#334155]">{client.email || "-"}</td>
+              <td className="px-3 py-2 text-[#334155]">{[client.city, client.country].filter(Boolean).join(", ") || "-"}</td>
+              <td className="px-3 py-2 text-[#334155]">{typeLabels[client.customer_type]}</td>
+              <td className="px-3 py-2"><StatusBadge status={client.lifecycle_status} /></td>
+              <td className="px-3 py-2 text-right font-medium">{client.dossiers_count}</td>
+              <td className="px-3 py-2 text-right font-medium">{client.shipments_count}</td>
+              <td className="px-3 py-2 text-[#687584]">{formatDate(client.last_activity_at || client.updated_at)}</td>
+              <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
             </tr>
           ))}
         </tbody>
@@ -360,7 +574,29 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
   );
 }
 
-function ClientDetails({ client, loading, onClose }: { client: ClientRecord; loading: boolean; onClose: () => void }) {
+function ClientDetails({
+  client,
+  loading,
+  activeTab,
+  onTabChange,
+  timeline,
+  timelineLoading,
+  duplicates,
+  duplicatesLoading,
+  onClose,
+  onEdit,
+}: {
+  client: ClientRecord;
+  loading: boolean;
+  activeTab: DetailTab;
+  onTabChange: (tab: DetailTab) => void;
+  timeline: ClientTimelineEvent[];
+  timelineLoading: boolean;
+  duplicates: ClientDuplicate[];
+  duplicatesLoading: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -373,59 +609,61 @@ function ClientDetails({ client, loading, onClose }: { client: ClientRecord; loa
     window.setTimeout(onClose, 180);
   }
 
+  const tabs: Array<{ key: DetailTab; label: string }> = [
+    { key: "summary", label: "Résumé" },
+    { key: "operations", label: "Opérations" },
+    { key: "messages", label: "Messages" },
+    { key: "payments", label: "Paiements" },
+    { key: "history", label: "Historique" },
+    { key: "duplicates", label: "Doublons" },
+    { key: "notes", label: "Notes" },
+  ];
+
   return (
     <div className="fixed inset-0 z-50">
-      <button
-        aria-label="Fermer la fiche client"
-        onClick={close}
-        className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
-      />
-      <aside className={`absolute right-0 top-0 h-full w-full max-w-[430px] border-l border-[#d7dbe0] bg-white shadow-[-20px_0_50px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}>
+      <button aria-label="Fermer la fiche client" onClick={close} className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`} />
+      <aside className={`absolute right-0 top-0 h-full w-full max-w-[560px] border-l border-[#cfd5dd] bg-white shadow-[-18px_0_42px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-[#dfe3e8] px-5 py-4">
-            <div>
-              <p className="text-xs font-medium text-[#6b7280]">Fiche client</p>
-              <h2 className="mt-1 max-w-[300px] truncate text-lg font-semibold">{client.display_name || client.name || "Sans nom"}</h2>
-            </div>
-            <button onClick={close} className="rounded-md p-2 text-slate-500 hover:bg-[#f1f3f5]">
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="border-b border-[#dfe3e8] p-5">
-            <div className="flex items-start gap-4">
-              <Initials name={client.display_name || client.name || "Client"} large />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-base font-semibold">{client.display_name || client.name || "Sans nom"}</p>
-                  <StatusBadge status={client.lifecycle_status} />
-                </div>
-                <p className="mt-1 text-sm text-slate-500">{typeLabels[client.customer_type]} · Source {client.source}</p>
+          <div className="border-b border-[#d8dce2] px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-[#687584]">Fiche client</p>
+                <h2 className="mt-1 truncate text-[22px] font-semibold tracking-[-0.02em]">{client.display_name || client.name || client.company_name || "Sans nom"}</h2>
+                <p className="mt-1 text-[13px] text-[#687584]">{typeLabels[client.customer_type]} · {sourceLabels[client.source]}</p>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button>
+                <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>
+            <div className="mt-4 flex items-center gap-3">
+              <Initials name={client.display_name || client.name || "Client"} />
+              <StatusBadge status={client.lifecycle_status} />
+            </div>
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto border-b border-[#d8dce2] px-4 py-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => onTabChange(tab.key)}
+                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${
+                  activeTab === tab.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#5f6b76] hover:bg-[#f4f6f8]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <div className={`flex-1 overflow-y-auto p-5 ${loading ? "opacity-60" : ""}`}>
-            <div className="space-y-5">
-              <DetailRow icon={Phone} label="Téléphone" value={client.phone || "Non renseigné"} />
-              <DetailRow icon={Mail} label="Email" value={client.email || "Non renseigné"} />
-              <DetailRow icon={MapPin} label="Localisation" value={[client.city, client.country].filter(Boolean).join(", ") || "Non renseigné"} />
-              <DetailRow icon={Building2} label="Entreprise" value={client.company_name || "Non renseigné"} />
-              <div className="rounded-lg border border-slate-200 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Résumé opérationnel</p>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <Metric label="Dossiers" value={client.dossiers_count} />
-                  <Metric label="Colis" value={client.shipments_count} />
-                  <Metric label="Solde" value={formatMoney(client.current_balance, client.preferred_currency)} />
-                  <Metric label="Total dépensé" value={formatMoney(client.total_spent, client.preferred_currency)} />
-                </div>
-              </div>
-              {client.notes && (
-                <div className="rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                  {client.notes}
-                </div>
-              )}
-            </div>
+            {activeTab === "summary" && <SummaryTab client={client} />}
+            {activeTab === "operations" && <OperationsTab client={client} />}
+            {activeTab === "messages" && <ModulePlaceholder icon={MessageCircle} title="Messages client" text="Cette vue affichera les conversations WhatsApp, emails et messages liés à ce client lorsque le module Communication les aura synchronisés." />}
+            {activeTab === "payments" && <ModulePlaceholder icon={ShieldAlert} title="Paiements client" text="Cette vue affichera les factures, paiements reçus, soldes et relances provenant du module Finance. Aucun montant n’est inventé ici." />}
+            {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
+            {activeTab === "duplicates" && <DuplicatesTab duplicates={duplicates} loading={duplicatesLoading} />}
+            {activeTab === "notes" && <NotesTab client={client} />}
           </div>
         </div>
       </aside>
@@ -433,60 +671,150 @@ function ClientDetails({ client, loading, onClose }: { client: ClientRecord; loa
   );
 }
 
-function CreateClientModal({ creating, error, onClose, onSubmit }: {
-  creating: boolean;
+function SummaryTab({ client }: { client: ClientRecord }) {
+  return (
+    <div className="space-y-5">
+      <Section title="Coordonnées">
+        <InfoRow icon={Phone} label="Téléphone" value={client.phone || "-"} />
+        <InfoRow icon={MessageCircle} label="WhatsApp" value={client.whatsapp_phone || client.phone || "-"} />
+        <InfoRow icon={Mail} label="Email" value={client.email || "-"} />
+        <InfoRow icon={UserRound} label="Type" value={typeLabels[client.customer_type]} />
+      </Section>
+      <Section title="Localisation & identité">
+        <Field label="Entreprise" value={client.company_name || "-"} />
+        <Field label="Identifiant fiscal" value={client.tax_id || "-"} />
+        <Field label="Ville" value={client.city || "-"} />
+        <Field label="Pays" value={client.country || "-"} />
+        <Field label="Adresse" value={client.address || "-"} />
+      </Section>
+      <Section title="Résumé opérationnel">
+        <div className="grid grid-cols-2 gap-3">
+          <SmallMetric label="Dossiers" value={client.dossiers_count} />
+          <SmallMetric label="Colis / expéditions" value={client.shipments_count} />
+          <SmallMetric label="Solde" value={formatMoney(client.current_balance, client.preferred_currency)} />
+          <SmallMetric label="Total dépensé" value={formatMoney(client.total_spent, client.preferred_currency)} />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function OperationsTab({ client }: { client: ClientRecord }) {
+  return (
+    <div className="space-y-4">
+      <ModuleCounter icon={FileText} title="Dossiers" count={client.dossiers_count} text="Les dossiers liés à ce client seront consultables ici dès que le module Dossiers exposera sa vue détaillée." />
+      <ModuleCounter icon={Package} title="Colis" count={client.shipments_count} text="Les colis et expéditions liés au client seront alimentés par les modules Colis, Tracking et Expéditions." />
+      <ModuleCounter icon={Truck} title="Expéditions" count={client.shipments_count} text="La liste opérationnelle complète restera dans le module Expéditions pour garder une séparation métier propre." />
+    </div>
+  );
+}
+
+function HistoryTab({ events, loading }: { events: ClientTimelineEvent[]; loading: boolean }) {
+  if (loading) return <LoadingLines />;
+  if (events.length === 0) return <EmptyState title="Aucun historique" text="Les événements apparaîtront ici dès que le client aura des dossiers, messages, relances ou expéditions liés." />;
+  return (
+    <div className="space-y-1">
+      {events.map((event) => (
+        <div key={event.id} className="flex gap-3 border-b border-[#eef0f3] py-3 last:border-0">
+          <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#f1f3f5] text-[#334155]">
+            <TimelineIcon type={event.type} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-medium text-[#1f2328]">{event.title}</p>
+              <span className="shrink-0 text-[12px] text-[#687584]">{formatDate(event.occurred_at)}</span>
+            </div>
+            <p className="mt-1 text-[13px] leading-5 text-[#5f6b76]">{event.description}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DuplicatesTab({ duplicates, loading }: { duplicates: ClientDuplicate[]; loading: boolean }) {
+  if (loading) return <LoadingLines />;
+  if (duplicates.length === 0) return <EmptyState title="Aucun doublon détecté" text="Aucun autre client ne partage actuellement le même téléphone, email ou nom proche dans cette organisation." />;
+  return (
+    <div className="space-y-3">
+      {duplicates.map((item) => (
+        <div key={item.id} className="rounded-md border border-[#d8dce2] p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">{item.display_name || item.name || item.company_name || "Client sans nom"}</p>
+              <p className="mt-1 text-[13px] text-[#687584]">{item.email || item.phone || item.whatsapp_phone || "-"}</p>
+            </div>
+            <span className="rounded-full bg-amber-50 px-2 py-1 text-[12px] font-medium text-amber-700 ring-1 ring-amber-100">{duplicateLabel(item.match_reason)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotesTab({ client }: { client: ClientRecord }) {
+  if (!client.notes) return <EmptyState title="Aucune note" text="Les notes internes ajoutées sur la fiche client apparaîtront ici." />;
+  return <div className="rounded-md border border-[#d8dce2] bg-[#fbfcfd] p-4 text-[13px] leading-6 text-[#334155]">{client.notes}</div>;
+}
+
+function ClientFormModal({
+  mode,
+  client,
+  saving,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  mode: ClientFormMode;
+  client: ClientRecord | null;
+  saving: boolean;
   error: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const title = mode === "edit" ? "Modifier le client" : "Nouveau client";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-[#d8dce2] bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-[#d8dce2] px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold">Nouveau client</h2>
-            <p className="mt-1 text-sm text-slate-500">Créez un lead ou client réel pour l’organisation active.</p>
+            <h2 className="text-[20px] font-semibold tracking-[-0.02em]">{title}</h2>
+            <p className="mt-1 text-[13px] text-[#687584]">Renseignez uniquement les informations réelles disponibles.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-slate-100"><X size={18} /></button>
+          <button onClick={onClose} className={iconButtonClass}><X size={17} /></button>
         </div>
-        <form onSubmit={onSubmit} className="space-y-5 p-6">
-          {error && <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Nom complet" name="name" placeholder="Jean Mukendi" />
-            <Input label="Entreprise" name="company_name" placeholder="OTI Cargo Express" />
-            <Input label="Téléphone" name="phone" placeholder="+243 81 234 5678" />
-            <Input label="WhatsApp" name="whatsapp_phone" placeholder="+243 81 234 5678" />
-            <Input label="Email" name="email" placeholder="client@email.com" />
-            <Input label="Pays" name="country" placeholder="RDC" />
-            <Input label="Ville" name="city" placeholder="Kinshasa" />
-            <label className="text-sm font-medium text-slate-700">
-              Type
-              <select name="customer_type" className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 outline-none">
-                <option value="individual">Particulier</option>
-                <option value="business">Entreprise</option>
-                <option value="agent">Agent</option>
-                <option value="partner">Partenaire</option>
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Statut
-              <select name="lifecycle_status" className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 outline-none">
-                <option value="lead">Lead</option>
-                <option value="active">Actif</option>
-                <option value="pending">En attente</option>
-                <option value="inactive">Inactif</option>
-                <option value="blocked">Bloqué</option>
-              </select>
-            </label>
+        <form onSubmit={onSubmit} className="space-y-5 p-5">
+          {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input label="Nom affiché" name="display_name" defaultValue={client?.display_name || ""} />
+            <Input label="Nom complet" name="name" defaultValue={client?.name || ""} />
+            <Input label="Entreprise" name="company_name" defaultValue={client?.company_name || ""} />
+            <Input label="Téléphone" name="phone" defaultValue={client?.phone || ""} />
+            <Input label="WhatsApp" name="whatsapp_phone" defaultValue={client?.whatsapp_phone || ""} />
+            <Input label="Email" name="email" defaultValue={client?.email || ""} />
+            <Input label="Pays" name="country" defaultValue={client?.country || ""} />
+            <Input label="Ville" name="city" defaultValue={client?.city || ""} />
+            <Input label="Identifiant fiscal" name="tax_id" defaultValue={client?.tax_id || ""} />
+            <SelectInput label="Type" name="customer_type" defaultValue={client?.customer_type || "individual"} options={typeLabels} />
+            <SelectInput label="Statut" name="lifecycle_status" defaultValue={client?.lifecycle_status || "lead"} options={statusLabels} />
+            <SelectInput label="Source" name="source" defaultValue={client?.source || "manual"} options={sourceLabels} />
+            <Input label="Langue" name="preferred_language" defaultValue={client?.preferred_language || "FR"} />
+            <Input label="Devise" name="preferred_currency" defaultValue={client?.preferred_currency || ""} />
+            <Input label="Limite crédit" name="credit_limit" type="number" defaultValue={String(client?.credit_limit || 0)} />
           </div>
-          <label className="block text-sm font-medium text-slate-700">
-            Notes internes
-            <textarea name="notes" rows={4} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-3 outline-none" placeholder="Informations utiles pour l’équipe..." />
+          <Input label="Adresse" name="address" defaultValue={client?.address || ""} />
+          <label className="flex items-center gap-2 text-[13px] font-medium text-[#334155]">
+            <input name="credit_enabled" type="checkbox" defaultChecked={Boolean(client?.credit_enabled)} className="rounded border-[#c9d0d8]" />
+            Crédit autorisé
           </label>
-          <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-            <button type="button" onClick={onClose} className="h-11 rounded-lg border border-slate-200 px-5 text-sm font-semibold">Annuler</button>
-            <button disabled={creating} className="h-11 rounded-lg bg-[#12c76f] px-5 text-sm font-semibold text-white disabled:opacity-60">
-              {creating ? "Création..." : "Créer le client"}
+          <label className="block text-[13px] font-medium text-[#334155]">
+            Notes internes
+            <textarea name="notes" rows={4} defaultValue={client?.notes || ""} className="mt-1 w-full rounded-md border border-[#cfd5dd] px-3 py-2 text-[13px] outline-none focus:border-[#2f7df6]" />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-[#eef0f3] pt-4">
+            <button type="button" onClick={onClose} className={buttonClass}>Annuler</button>
+            <button disabled={saving} className={`${primaryButtonClass} disabled:opacity-60`}>
+              {saving ? "Enregistrement..." : mode === "edit" ? "Enregistrer" : "Créer le client"}
             </button>
           </div>
         </form>
@@ -495,47 +823,175 @@ function CreateClientModal({ creating, error, onClose, onSubmit }: {
   );
 }
 
-function Input({ label, name, placeholder }: { label: string; name: string; placeholder: string }) {
+function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
+  importing: boolean;
+  error: string;
+  result: ClientImportResult | null;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
-    <label className="text-sm font-medium text-slate-700">
-      {label}
-      <input name={name} placeholder={placeholder} className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 outline-none focus:border-slate-400" />
-    </label>
-  );
-}
-
-function Initials({ name, large = false }: { name: string; large?: boolean }) {
-  const initials = name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "CL";
-  return (
-    <div className={`flex shrink-0 items-center justify-center rounded-full bg-[#121826] font-semibold text-white ${large ? "h-14 w-14 text-base" : "h-10 w-10 text-sm"}`}>
-      {initials}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: ClientLifecycleStatus }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusStyles[status]}`}>{statusLabels[status]}</span>;
-}
-
-function DetailRow({ icon: Icon, label, value }: { icon: typeof Phone; label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-3 text-sm">
-      <Icon size={17} className="mt-0.5 text-slate-500" />
-      <div className="min-w-0">
-        <p className="text-slate-500">{label}</p>
-        <p className="mt-1 break-words font-medium text-slate-950">{value}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+      <div className="w-full max-w-lg rounded-lg border border-[#d8dce2] bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-[#d8dce2] px-5 py-4">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Importer des clients</h2>
+            <p className="mt-1 text-[13px] text-[#687584]">CSV supporté: nom, entreprise, téléphone, whatsapp, email, pays, ville, statut, type.</p>
+          </div>
+          <button onClick={onClose} className={iconButtonClass}><X size={17} /></button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4 p-5">
+          {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
+          {result && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-[13px] text-emerald-800">
+              {result.created} créé(s), {result.skipped} doublon(s) ignoré(s), {result.errors.length} erreur(s).
+            </div>
+          )}
+          <label className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[#b9c1cc] bg-[#fbfcfd] p-5 text-center text-[13px] text-[#5f6b76] hover:bg-[#f6f8fb]">
+            <Import size={22} />
+            <span className="mt-2 font-medium text-[#1f2328]">Choisir un fichier CSV</span>
+            <input name="file" type="file" accept=".csv,text/csv" className="mt-3 text-[13px]" />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-[#eef0f3] pt-4">
+            <button type="button" onClick={onClose} className={buttonClass}>Fermer</button>
+            <button disabled={importing} className={`${primaryButtonClass} disabled:opacity-60`}>{importing ? "Import..." : "Importer"}</button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function SelectFilter({ value, onChange, children }: { value: string; onChange: (value: string) => void; label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold text-slate-950">{value}</p>
+    <label className="relative inline-flex h-8 min-w-[120px] items-center">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="h-8 w-full appearance-none rounded-md border border-[#cfd5dd] bg-white pl-3 pr-8 text-[13px] font-medium outline-none shadow-sm hover:bg-[#f8fafc] focus:border-[#2f7df6]">
+        {children}
+      </select>
+      <ChevronDown size={14} className="pointer-events-none absolute right-2 text-[#667085]" />
+    </label>
+  );
+}
+
+function Input({ label, name, defaultValue = "", placeholder = "", type = "text" }: { label: string; name: string; defaultValue?: string; placeholder?: string; type?: string }) {
+  return (
+    <label className="block text-[13px] font-medium text-[#334155]">
+      {label}
+      <input name={name} type={type} defaultValue={defaultValue} placeholder={placeholder} className="mt-1 h-9 w-full rounded-md border border-[#cfd5dd] px-3 text-[13px] outline-none focus:border-[#2f7df6]" />
+    </label>
+  );
+}
+
+function SelectInput<T extends string>({ label, name, defaultValue, options }: { label: string; name: string; defaultValue: T; options: Record<T, string> }) {
+  return (
+    <label className="block text-[13px] font-medium text-[#334155]">
+      {label}
+      <select name={name} defaultValue={defaultValue} className="mt-1 h-9 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#2f7df6]">
+        {Object.entries(options).map(([value, label]) => <option key={value} value={value}>{String(label)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-md border border-[#d8dce2] bg-white">
+      <h3 className="border-b border-[#eef0f3] px-4 py-3 text-[13px] font-semibold text-[#1f2328]">{title}</h3>
+      <div className="space-y-3 p-4">{children}</div>
+    </section>
+  );
+}
+
+function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="flex gap-3 text-[13px]">
+      <Icon size={16} className="mt-0.5 text-[#64748b]" />
+      <div>
+        <p className="text-[#687584]">{label}</p>
+        <p className="mt-0.5 font-medium text-[#1f2328]">{value}</p>
+      </div>
     </div>
   );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[130px_1fr] gap-3 text-[13px]">
+      <p className="text-[#687584]">{label}</p>
+      <p className="min-w-0 break-words font-medium text-[#1f2328]">{value}</p>
+    </div>
+  );
+}
+
+function SmallMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-[#eef0f3] bg-[#fbfcfd] p-3">
+      <p className="text-[12px] text-[#687584]">{label}</p>
+      <p className="mt-1 text-[16px] font-semibold text-[#1f2328]">{value}</p>
+    </div>
+  );
+}
+
+function ModuleCounter({ icon: Icon, title, count, text }: { icon: LucideIcon; title: string; count: number; text: string }) {
+  return (
+    <div className="rounded-md border border-[#d8dce2] p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#f1f3f5]"><Icon size={17} /></div>
+          <div>
+            <p className="font-semibold">{title}</p>
+            <p className="mt-1 text-[13px] leading-5 text-[#5f6b76]">{text}</p>
+          </div>
+        </div>
+        <span className="text-[22px] font-semibold">{count}</span>
+      </div>
+    </div>
+  );
+}
+
+function ModulePlaceholder({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
+  return (
+    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-md border border-[#d8dce2] bg-[#fbfcfd] p-8 text-center">
+      <div className="flex h-11 w-11 items-center justify-center rounded-md bg-white shadow-sm"><Icon size={19} /></div>
+      <h3 className="mt-4 text-[16px] font-semibold">{title}</h3>
+      <p className="mt-2 max-w-sm text-[13px] leading-6 text-[#617083]">{text}</p>
+    </div>
+  );
+}
+
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-md border border-[#d8dce2] bg-[#fbfcfd] p-8 text-center">
+      <h3 className="text-[16px] font-semibold">{title}</h3>
+      <p className="mt-2 max-w-sm text-[13px] leading-6 text-[#617083]">{text}</p>
+    </div>
+  );
+}
+
+function LoadingLines() {
+  return (
+    <div className="space-y-2">
+      {[0, 1, 2, 3].map((item) => <div key={item} className="h-14 animate-pulse rounded-md bg-[#eef1f5]" />)}
+    </div>
+  );
+}
+
+function Initials({ name }: { name: string }) {
+  const initials = name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "CL";
+  return <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#111827] text-[13px] font-semibold text-white">{initials}</div>;
+}
+
+function StatusBadge({ status }: { status: ClientLifecycleStatus }) {
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-medium ring-1 ${statusStyles[status]}`}>{statusLabels[status]}</span>;
+}
+
+function TimelineIcon({ type }: { type: string }) {
+  const props = { size: 15 };
+  if (type === "dossier") return <FileText {...props} />;
+  if (type === "shipment") return <Truck {...props} />;
+  if (type === "message") return <MessageCircle {...props} />;
+  if (type === "followup") return <Clock3 {...props} />;
+  return <History {...props} />;
 }
 
 function metricCardClass(tone: string) {
@@ -544,22 +1000,40 @@ function metricCardClass(tone: string) {
   return "border-[#c8d2e5] bg-[#f1f5fb] text-[#0752b8]";
 }
 
+function clean(value: FormDataEntryValue | null) {
+  const text = String(value || "").trim();
+  return text || undefined;
+}
+
+function duplicateLabel(reason: string) {
+  if (reason === "phone") return "Même téléphone";
+  if (reason === "email") return "Même email";
+  return "Nom proche";
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function formatMoney(value: number | null | undefined, currency?: string | null) {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${currency || "$"}`;
+}
+
 function apiErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;
     const target = `${API_BASE_URL || "API_BASE_URL non configurée"}${error.config?.url || ""}`;
     if (detail === "duplicate_client") return "Un client avec ce téléphone ou cet email existe déjà dans cette agence.";
     if (detail === "name_company_phone_or_email_required") return "Ajoutez au moins un nom, une entreprise, un téléphone ou un email.";
+    if (detail === "csv_required") return "Le fichier importé doit être un CSV.";
+    if (detail === "empty_csv") return "Le fichier CSV est vide.";
     if (error.response?.status === 401) return "Session expirée. Reconnectez-vous.";
     if (error.response?.status === 403) return "Vous n’avez pas accès à cette organisation.";
     if (!error.response) return `API injoignable vers ${target}. Vérifiez NEXT_PUBLIC_API_BASE_URL côté frontend et redéployez Render.`;
-    if (error.response.status === 404) return `Route API introuvable (${target}). Le frontend atteint le backend, mais ce backend ne sert pas cette route. Vérifiez que Render appelle bien le backend Railway et que Railway a le dernier code.`;
+    if (error.response.status === 404) return `Route API introuvable (${target}). Vérifiez que le backend Railway a le dernier code.`;
     return detail || `Erreur API (${error.response?.status || "réseau"}) sur ${target}.`;
   }
   return "Une erreur inattendue est survenue.";
-}
-
-function formatMoney(value: number | null | undefined, currency?: string | null) {
-  const amount = Number(value || 0);
-  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${currency || "$"}`;
 }

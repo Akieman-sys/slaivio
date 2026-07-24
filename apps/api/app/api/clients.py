@@ -1,13 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import csv
+import io
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
+from starlette.responses import StreamingResponse
 
 from app.clients.repository import (
     CLIENT_SOURCES,
     CLIENT_STATUSES,
     CLIENT_TYPES,
+    client_timeline,
     client_stats,
     create_client,
+    export_clients,
+    find_client_duplicates,
     get_client,
+    import_clients,
     list_clients,
     soft_delete_client,
     update_client,
@@ -142,12 +150,110 @@ def clients_create(body: ClientPayload, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "client": client}
 
 
+@router.get("/clients/export")
+def clients_export(
+    q: str | None = Query(default=None, max_length=120),
+    status_filter: str | None = Query(default=None, alias="status"),
+    customer_type: str | None = None,
+    source: str | None = None,
+    country: str | None = None,
+    city: str | None = None,
+    sort: str = "created_desc",
+    tenant=Depends(get_current_tenant),
+):
+    rows = export_clients(
+        tenant["org_id"],
+        q=q,
+        status=status_filter,
+        customer_type=customer_type,
+        source=source,
+        country=country,
+        city=city,
+        sort=sort,
+    )
+    output = io.StringIO()
+    fieldnames = [
+        "display_name",
+        "name",
+        "company_name",
+        "phone",
+        "whatsapp_phone",
+        "email",
+        "country",
+        "city",
+        "customer_type",
+        "lifecycle_status",
+        "source",
+        "preferred_language",
+        "preferred_currency",
+        "credit_enabled",
+        "credit_limit",
+        "current_balance",
+        "total_spent",
+        "notes",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="slaivio-clients.csv"'},
+    )
+
+
+@router.post("/clients/import")
+async def clients_import(file: UploadFile = File(...), tenant=Depends(get_current_tenant)):
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="csv_required")
+    content = await file.read()
+    try:
+        decoded = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail="invalid_csv_encoding") from exc
+    reader = csv.DictReader(io.StringIO(decoded))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=422, detail="empty_csv")
+    rows = [{str(key).strip(): (value or "").strip() for key, value in row.items()} for row in reader]
+    return {"status": "ok", "result": import_clients(tenant["org_id"], _user_id(tenant), rows)}
+
+
+@router.get("/clients/duplicates")
+def clients_duplicates(
+    client_id: str | None = None,
+    phone: str | None = None,
+    email: str | None = None,
+    name: str | None = None,
+    tenant=Depends(get_current_tenant),
+):
+    return {
+        "status": "ok",
+        "items": find_client_duplicates(
+            tenant["org_id"],
+            client_id=client_id,
+            phone=phone,
+            email=email,
+            name=name,
+        ),
+    }
+
+
 @router.get("/clients/{client_id}")
 def clients_show(client_id: str, tenant=Depends(get_current_tenant)):
     client = get_client(tenant["org_id"], client_id)
     if not client:
         raise HTTPException(status_code=404, detail="client_not_found")
     return {"status": "ok", "client": client}
+
+
+@router.get("/clients/{client_id}/timeline")
+def clients_timeline(client_id: str, tenant=Depends(get_current_tenant)):
+    client = get_client(tenant["org_id"], client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="client_not_found")
+    return {"status": "ok", "items": client_timeline(tenant["org_id"], client_id)}
 
 
 @router.patch("/clients/{client_id}")

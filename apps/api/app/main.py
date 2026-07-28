@@ -79,6 +79,7 @@ from app.api.onboarding import router as onboarding_router
 from app.api.onboarding_experience import router as onboarding_experience_router
 from app.api.dashboard import router as dashboard_router
 from app.api.clients import router as clients_router
+from app.api.packages import router as packages_router
 
 
 app = FastAPI(title="Slaivio")
@@ -183,6 +184,7 @@ app.include_router(onboarding_router)
 app.include_router(onboarding_experience_router)
 app.include_router(dashboard_router)
 app.include_router(clients_router)
+app.include_router(packages_router)
 
 
 @app.get("/")

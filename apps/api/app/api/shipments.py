@@ -1,382 +1,319 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import text
+from __future__ import annotations
+
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 
 from app.core.tenant_context import get_current_tenant
-from app.db.database import engine
-from app.db.message_repository import (
-    get_dossier_full,
-    create_dossier_event,
-)
-from app.db.shipment_repository import (
-    create_shipment,
-    set_shipment_total,
-)
-from app.services.shipment_notification import (
-    create_shipment_notification,
-    create_payment_reminder_notification,
-)
-from app.shipment_lifecycle.services.lifecycle_service import (
-    change_shipment_status,
+from app.expeditions.repository import (
+    add_document,
+    add_financial_line,
+    add_note,
+    add_package_to_expedition,
+    create_anomaly,
+    create_expedition,
+    create_notification,
+    expedition_stats,
+    expedition_timeline,
+    export_expeditions,
+    get_expedition,
+    list_expeditions,
+    remove_package_from_expedition,
+    resolve_anomaly,
+    update_checkpoint,
+    update_expedition,
 )
 
 
 router = APIRouter()
 
 
-class UpdateShipmentStatusRequest(BaseModel):
-    status: str
+class ExpeditionPayload(BaseModel):
+    expedition_reference: str | None = None
+    title: str | None = None
+    status: str | None = None
+    mode: str | None = None
+    service_type: str | None = None
+    risk_level: str | None = None
+    financial_status: str | None = None
+    origin_country: str | None = None
+    origin_city: str | None = None
+    origin_warehouse: str | None = None
+    destination_country: str | None = None
+    destination_city: str | None = None
+    destination_warehouse: str | None = None
+    route_label: str | None = None
+    carrier_name: str | None = None
+    flight_number: str | None = None
+    vessel_name: str | None = None
+    container_number: str | None = None
+    awb_number: str | None = None
+    bl_number: str | None = None
+    batch_reference: str | None = None
+    manifest_reference: str | None = None
+    owner_id: str | None = None
+    owner_name: str | None = None
+    planned_departure_at: str | None = None
+    departed_at: str | None = None
+    eta_at: str | None = None
+    arrived_at: str | None = None
+    delivered_at: str | None = None
+    is_delayed: bool | None = False
+    delay_reason: str | None = None
+    currency: str | None = "USD"
     notes: str | None = None
 
 
-class SetTotalRequest(BaseModel):
-    total: float
-    currency: str
+class PackageAssignmentPayload(BaseModel):
+    package_id: str
 
 
-class CreateShipmentRequest(BaseModel):
-    weight_kg: float | None = None
-    volume_cbm: float | None = None
+class CheckpointPayload(BaseModel):
+    status: str | None = None
+    planned_at: str | None = None
+    completed_at: str | None = None
+    location: str | None = None
+    notes: str | None = None
 
 
-def get_client_phone_from_dossier(dossier_full: dict) -> str | None:
-    if dossier_full and dossier_full.get("client"):
-        return dossier_full["client"].get("phone")
+class DocumentPayload(BaseModel):
+    document_type: str = "DOCUMENT"
+    file_url: str
+    file_name: str | None = None
+    mime_type: str | None = None
+    visibility: str = "INTERNAL"
+    notes: str | None = None
 
-    return None
+
+class FinancialLinePayload(BaseModel):
+    line_type: str = "OTHER"
+    category: str | None = None
+    description: str | None = None
+    amount: float = Field(default=0, ge=0)
+    currency: str = "USD"
+    direction: Literal["COST", "REVENUE"] = "COST"
+    status: str = "PENDING"
+    client_id: str | None = None
+    dossier_id: str | None = None
+    package_id: str | None = None
+    due_at: str | None = None
+    paid_at: str | None = None
+
+
+class AnomalyPayload(BaseModel):
+    anomaly_type: str = "OPERATIONAL"
+    severity: str = "MEDIUM"
+    title: str
+    description: str | None = None
+
+
+class ResolveAnomalyPayload(BaseModel):
+    notes: str | None = None
+
+
+class NotificationPayload(BaseModel):
+    channel: str = "whatsapp"
+    audience: str = "ALL_CLIENTS"
+    recipient: str | None = None
+    notification_type: str = "EXPEDITION_UPDATE"
+    message: str
+
+
+class NotePayload(BaseModel):
+    note: str
+    priority: str = "NORMAL"
+    visibility: str = "PRIVATE"
+
+
+def _tenant_ids(tenant: dict) -> tuple[str, str]:
+    return tenant["org_id"], tenant.get("user_id") or tenant.get("clerk_user_id") or "system"
 
 
 @router.get("/shipments")
 def list_shipments(
+    q: str | None = None,
+    status: str | None = None,
+    mode: str | None = None,
+    risk_level: str | None = None,
+    origin_country: str | None = None,
+    destination_country: str | None = None,
+    page: int = 1,
+    page_size: int = 30,
+    sort: str = "updated_desc",
     tenant=Depends(get_current_tenant),
 ):
-    org_id = tenant["org_id"]
+    org_id, _ = _tenant_ids(tenant)
+    data = list_expeditions(
+        org_id,
+        q=q,
+        status=status,
+        mode=mode,
+        risk_level=risk_level,
+        origin_country=origin_country,
+        destination_country=destination_country,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+    )
+    return {"status": "ok", "items": data["items"], "shipments": data["items"], "pagination": data["pagination"]}
 
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text("""
-                select
-                    s.id,
-                    s.org_id,
-                    s.client_id,
-                    s.dossier_id,
-                    s.tracking_id,
-                    s.status,
-                    s.current_status,
-                    s.eta_at,
-                    s.current_batch_id,
-                    s.batch_status,
-                    s.customs_status,
-                    s.delay_status,
-                    s.inventory_status,
-                    s.delivery_status,
-                    s.final_release_status,
-                    s.origin_country,
-                    s.origin_city,
-                    s.destination_country,
-                    s.destination_city,
-                    s.goods_type,
 
-                    s.weight_kg as estimated_weight_kg,
-                    s.weight_kg as actual_weight_kg,
-                    s.volume_cbm as estimated_volume_cbm,
-                    s.volume_cbm as actual_volume_cbm,
+@router.get("/shipments/stats")
+def get_shipments_stats(tenant=Depends(get_current_tenant)):
+    org_id, _ = _tenant_ids(tenant)
+    return {"status": "ok", "stats": expedition_stats(org_id)}
 
-                    s.fees_total as final_total,
-                    s.currency as final_currency,
 
-                    c.phone as client_phone,
-                    c.name as client_name,
+@router.get("/shipments/export")
+def export_shipments(
+    q: str | None = None,
+    status: str | None = None,
+    mode: str | None = None,
+    risk_level: str | None = None,
+    origin_country: str | None = None,
+    destination_country: str | None = None,
+    sort: str = "updated_desc",
+    tenant=Depends(get_current_tenant),
+):
+    org_id, _ = _tenant_ids(tenant)
+    csv_data = export_expeditions(
+        org_id,
+        q=q,
+        status=status,
+        mode=mode,
+        risk_level=risk_level,
+        origin_country=origin_country,
+        destination_country=destination_country,
+        sort=sort,
+    )
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=expeditions.csv"},
+    )
 
-                    d.case_type,
-                    d.status_global as dossier_status,
 
-                    s.created_at,
-                    s.updated_at
-                from shipments s
-                left join clients c
-                    on c.id = s.client_id
-                left join dossiers d
-                    on d.id = s.dossier_id
-                where s.org_id = :org_id
-                order by s.created_at desc
-            """),
-            {"org_id": org_id},
-        ).fetchall()
-
-    return {
-        "status": "ok",
-        "shipments": [dict(row._mapping) for row in rows],
-    }
+@router.post("/shipments")
+def create_shipment(payload: ExpeditionPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    try:
+        expedition = create_expedition(org_id, user_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
 
 
 @router.get("/shipments/{shipment_id}")
-def get_shipment(
-    shipment_id: str,
-    tenant=Depends(get_current_tenant),
-):
-    org_id = tenant["org_id"]
-
-    with engine.connect() as conn:
-        shipment_row = conn.execute(
-            text("""
-                select
-                    s.id,
-                    s.org_id,
-                    s.client_id,
-                    s.dossier_id,
-                    s.tracking_id,
-                    s.status,
-                    s.current_status,
-                    s.eta_at,
-                    s.current_batch_id,
-                    s.batch_status,
-                    s.customs_status,
-                    s.delay_status,
-                    s.inventory_status,
-                    s.delivery_status,
-                    s.final_release_status,
-                    s.origin_country,
-                    s.origin_city,
-                    s.destination_country,
-                    s.destination_city,
-                    s.goods_type,
-
-                    s.weight_kg as estimated_weight_kg,
-                    s.weight_kg as actual_weight_kg,
-                    s.volume_cbm as estimated_volume_cbm,
-                    s.volume_cbm as actual_volume_cbm,
-
-                    s.fees_total as final_total,
-                    s.currency as final_currency,
-
-                    c.phone as client_phone,
-                    c.name as client_name,
-
-                    d.case_type,
-                    d.status_global as dossier_status,
-
-                    s.created_at,
-                    s.updated_at
-                from shipments s
-                left join clients c
-                    on c.id = s.client_id
-                left join dossiers d
-                    on d.id = s.dossier_id
-                where s.org_id = :org_id
-                  and s.id = :shipment_id
-                limit 1
-            """),
-            {
-                "org_id": org_id,
-                "shipment_id": shipment_id,
-            },
-        ).fetchone()
-
-        if not shipment_row:
-            raise HTTPException(status_code=404, detail="Shipment not found")
-
-        timeline_rows = conn.execute(
-            text("""
-                select
-                    id,
-                    event_type,
-                    event_payload,
-                    created_at
-                from shipment_timeline_events
-                where shipment_id = :shipment_id
-                order by created_at desc
-            """),
-            {"shipment_id": shipment_id},
-        ).fetchall()
-
-        media_rows = conn.execute(
-            text("""
-                select
-                    id,
-                    media_type,
-                    media_url,
-                    caption,
-                    content_type,
-                    created_at
-                from shipment_media
-                where shipment_id = :shipment_id
-                order by created_at desc
-            """),
-            {"shipment_id": shipment_id},
-        ).fetchall()
-
-    return {
-        "status": "ok",
-        "shipment": dict(shipment_row._mapping),
-        "timeline": [dict(row._mapping) for row in timeline_rows],
-        "media": [dict(row._mapping) for row in media_rows],
-    }
+def get_shipment(shipment_id: str, tenant=Depends(get_current_tenant)):
+    org_id, _ = _tenant_ids(tenant)
+    expedition = get_expedition(org_id, shipment_id)
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
 
 
-@router.post("/shipments/{dossier_id}")
-def create_shipment_from_dossier(
-    dossier_id: str,
-    body: CreateShipmentRequest | None = None,
-    tenant=Depends(get_current_tenant),
-):
-    org_id = tenant["org_id"]
-
-    dossier = get_dossier_full(
-        org_id=org_id,
-        dossier_id=dossier_id,
-    )
-
-    if not dossier:
-        raise HTTPException(status_code=404, detail="Dossier not found")
-
-    weight_kg = body.weight_kg if body else None
-    volume_cbm = body.volume_cbm if body else None
-
-    shipment = create_shipment(
-        org_id=org_id,
-        dossier_id=dossier_id,
-        weight_kg=weight_kg,
-        volume_cbm=volume_cbm,
-    )
-
-    if not shipment:
-        raise HTTPException(status_code=500, detail="Shipment creation failed")
-
-    create_dossier_event(
-        org_id=org_id,
-        dossier_id=dossier_id,
-        event_type="SHIPMENT_CREATED",
-        payload={
-            "shipment_id": str(shipment["id"]),
-            "tracking_id": shipment["tracking_id"],
-        },
-    )
-
-    return {
-        "status": "ok",
-        "shipment": shipment,
-    }
+@router.patch("/shipments/{shipment_id}")
+def patch_shipment(shipment_id: str, payload: ExpeditionPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    try:
+        expedition = update_expedition(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
 
 
-@router.patch("/shipments/{shipment_id}/status")
-def update_status(
-    shipment_id: str,
-    body: UpdateShipmentStatusRequest,
-    tenant=Depends(get_current_tenant),
-):
-    org_id = tenant["org_id"]
-
-    lifecycle_result = change_shipment_status(
-        org_id=org_id,
-        shipment_id=shipment_id,
-        next_status=body.status,
-        event_type="STATUS_CHANGE",
-        event_source="MANAGER",
-        event_message=body.notes or "Shipment updated",
-        metadata={
-            "legacy_endpoint": "/shipments/{shipment_id}/status",
-        },
-        actor_id="demo_manager",
-        actor_name="Demo Manager",
-    )
-    shipment = lifecycle_result["shipment"]
-
-    if not shipment:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid status or shipment not found",
-        )
-
-    dossier_id = str(shipment["dossier_id"])
-
-    create_dossier_event(
-        org_id=org_id,
-        dossier_id=dossier_id,
-        event_type="SHIPMENT_STATUS_UPDATED",
-        payload={
-            "shipment_id": str(shipment["id"]),
-            "tracking_id": shipment["tracking_id"],
-            "new_status": shipment["status"],
-            "notes": body.notes,
-        },
-    )
-
-    dossier = get_dossier_full(
-        org_id=org_id,
-        dossier_id=dossier_id,
-    )
-
-    client_phone = get_client_phone_from_dossier(dossier)
-
-    notification = None
-
-    if client_phone:
-        notification = create_shipment_notification(
-            org_id=org_id,
-            shipment=shipment,
-            client_phone=client_phone,
-        )
-
-        if notification:
-            create_dossier_event(
-                org_id=org_id,
-                dossier_id=dossier_id,
-                event_type="SHIPMENT_NOTIFICATION_CREATED",
-                payload={
-                    "shipment_id": str(shipment["id"]),
-                    "status": shipment["status"],
-                    "notification_id": str(notification["id"]),
-                },
-            )
-
-    payment_notification = None
-
-    if shipment["status"] == "READY_FOR_PICKUP" and client_phone:
-        payment_notification = create_payment_reminder_notification(
-            org_id=org_id,
-            shipment=shipment,
-            client_phone=client_phone,
-        )
-
-        if payment_notification:
-            create_dossier_event(
-                org_id=org_id,
-                dossier_id=dossier_id,
-                event_type="PAYMENT_REMINDER_CREATED",
-                payload={
-                    "shipment_id": str(shipment["id"]),
-                    "notification_id": str(payment_notification["id"]),
-                },
-            )
-
-    return {
-        "status": "ok",
-        "shipment": shipment,
-        "notification": notification,
-        "payment_notification": payment_notification,
-    }
+@router.get("/shipments/{shipment_id}/timeline")
+def get_shipment_timeline(shipment_id: str, tenant=Depends(get_current_tenant)):
+    org_id, _ = _tenant_ids(tenant)
+    items = expedition_timeline(org_id, shipment_id)
+    return {"status": "ok", "items": items}
 
 
-@router.post("/shipments/{shipment_id}/set-total")
-def set_total(
-    shipment_id: str,
-    body: SetTotalRequest,
-    tenant=Depends(get_current_tenant),
-):
-    org_id = tenant["org_id"]
+@router.post("/shipments/{shipment_id}/packages")
+def attach_package(shipment_id: str, payload: PackageAssignmentPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = add_package_to_expedition(org_id, shipment_id, payload.package_id, user_id)
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition or package not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
 
-    shipment = set_shipment_total(
-        org_id=org_id,
-        shipment_id=shipment_id,
-        total=body.total,
-        currency=body.currency,
-    )
 
-    if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
+@router.delete("/shipments/{shipment_id}/packages/{package_id}")
+def detach_package(shipment_id: str, package_id: str, reason: str | None = None, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = remove_package_from_expedition(org_id, shipment_id, package_id, user_id, reason)
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Package assignment not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
 
-    return {
-        "status": "ok",
-        "shipment": shipment,
-    }
+
+@router.patch("/shipments/{shipment_id}/checkpoints/{checkpoint_key}")
+def patch_checkpoint(shipment_id: str, checkpoint_key: str, payload: CheckpointPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    try:
+        expedition = update_checkpoint(org_id, shipment_id, checkpoint_key, user_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.post("/shipments/{shipment_id}/documents")
+def post_document(shipment_id: str, payload: DocumentPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = add_document(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.post("/shipments/{shipment_id}/financial-lines")
+def post_financial_line(shipment_id: str, payload: FinancialLinePayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = add_financial_line(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.post("/shipments/{shipment_id}/anomalies")
+def post_anomaly(shipment_id: str, payload: AnomalyPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    try:
+        expedition = create_anomaly(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.patch("/shipments/{shipment_id}/anomalies/{anomaly_id}/resolve")
+def patch_anomaly(shipment_id: str, anomaly_id: str, payload: ResolveAnomalyPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = resolve_anomaly(org_id, shipment_id, anomaly_id, user_id, payload.notes)
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.post("/shipments/{shipment_id}/notifications")
+def post_notification(shipment_id: str, payload: NotificationPayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = create_notification(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}
+
+
+@router.post("/shipments/{shipment_id}/notes")
+def post_note(shipment_id: str, payload: NotePayload, tenant=Depends(get_current_tenant)):
+    org_id, user_id = _tenant_ids(tenant)
+    expedition = add_note(org_id, shipment_id, user_id, payload.model_dump(exclude_unset=True))
+    if not expedition:
+        raise HTTPException(status_code=404, detail="Expedition not found")
+    return {"status": "ok", "shipment": expedition, "expedition": expedition}

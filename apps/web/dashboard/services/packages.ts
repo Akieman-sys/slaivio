@@ -16,41 +16,71 @@ export type PackageStatus =
 
 export type PackageCondition = "UNKNOWN" | "GOOD" | "DAMAGED" | "FRAGILE" | "MISSING_INFO" | "REPACK_REQUIRED";
 export type InventoryStatus = "NOT_STORED" | "IN_STOCK" | "RESERVED" | "GROUPED" | "DISPATCHED" | "RELEASED";
-export type PaymentClearanceStatus = "UNKNOWN" | "PENDING" | "PARTIAL" | "CLEARED" | "BLOCKED";
+export type PackageValidationStatus = "PENDING" | "VALIDATED" | "NEEDS_REVIEW" | "BLOCKED" | "REJECTED";
+export type PaymentStatus = "UNKNOWN" | "PENDING" | "PARTIAL" | "PAID" | "OVERDUE" | "BLOCKED" | "CLEARED";
+export type PaymentClearanceStatus = PaymentStatus;
+export type PackageType = "carton" | "sac" | "caisse" | "palette" | "document" | "lot" | "other";
+export type PackageSource = "manual" | "whatsapp" | "import" | "warehouse" | "api" | "legacy";
+export type AnomalySeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type AnomalyStatus = "OPEN" | "IN_REVIEW" | "RESOLVED" | "DISMISSED";
+export type NotificationChannel = "whatsapp" | "email" | "sms" | "internal";
 
 export type PackageRecord = {
   id: string;
   org_id: string;
   client_id: string | null;
   dossier_id: string | null;
+  shipment_id: string | null;
   package_reference: string | null;
   tracking_id: string | null;
+  source: PackageSource;
+  package_type: PackageType;
+  description: string | null;
+  category: string | null;
   status: PackageStatus;
+  validation_status: PackageValidationStatus;
+  payment_status: PaymentStatus;
+  payment_clearance_status: PaymentClearanceStatus;
   package_condition: PackageCondition;
   inventory_status: InventoryStatus;
-  payment_clearance_status: PaymentClearanceStatus;
-  current_warehouse_id: string | null;
-  storage_location_id: string | null;
-  last_scan_location: string | null;
-  last_scan_at: string | null;
-  barcode: string | null;
-  qr_code_value: string | null;
-  public_tracking_enabled: boolean | null;
-  eta_at: string | null;
-  received_at_origin_at: string | null;
-  dispatched_at: string | null;
-  delivered_at: string | null;
+  warehouse_id: string | null;
+  warehouse_name: string | null;
+  warehouse_zone: string | null;
+  warehouse_rack: string | null;
+  warehouse_location: string | null;
   origin_country: string | null;
   origin_city: string | null;
   destination_country: string | null;
   destination_city: string | null;
-  goods_type: string | null;
-  weight_kg: number | null;
-  volume_cbm: number | null;
+  service_type: string | null;
   shipping_mode: string | null;
+  shipment_reference: string | null;
+  shipment_batch_id: string | null;
+  manifest_id: string | null;
+  public_tracking_enabled: boolean | null;
+  eta_at: string | null;
+  received_at: string | null;
+  received_at_origin_at: string | null;
+  dispatched_at: string | null;
+  delivered_at: string | null;
+  weight_kg: number | null;
+  volumetric_weight_kg: number | null;
+  length_cm: number | null;
+  width_cm: number | null;
+  height_cm: number | null;
+  volume_cbm: number | null;
+  pieces_count: number;
+  declared_value: number | null;
+  declared_currency: string | null;
+  is_fragile: boolean;
+  notes: string | null;
   fees_total: number | null;
   fees_paid: number | null;
   currency: string | null;
+  barcode: string | null;
+  qr_code_value: string | null;
+  last_scan_location: string | null;
+  last_scan_at: string | null;
   client_name: string | null;
   client_phone: string | null;
   client_email: string | null;
@@ -60,46 +90,66 @@ export type PackageRecord = {
   receipt_count: number;
   media_count: number;
   event_count: number;
+  anomaly_count: number;
+  open_anomaly_count: number;
+  notification_count: number;
   created_at: string;
   updated_at: string | null;
-  receipts?: WarehouseReceipt[];
   media?: PackageMedia[];
   events?: PackageLifecycleEvent[];
-};
-
-export type WarehouseReceipt = {
-  id: string;
-  receipt_code: string | null;
-  warehouse_id: string | null;
-  received_by_name: string | null;
-  supplier_name: string | null;
-  supplier_phone: string | null;
-  package_label: string | null;
-  package_condition: PackageCondition | string | null;
-  measured_weight_kg: number | null;
-  measured_volume_cbm: number | null;
-  notes: string | null;
-  received_at: string | null;
-  created_at: string;
+  anomalies?: PackageAnomaly[];
+  notifications?: PackageNotification[];
 };
 
 export type PackageMedia = {
   id: string;
-  media_url: string | null;
-  media_type: string | null;
+  media_url: string;
+  media_type: string;
   caption: string | null;
   uploaded_by_name: string | null;
   created_at: string;
 };
 
+export type PackageAnomaly = {
+  id: string;
+  anomaly_type: string;
+  severity: AnomalySeverity;
+  status: AnomalyStatus;
+  title: string;
+  description: string | null;
+  resolution_notes: string | null;
+  detected_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PackageNotification = {
+  id: string;
+  channel: NotificationChannel;
+  notification_type: string;
+  recipient: string | null;
+  message: string;
+  status: string;
+  provider: string | null;
+  provider_message_id: string | null;
+  sent_at: string | null;
+  failed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
 export type PackageLifecycleEvent = {
   id: string;
+  event_type: string;
+  title: string;
+  description: string | null;
   previous_status: string | null;
   new_status: string | null;
-  event_type: string | null;
-  event_source: string | null;
-  event_message: string | null;
   metadata: Record<string, unknown> | null;
+  actor_id: string | null;
   actor_name: string | null;
   created_at: string;
 };
@@ -122,32 +172,55 @@ export type PackageStats = {
   delivered: number;
   total_weight_kg: number;
   total_volume_cbm: number;
+  total_pieces?: number;
 };
 
 export type PackagePayload = {
   dossier_id: string;
+  package_reference?: string | null;
   tracking_id?: string | null;
+  source?: PackageSource;
+  package_type?: PackageType;
+  description?: string | null;
+  category?: string | null;
   status?: PackageStatus;
+  validation_status?: PackageValidationStatus;
+  payment_status?: PaymentStatus;
+  payment_clearance_status?: PaymentClearanceStatus;
   package_condition?: PackageCondition;
   inventory_status?: InventoryStatus;
-  payment_clearance_status?: PaymentClearanceStatus;
+  warehouse_name?: string | null;
+  warehouse_zone?: string | null;
+  warehouse_rack?: string | null;
+  warehouse_location?: string | null;
   origin_country?: string | null;
   origin_city?: string | null;
   destination_country?: string | null;
   destination_city?: string | null;
-  goods_type?: string | null;
-  weight_kg?: number | null;
-  volume_cbm?: number | null;
-  actual_weight_kg?: number | null;
-  actual_volume_cbm?: number | null;
+  service_type?: string | null;
   shipping_mode?: string | null;
+  shipment_reference?: string | null;
+  public_tracking_enabled?: boolean;
+  eta_at?: string | null;
+  received_at?: string | null;
+  dispatched_at?: string | null;
+  delivered_at?: string | null;
+  weight_kg?: number | null;
+  volumetric_weight_kg?: number | null;
+  length_cm?: number | null;
+  width_cm?: number | null;
+  height_cm?: number | null;
+  volume_cbm?: number | null;
+  pieces_count?: number | null;
+  declared_value?: number | null;
+  declared_currency?: string | null;
+  is_fragile?: boolean;
+  notes?: string | null;
   fees_total?: number | null;
   fees_paid?: number | null;
   currency?: string | null;
   barcode?: string | null;
   qr_code_value?: string | null;
-  public_tracking_enabled?: boolean;
-  eta_at?: string | null;
   last_scan_location?: string | null;
 };
 
@@ -169,6 +242,10 @@ export async function listPackages(params: {
   condition?: PackageCondition | "";
   inventory_status?: InventoryStatus | "";
   payment_clearance_status?: PaymentClearanceStatus | "";
+  payment_status?: PaymentStatus | "";
+  validation_status?: PackageValidationStatus | "";
+  package_type?: PackageType | "";
+  source?: PackageSource | "";
   dossier_id?: string;
   client_id?: string;
   page?: number;
@@ -204,6 +281,10 @@ export async function exportPackages(params: {
   condition?: PackageCondition | "";
   inventory_status?: InventoryStatus | "";
   payment_clearance_status?: PaymentClearanceStatus | "";
+  payment_status?: PaymentStatus | "";
+  validation_status?: PackageValidationStatus | "";
+  package_type?: PackageType | "";
+  source?: PackageSource | "";
   sort?: string;
 } = {}) {
   return (
@@ -212,4 +293,26 @@ export async function exportPackages(params: {
       responseType: "blob",
     })
   ).data;
+}
+
+export async function importPackages(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return (await api.post<{ status: "ok"; result: { created: number; skipped: number; errors: Array<{ line: number; error: string }> } }>("/packages/import", form)).data.result;
+}
+
+export async function addPackageMedia(id: string, payload: { media_url: string; media_type?: string; caption?: string | null }) {
+  return (await api.post<{ status: "ok"; package: PackageRecord }>(`/packages/${id}/media`, payload)).data.package;
+}
+
+export async function createPackageAnomaly(id: string, payload: { anomaly_type?: string; severity?: AnomalySeverity; title: string; description?: string | null }) {
+  return (await api.post<{ status: "ok"; package: PackageRecord }>(`/packages/${id}/anomalies`, payload)).data.package;
+}
+
+export async function resolvePackageAnomaly(id: string, anomalyId: string, notes?: string | null) {
+  return (await api.patch<{ status: "ok"; package: PackageRecord }>(`/packages/${id}/anomalies/${anomalyId}/resolve`, { notes })).data.package;
+}
+
+export async function createPackageNotification(id: string, payload: { channel?: NotificationChannel; notification_type?: string; recipient?: string | null; message: string }) {
+  return (await api.post<{ status: "ok"; package: PackageRecord }>(`/packages/${id}/notifications`, payload)).data.package;
 }

@@ -3,8 +3,11 @@
 import axios from "axios";
 import {
   AlertCircle,
+  AlertTriangle,
   Barcode,
+  Bell,
   Box,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -12,6 +15,7 @@ import {
   FileText,
   History,
   Image as ImageIcon,
+  Link as LinkIcon,
   MapPin,
   MoreHorizontal,
   PackageCheck,
@@ -19,6 +23,7 @@ import {
   Ruler,
   Search,
   Truck,
+  Upload,
   Warehouse,
   X,
 } from "lucide-react";
@@ -28,20 +33,29 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "@/services/api";
 import { listDossiers, type DossierRecord } from "@/services/dossiers";
 import {
+  addPackageMedia,
   createPackage,
+  createPackageAnomaly,
+  createPackageNotification,
   exportPackages,
   getPackage,
   getPackageStats,
   getPackageTimeline,
+  importPackages,
   listPackages,
+  resolvePackageAnomaly,
   updatePackage,
+  type AnomalySeverity,
   type InventoryStatus,
   type PackageCondition,
   type PackagePayload,
   type PackageRecord,
+  type PackageSource,
   type PackageStats,
   type PackageStatus,
   type PackageTimelineEvent,
+  type PackageType,
+  type PackageValidationStatus,
   type PaymentClearanceStatus,
 } from "@/services/packages";
 
@@ -97,8 +111,37 @@ const paymentLabels: Record<PaymentClearanceStatus, string> = {
   UNKNOWN: "Non défini",
   PENDING: "À encaisser",
   PARTIAL: "Partiel",
+  PAID: "Payé",
   CLEARED: "Soldé",
+  OVERDUE: "En retard",
   BLOCKED: "Bloqué",
+};
+
+const validationLabels: Record<PackageValidationStatus, string> = {
+  PENDING: "À vérifier",
+  VALIDATED: "Validé",
+  NEEDS_REVIEW: "À revoir",
+  BLOCKED: "Bloqué",
+  REJECTED: "Rejeté",
+};
+
+const packageTypeLabels: Record<PackageType, string> = {
+  carton: "Carton",
+  sac: "Sac",
+  caisse: "Caisse",
+  palette: "Palette",
+  document: "Document",
+  lot: "Lot",
+  other: "Autre",
+};
+
+const sourceLabels: Record<PackageSource, string> = {
+  manual: "Manuel",
+  whatsapp: "WhatsApp",
+  import: "Import",
+  warehouse: "Entrepôt",
+  api: "API",
+  legacy: "Historique",
 };
 
 const emptyStats: PackageStats = {
@@ -114,9 +157,12 @@ const emptyStats: PackageStats = {
 
 const views: Array<{ key: string; label: string; status?: PackageStatus; inventory?: InventoryStatus }> = [
   { key: "all", label: "Tous" },
-  { key: "received", label: "Reçus", status: "RECEIVED_AT_ORIGIN" },
+  { key: "received", label: "Reçus entrepôt", status: "RECEIVED_AT_ORIGIN" },
+  { key: "review", label: "À vérifier" },
   { key: "stock", label: "En stock", inventory: "IN_STOCK" },
+  { key: "ready", label: "Prêts à expédier", status: "READY_FOR_DISPATCH" },
   { key: "transit", label: "En transit", status: "IN_TRANSIT" },
+  { key: "arrived", label: "Arrivés", status: "ARRIVED_DESTINATION" },
   { key: "issues", label: "Anomalies" },
   { key: "delivered", label: "Livrés", status: "DELIVERED" },
 ];
@@ -128,7 +174,7 @@ const pagerButtonClass = "flex h-8 w-8 items-center justify-center rounded-md bo
 
 type Pagination = { page: number; page_size: number; total: number; total_pages: number };
 type PackageFormMode = "create" | "edit";
-type DetailTab = "summary" | "dossier" | "warehouse" | "media" | "history";
+type DetailTab = "summary" | "dossier" | "measures" | "warehouse" | "shipment" | "payment" | "anomalies" | "media" | "notifications" | "history";
 
 export function PackagesPage() {
   const [packages, setPackages] = useState<PackageRecord[]>([]);
@@ -143,6 +189,9 @@ export function PackagesPage() {
   const [condition, setCondition] = useState<PackageCondition | "">("");
   const [inventory, setInventory] = useState<InventoryStatus | "">("");
   const [payment, setPayment] = useState<PaymentClearanceStatus | "">("");
+  const [validation, setValidation] = useState<PackageValidationStatus | "">("");
+  const [packageType, setPackageType] = useState<PackageType | "">("");
+  const [source, setSource] = useState<PackageSource | "">("");
   const [sort, setSort] = useState("updated_desc");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -153,6 +202,10 @@ export function PackagesPage() {
   const [formPackage, setFormPackage] = useState<PackageRecord | null>(null);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
   const page = pagination.page || 1;
@@ -160,7 +213,7 @@ export function PackagesPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => loadPackages(1), 220);
     return () => window.clearTimeout(timeout);
-  }, [query, status, condition, inventory, payment, sort, activeView]);
+  }, [query, status, condition, inventory, payment, validation, packageType, source, sort, activeView]);
 
   useEffect(() => {
     loadStats();
@@ -185,16 +238,19 @@ export function PackagesPage() {
     try {
       const response = await listPackages({
         q: query || undefined,
-        status: currentView.key === "issues" ? undefined : currentView.status || status || undefined,
+        status: currentView.key === "issues" || currentView.key === "review" ? undefined : currentView.status || status || undefined,
         condition: condition || undefined,
         inventory_status: currentView.inventory || inventory || undefined,
         payment_clearance_status: payment || undefined,
+        validation_status: currentView.key === "review" ? "NEEDS_REVIEW" : validation || undefined,
+        package_type: packageType || undefined,
+        source: source || undefined,
         page: nextPage,
         page_size: 30,
         sort,
       });
       const items = currentView.key === "issues"
-        ? response.items.filter((item) => ["BLOCKED", "ISSUE"].includes(item.status))
+        ? response.items.filter((item) => ["BLOCKED", "ISSUE"].includes(item.status) || item.open_anomaly_count > 0)
         : response.items;
       setPackages(items);
       setPagination(response.pagination);
@@ -259,16 +315,33 @@ export function PackagesPage() {
       package_condition: String(form.get("package_condition") || "UNKNOWN") as PackageCondition,
       inventory_status: String(form.get("inventory_status") || "NOT_STORED") as InventoryStatus,
       payment_clearance_status: String(form.get("payment_clearance_status") || "UNKNOWN") as PaymentClearanceStatus,
+      payment_status: String(form.get("payment_clearance_status") || "UNKNOWN") as PaymentClearanceStatus,
+      validation_status: String(form.get("validation_status") || "PENDING") as PackageValidationStatus,
+      source: String(form.get("source") || "manual") as PackageSource,
+      package_type: String(form.get("package_type") || "carton") as PackageType,
+      description: clean(form.get("description")),
+      category: clean(form.get("category")),
+      warehouse_name: clean(form.get("warehouse_name")),
+      warehouse_zone: clean(form.get("warehouse_zone")),
+      warehouse_rack: clean(form.get("warehouse_rack")),
+      warehouse_location: clean(form.get("warehouse_location")),
       origin_country: clean(form.get("origin_country")),
       origin_city: clean(form.get("origin_city")),
       destination_country: clean(form.get("destination_country")),
       destination_city: clean(form.get("destination_city")),
-      goods_type: clean(form.get("goods_type")),
       weight_kg: numberOrNull(form.get("weight_kg")),
+      length_cm: numberOrNull(form.get("length_cm")),
+      width_cm: numberOrNull(form.get("width_cm")),
+      height_cm: numberOrNull(form.get("height_cm")),
       volume_cbm: numberOrNull(form.get("volume_cbm")),
-      actual_weight_kg: numberOrNull(form.get("actual_weight_kg")),
-      actual_volume_cbm: numberOrNull(form.get("actual_volume_cbm")),
+      volumetric_weight_kg: numberOrNull(form.get("volumetric_weight_kg")),
+      pieces_count: numberOrNull(form.get("pieces_count")),
+      declared_value: numberOrNull(form.get("declared_value")),
+      declared_currency: clean(form.get("declared_currency")),
+      is_fragile: form.get("is_fragile") === "on",
       shipping_mode: clean(form.get("shipping_mode")),
+      service_type: clean(form.get("shipping_mode")),
+      shipment_reference: clean(form.get("shipment_reference")),
       fees_total: numberOrNull(form.get("fees_total")),
       fees_paid: numberOrNull(form.get("fees_paid")),
       currency: clean(form.get("currency")),
@@ -277,6 +350,7 @@ export function PackagesPage() {
       public_tracking_enabled: form.get("public_tracking_enabled") === "on",
       eta_at: clean(form.get("eta_at")),
       last_scan_location: clean(form.get("last_scan_location")),
+      notes: clean(form.get("notes")),
     };
     if (!payload.dossier_id) {
       setSaving(false);
@@ -306,6 +380,9 @@ export function PackagesPage() {
         condition: condition || undefined,
         inventory_status: currentView.inventory || inventory || undefined,
         payment_clearance_status: payment || undefined,
+        validation_status: validation || undefined,
+        package_type: packageType || undefined,
+        source: source || undefined,
         sort,
       });
       const url = window.URL.createObjectURL(blob);
@@ -319,12 +396,34 @@ export function PackagesPage() {
     }
   }
 
+  async function handleImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const file = new FormData(event.currentTarget).get("file");
+    if (!(file instanceof File) || !file.size) {
+      setImportError("Sélectionnez un fichier CSV.");
+      return;
+    }
+    setImporting(true);
+    setImportError("");
+    setImportResult(null);
+    try {
+      const result = await importPackages(file);
+      setImportResult({ created: result.created, skipped: result.skipped });
+      await Promise.all([loadStats(), loadPackages(1)]);
+    } catch (err) {
+      setImportError(apiErrorMessage(err));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const statCards = useMemo(() => [
     { label: "Colis total", value: stats.total, tone: "blue" },
     { label: "Reçus", value: stats.received, tone: "blue" },
     { label: "En stock", value: stats.in_stock, tone: "blue" },
     { label: "En transit", value: stats.in_transit, tone: "blue" },
     { label: "Anomalies", value: stats.issues, tone: "amber" },
+    { label: "Poids total", value: `${Number(stats.total_weight_kg || 0).toLocaleString("fr-FR")} kg`, tone: "neutral" },
   ], [stats]);
 
   return (
@@ -344,6 +443,10 @@ export function PackagesPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button onClick={() => setImportOpen(true)} className={buttonClass}>
+                <Upload size={16} />
+                Importer
+              </button>
               <button onClick={handleExport} className={buttonClass}>
                 <Download size={16} />
                 Exporter
@@ -370,7 +473,7 @@ export function PackagesPage() {
           </div>
         </header>
 
-        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
           {statCards.map((card) => (
             <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
@@ -399,6 +502,18 @@ export function PackagesPage() {
             <SelectFilter value={payment} onChange={(value) => setPayment(value as PaymentClearanceStatus | "")} label="Paiement">
               <option value="">Paiement</option>
               {Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={validation} onChange={(value) => setValidation(value as PackageValidationStatus | "")} label="Validation">
+              <option value="">Validation</option>
+              {Object.entries(validationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={packageType} onChange={(value) => setPackageType(value as PackageType | "")} label="Type">
+              <option value="">Type</option>
+              {Object.entries(packageTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </SelectFilter>
+            <SelectFilter value={source} onChange={(value) => setSource(value as PackageSource | "")} label="Source">
+              <option value="">Source</option>
+              {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </SelectFilter>
             <SelectFilter value={sort} onChange={setSort} label="Tri">
               <option value="updated_desc">Activité récente</option>
@@ -453,6 +568,7 @@ export function PackagesPage() {
           timelineLoading={timelineLoading}
           onClose={() => setSelected(null)}
           onEdit={() => openEdit(selected)}
+          onUpdated={setSelected}
         />
       )}
 
@@ -468,6 +584,20 @@ export function PackagesPage() {
             setFormError("");
           }}
           onSubmit={submitPackage}
+        />
+      )}
+
+      {importOpen && (
+        <ImportPackagesModal
+          importing={importing}
+          error={importError}
+          result={importResult}
+          onClose={() => {
+            setImportOpen(false);
+            setImportError("");
+            setImportResult(null);
+          }}
+          onSubmit={handleImport}
         />
       )}
     </div>
@@ -504,11 +634,14 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
             <th className="px-3 py-2">Client</th>
             <th className="px-3 py-2">Dossier</th>
             <th className="px-3 py-2">Route</th>
+            <th className="px-3 py-2">Type</th>
             <th className="px-3 py-2">Marchandise</th>
             <th className="px-3 py-2 text-right">Poids / CBM</th>
-            <th className="px-3 py-2">Stock</th>
+            <th className="px-3 py-2">Entrepôt</th>
             <th className="px-3 py-2">Statut</th>
+            <th className="px-3 py-2">Validation</th>
             <th className="px-3 py-2">Paiement</th>
+            <th className="px-3 py-2">Expédition</th>
             <th className="px-3 py-2">Mise à jour</th>
             <th className="w-10 px-3 py-2" />
           </tr>
@@ -525,7 +658,7 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
               </td>
               <td className="px-3 py-2">
                 <p className="font-medium text-[#1f2328]">{item.package_reference || item.tracking_id || item.id.slice(0, 8)}</p>
-                <p className="text-[12px] text-[#687584]">{conditionLabels[item.package_condition] || item.package_condition}</p>
+                <p className="text-[12px] text-[#687584]">{item.tracking_id || sourceLabels[item.source] || item.source}</p>
               </td>
               <td className="px-3 py-2">
                 <p className="font-medium text-[#1f2328]">{item.client_name || "Client"}</p>
@@ -533,11 +666,20 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
               </td>
               <td className="px-3 py-2 text-[#334155]">{item.dossier_reference || "-"}</td>
               <td className="px-3 py-2 text-[#334155]">{routeLabel(item)}</td>
-              <td className="px-3 py-2 text-[#334155]">{item.goods_type || "-"}</td>
+              <td className="px-3 py-2 text-[#334155]">{packageTypeLabels[item.package_type] || item.package_type}</td>
+              <td className="px-3 py-2 text-[#334155]">
+                <p>{item.description || item.category || "-"}</p>
+                <p className="text-[12px] text-[#687584]">{item.is_fragile ? "Fragile" : conditionLabels[item.package_condition] || item.package_condition}</p>
+              </td>
               <td className="px-3 py-2 text-right text-[#334155]">{formatMeasure(item)}</td>
-              <td className="px-3 py-2"><InventoryBadge status={item.inventory_status} /></td>
+              <td className="px-3 py-2">
+                <p className="text-[#334155]">{item.warehouse_name || inventoryLabels[item.inventory_status] || "-"}</p>
+                <p className="text-[12px] text-[#687584]">{warehouseLocationLabel(item)}</p>
+              </td>
               <td className="px-3 py-2"><StatusBadge status={item.status} /></td>
+              <td className="px-3 py-2"><ValidationBadge status={item.validation_status} /></td>
               <td className="px-3 py-2"><PaymentBadge status={item.payment_clearance_status} /></td>
+              <td className="px-3 py-2 text-[#334155]">{item.shipment_reference || "-"}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(item.updated_at || item.created_at)}</td>
               <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
             </tr>
@@ -557,6 +699,7 @@ function PackageDetails({
   timelineLoading,
   onClose,
   onEdit,
+  onUpdated,
 }: {
   item: PackageRecord;
   loading: boolean;
@@ -566,6 +709,7 @@ function PackageDetails({
   timelineLoading: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onUpdated: (item: PackageRecord) => void;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -582,10 +726,19 @@ function PackageDetails({
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "summary", label: "Résumé" },
     { key: "dossier", label: "Dossier" },
+    { key: "measures", label: "Mesures" },
     { key: "warehouse", label: "Entrepôt" },
+    { key: "shipment", label: "Expédition" },
+    { key: "payment", label: "Paiement" },
+    { key: "anomalies", label: "Anomalies" },
     { key: "media", label: "Photos" },
+    { key: "notifications", label: "Notifications" },
     { key: "history", label: "Historique" },
   ];
+
+  async function refreshPackage(next: PackageRecord) {
+    onUpdated(next);
+  }
 
   return (
     <div className="fixed inset-0 z-50">
@@ -607,6 +760,7 @@ function PackageDetails({
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <StatusBadge status={item.status} />
               <InventoryBadge status={item.inventory_status} />
+              <ValidationBadge status={item.validation_status} />
               <PaymentBadge status={item.payment_clearance_status} />
               {loading && <span className="text-[12px] text-[#687584]">Actualisation…</span>}
             </div>
@@ -629,8 +783,13 @@ function PackageDetails({
           <div className={`flex-1 overflow-y-auto p-5 ${loading ? "opacity-60" : ""}`}>
             {activeTab === "summary" && <SummaryTab item={item} />}
             {activeTab === "dossier" && <DossierTab item={item} />}
+            {activeTab === "measures" && <MeasuresTab item={item} />}
             {activeTab === "warehouse" && <WarehouseTab item={item} />}
+            {activeTab === "shipment" && <ShipmentTab item={item} />}
+            {activeTab === "payment" && <PaymentTab item={item} />}
+            {activeTab === "anomalies" && <AnomaliesTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "media" && <MediaTab item={item} />}
+            {activeTab === "notifications" && <NotificationsTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
           </div>
         </div>
@@ -652,7 +811,7 @@ function SummaryTab({ item }: { item: PackageRecord }) {
       <Section title="Colis">
         <InfoRow icon={Barcode} label="Référence" value={item.package_reference || "-"} />
         <InfoRow icon={PackageSearch} label="Tracking ID" value={item.tracking_id || "-"} />
-        <InfoRow icon={Box} label="Marchandise" value={item.goods_type || "-"} />
+        <InfoRow icon={Box} label="Marchandise" value={item.description || item.category || "-"} />
         <InfoRow icon={Ruler} label="Mesures" value={formatMeasure(item)} />
       </Section>
       <Section title="Route & dates">
@@ -665,6 +824,33 @@ function SummaryTab({ item }: { item: PackageRecord }) {
         <Field label="Montant facturé" value={formatMoney(item.fees_total, item.currency)} />
         <Field label="Montant payé" value={formatMoney(item.fees_paid, item.currency)} />
         <Field label="Statut paiement" value={paymentLabels[item.payment_clearance_status] || item.payment_clearance_status} />
+      </Section>
+    </div>
+  );
+}
+
+function MeasuresTab({ item }: { item: PackageRecord }) {
+  return (
+    <div className="space-y-5">
+      <Section title="Mesures physiques">
+        <div className="grid grid-cols-2 gap-3">
+          <SmallMetric label="Poids réel" value={item.weight_kg ? `${item.weight_kg} kg` : "-"} />
+          <SmallMetric label="Poids volumétrique" value={item.volumetric_weight_kg ? `${item.volumetric_weight_kg} kg` : "-"} />
+          <SmallMetric label="Volume" value={item.volume_cbm ? `${item.volume_cbm} m³` : "-"} />
+          <SmallMetric label="Pièces" value={item.pieces_count || 1} />
+        </div>
+      </Section>
+      <Section title="Dimensions & valeur">
+        <Field label="Dimensions" value={dimensionsLabel(item)} />
+        <Field label="Type colis" value={packageTypeLabels[item.package_type] || item.package_type} />
+        <Field label="Catégorie" value={item.category || "-"} />
+        <Field label="Valeur déclarée" value={formatMoney(item.declared_value, item.declared_currency || item.currency)} />
+        <Field label="Fragile" value={item.is_fragile ? "Oui" : "Non"} />
+      </Section>
+      <Section title="Contrôle">
+        <Field label="Validation" value={validationLabels[item.validation_status] || item.validation_status} />
+        <Field label="État colis" value={conditionLabels[item.package_condition] || item.package_condition} />
+        <Field label="Notes internes" value={item.notes || "-"} />
       </Section>
     </div>
   );
@@ -688,44 +874,291 @@ function DossierTab({ item }: { item: PackageRecord }) {
 }
 
 function WarehouseTab({ item }: { item: PackageRecord }) {
-  const receipts = item.receipts || [];
-  if (receipts.length === 0) return <EmptyState title="Aucune réception entrepôt" text="Les reçus apparaîtront ici dès qu’un agent scanne ou réceptionne ce colis dans le module entrepôt." />;
   return (
-    <div className="space-y-3">
-      {receipts.map((receipt) => (
-        <div key={receipt.id} className="rounded-md border border-[#d8dce2] p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-medium">{receipt.receipt_code || receipt.package_label || "Réception"}</p>
-              <p className="mt-1 text-[13px] text-[#687584]">{receipt.supplier_name || "Fournisseur non renseigné"} · {formatDate(receipt.received_at || receipt.created_at)}</p>
-            </div>
-            <span className="rounded-full bg-[#f1f3f5] px-2 py-1 text-[12px] font-medium text-[#4f5b67] ring-1 ring-[#e1e5ea]">{receipt.package_condition || "UNKNOWN"}</span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[13px] text-[#334155]">
-            <Field label="Poids mesuré" value={receipt.measured_weight_kg ? `${receipt.measured_weight_kg} kg` : "-"} />
-            <Field label="Volume mesuré" value={receipt.measured_volume_cbm ? `${receipt.measured_volume_cbm} m³` : "-"} />
-          </div>
-          {receipt.notes && <p className="mt-3 text-[13px] leading-5 text-[#5f6b76]">{receipt.notes}</p>}
+    <div className="space-y-5">
+      <Section title="Emplacement actuel">
+        <InfoRow icon={Warehouse} label="Entrepôt" value={item.warehouse_name || "-"} />
+        <Field label="Zone" value={item.warehouse_zone || "-"} />
+        <Field label="Rack" value={item.warehouse_rack || "-"} />
+        <Field label="Emplacement" value={item.warehouse_location || "-"} />
+        <Field label="Statut stock" value={inventoryLabels[item.inventory_status] || item.inventory_status} />
+      </Section>
+      <Section title="Réception">
+        <Field label="Date réception" value={formatDate(item.received_at || item.received_at_origin_at)} />
+        <Field label="Dernier scan" value={item.last_scan_location ? `${item.last_scan_location} · ${formatDate(item.last_scan_at)}` : "-"} />
+        <Field label="Source" value={sourceLabels[item.source] || item.source} />
+      </Section>
+    </div>
+  );
+}
+
+function ShipmentTab({ item }: { item: PackageRecord }) {
+  return (
+    <div className="space-y-5">
+      <Section title="Expédition liée">
+        <InfoRow icon={Truck} label="Référence expédition" value={item.shipment_reference || "-"} />
+        <Field label="Service" value={item.service_type || item.shipping_mode || "-"} />
+        <Field label="Route" value={routeLabel(item)} />
+        <Field label="ETA" value={formatDate(item.eta_at)} />
+      </Section>
+      <Section title="Dates opérationnelles">
+        <Field label="Départ" value={formatDate(item.dispatched_at)} />
+        <Field label="Arrivée / livraison" value={formatDate(item.delivered_at)} />
+        <Field label="Tracking public" value={item.public_tracking_enabled ? "Activé" : "Désactivé"} />
+      </Section>
+    </div>
+  );
+}
+
+function PaymentTab({ item }: { item: PackageRecord }) {
+  const remaining = Number(item.fees_total || 0) - Number(item.fees_paid || 0);
+  return (
+    <div className="space-y-5">
+      <Section title="Paiement colis">
+        <div className="grid grid-cols-3 gap-3">
+          <SmallMetric label="Facturé" value={formatMoney(item.fees_total, item.currency)} />
+          <SmallMetric label="Payé" value={formatMoney(item.fees_paid, item.currency)} />
+          <SmallMetric label="Reste" value={formatMoney(Math.max(remaining, 0), item.currency)} />
         </div>
-      ))}
+      </Section>
+      <Section title="Statut">
+        <Field label="Paiement" value={paymentLabels[item.payment_clearance_status] || item.payment_clearance_status} />
+        <Field label="Devise" value={item.currency || "-"} />
+      </Section>
+    </div>
+  );
+}
+
+function AnomaliesTab({ item, onUpdated }: { item: PackageRecord; onUpdated: (item: PackageRecord) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const anomalies = item.anomalies || [];
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await createPackageAnomaly(item.id, {
+        anomaly_type: String(form.get("anomaly_type") || "OTHER"),
+        severity: String(form.get("severity") || "MEDIUM") as AnomalySeverity,
+        title: String(form.get("title") || ""),
+        description: clean(form.get("description")),
+      });
+      onUpdated(updated);
+      event.currentTarget.reset();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resolve(anomalyId: string) {
+    setSaving(true);
+    try {
+      onUpdated(await resolvePackageAnomaly(item.id, anomalyId, "Résolu depuis la fiche colis."));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Section title="Signaler une anomalie">
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput name="title" label="Titre" placeholder="Poids incohérent, colis abîmé..." />
+            <label className="block">
+              <FormLabel>Sévérité</FormLabel>
+              <select name="severity" defaultValue="MEDIUM" className={inputClass}>
+                <option value="LOW">Faible</option>
+                <option value="MEDIUM">Moyenne</option>
+                <option value="HIGH">Haute</option>
+                <option value="CRITICAL">Critique</option>
+              </select>
+            </label>
+          </div>
+          <TextInput name="anomaly_type" label="Type" placeholder="WEIGHT, DAMAGE, MISSING_INFO..." />
+          <label className="block">
+            <FormLabel>Description</FormLabel>
+            <textarea name="description" className={`${inputClass} h-24 py-2`} />
+          </label>
+          {error && <p className="text-[13px] text-red-600">{error}</p>}
+          <button disabled={saving} className={buttonClass}>
+            <AlertTriangle size={15} />
+            {saving ? "Enregistrement..." : "Créer l’anomalie"}
+          </button>
+        </form>
+      </Section>
+      <Section title="Anomalies">
+        {anomalies.length === 0 ? (
+          <EmptyState title="Aucune anomalie" text="Ce colis ne présente aucun blocage ou incident ouvert." />
+        ) : (
+          <div className="space-y-2">
+            {anomalies.map((anomaly) => (
+              <div key={anomaly.id} className="rounded-md border border-[#d8dce2] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{anomaly.title}</p>
+                    <p className="mt-1 text-[13px] text-[#687584]">{anomaly.severity} · {anomaly.status} · {formatDate(anomaly.detected_at)}</p>
+                  </div>
+                  {anomaly.status !== "RESOLVED" && (
+                    <button disabled={saving} onClick={() => resolve(anomaly.id)} className={buttonClass}>
+                      <CheckCircle2 size={15} />
+                      Résoudre
+                    </button>
+                  )}
+                </div>
+                {anomaly.description && <p className="mt-2 text-[13px] leading-5 text-[#4b5563]">{anomaly.description}</p>}
+                {anomaly.resolution_notes && <p className="mt-2 text-[13px] leading-5 text-emerald-700">{anomaly.resolution_notes}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
 
 function MediaTab({ item }: { item: PackageRecord }) {
   const media = item.media || [];
-  if (media.length === 0) return <EmptyState title="Aucune photo" text="Les photos de réception, étiquettes et preuves liées à ce colis seront visibles ici après synchronisation entrepôt." />;
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {media.map((file) => (
-        <a key={file.id} href={file.media_url || "#"} target="_blank" rel="noreferrer" className="rounded-md border border-[#d8dce2] p-3 transition hover:bg-[#f7f8fa]">
-          <div className="flex h-28 items-center justify-center rounded-md bg-[#f1f3f5] text-[#64748b]">
-            <ImageIcon size={28} />
+    <div className="space-y-5">
+      <AddMediaForm item={item} />
+      {media.length === 0 ? (
+        <EmptyState title="Aucune photo" text="Les photos de réception, étiquettes et preuves liées à ce colis seront visibles ici." />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {media.map((file) => (
+            <a key={file.id} href={file.media_url || "#"} target="_blank" rel="noreferrer" className="rounded-md border border-[#d8dce2] p-3 transition hover:bg-[#f7f8fa]">
+              <div className="flex h-28 items-center justify-center rounded-md bg-[#f1f3f5] text-[#64748b]">
+                <ImageIcon size={28} />
+              </div>
+              <p className="mt-3 truncate text-[13px] font-medium">{file.caption || file.media_type || "Média colis"}</p>
+              <p className="mt-1 text-[12px] text-[#687584]">{formatDate(file.created_at)}</p>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddMediaForm({ item }: { item: PackageRecord }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    setError("");
+    try {
+      await addPackageMedia(item.id, {
+        media_url: String(form.get("media_url") || ""),
+        media_type: String(form.get("media_type") || "IMAGE"),
+        caption: clean(form.get("caption")),
+      });
+      event.currentTarget.reset();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Section title="Ajouter un média">
+      <form onSubmit={submit} className="space-y-3">
+        <TextInput name="media_url" label="URL du média" placeholder="https://..." />
+        <div className="grid grid-cols-2 gap-3">
+          <TextInput name="media_type" label="Type" defaultValue="IMAGE" />
+          <TextInput name="caption" label="Légende" />
+        </div>
+        {error && <p className="text-[13px] text-red-600">{error}</p>}
+        <button disabled={saving} className={buttonClass}>
+          <LinkIcon size={15} />
+          {saving ? "Ajout..." : "Ajouter le média"}
+        </button>
+      </form>
+    </Section>
+  );
+}
+
+function NotificationsTab({ item, onUpdated }: { item: PackageRecord; onUpdated: (item: PackageRecord) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const notifications = item.notifications || [];
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await createPackageNotification(item.id, {
+        channel: String(form.get("channel") || "whatsapp") as "whatsapp",
+        notification_type: String(form.get("notification_type") || "PACKAGE_UPDATE"),
+        recipient: clean(form.get("recipient")),
+        message: String(form.get("message") || ""),
+      });
+      onUpdated(updated);
+      event.currentTarget.reset();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Section title="Préparer une notification">
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <FormLabel>Canal</FormLabel>
+              <select name="channel" defaultValue="whatsapp" className={inputClass}>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+                <option value="sms">SMS</option>
+                <option value="internal">Interne</option>
+              </select>
+            </label>
+            <TextInput name="notification_type" label="Type" defaultValue="PACKAGE_UPDATE" />
           </div>
-          <p className="mt-3 truncate text-[13px] font-medium">{file.caption || file.media_type || "Média colis"}</p>
-          <p className="mt-1 text-[12px] text-[#687584]">{formatDate(file.created_at)}</p>
-        </a>
-      ))}
+          <TextInput name="recipient" label="Destinataire" defaultValue={item.client_phone || item.client_email || ""} />
+          <label className="block">
+            <FormLabel>Message</FormLabel>
+            <textarea name="message" className={`${inputClass} h-28 py-2`} defaultValue={`Bonjour, votre colis ${item.package_reference || ""} est actuellement : ${statusLabels[item.status] || item.status}.`} />
+          </label>
+          {error && <p className="text-[13px] text-red-600">{error}</p>}
+          <button disabled={saving} className={buttonClass}>
+            <Bell size={15} />
+            {saving ? "Préparation..." : "Enregistrer la notification"}
+          </button>
+        </form>
+      </Section>
+      <Section title="Notifications">
+        {notifications.length === 0 ? (
+          <EmptyState title="Aucune notification" text="Les messages préparés ou envoyés pour ce colis apparaîtront ici." />
+        ) : (
+          <div className="space-y-2">
+            {notifications.map((notification) => (
+              <div key={notification.id} className="rounded-md border border-[#d8dce2] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-medium">{notification.channel} · {notification.notification_type}</p>
+                  <span className="text-[12px] text-[#687584]">{notification.status}</span>
+                </div>
+                <p className="mt-2 text-[13px] leading-5 text-[#4b5563]">{notification.message}</p>
+                <p className="mt-2 text-[12px] text-[#687584]">{formatDate(notification.created_at)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
@@ -820,7 +1253,10 @@ function PackageFormModal({
             </FormSection>
 
             <FormSection title="Statuts">
+              <SelectInput name="source" label="Source" defaultValue={item?.source || "manual"} options={sourceLabels} />
+              <SelectInput name="package_type" label="Type colis" defaultValue={item?.package_type || "carton"} options={packageTypeLabels} />
               <SelectInput name="status" label="Statut" defaultValue={item?.status || "CREATED"} options={statusLabels} />
+              <SelectInput name="validation_status" label="Validation" defaultValue={item?.validation_status || "PENDING"} options={validationLabels} />
               <SelectInput name="package_condition" label="État colis" defaultValue={item?.package_condition || "UNKNOWN"} options={conditionLabels} />
               <SelectInput name="inventory_status" label="Stock" defaultValue={item?.inventory_status || "NOT_STORED"} options={inventoryLabels} />
               <SelectInput name="payment_clearance_status" label="Paiement" defaultValue={item?.payment_clearance_status || "UNKNOWN"} options={paymentLabels} />
@@ -832,16 +1268,34 @@ function PackageFormModal({
               <TextInput name="destination_country" label="Pays destination" defaultValue={item?.destination_country || ""} />
               <TextInput name="destination_city" label="Ville destination" defaultValue={item?.destination_city || ""} />
               <TextInput name="shipping_mode" label="Mode d’expédition" defaultValue={item?.shipping_mode || ""} placeholder="Air Cargo, Sea Freight..." />
+              <TextInput name="shipment_reference" label="Expédition liée" defaultValue={item?.shipment_reference || ""} placeholder="EXP-2026-00324" />
               <TextInput name="eta_at" label="ETA" defaultValue={toDatetimeLocal(item?.eta_at)} type="datetime-local" />
             </FormSection>
 
             <FormSection title="Marchandise & mesures">
-              <TextInput name="goods_type" label="Marchandise" defaultValue={item?.goods_type || ""} placeholder="Électronique, textile..." />
-              <TextInput name="weight_kg" label="Poids déclaré kg" defaultValue={valueOrEmpty(item?.weight_kg)} type="number" step="0.01" />
-              <TextInput name="volume_cbm" label="Volume déclaré m³" defaultValue={valueOrEmpty(item?.volume_cbm)} type="number" step="0.001" />
-              <TextInput name="actual_weight_kg" label="Poids réel kg" defaultValue="" type="number" step="0.01" />
-              <TextInput name="actual_volume_cbm" label="Volume réel m³" defaultValue="" type="number" step="0.001" />
+              <TextInput name="description" label="Description" defaultValue={item?.description || ""} placeholder="Électronique, textile..." />
+              <TextInput name="category" label="Catégorie" defaultValue={item?.category || ""} />
+              <TextInput name="weight_kg" label="Poids kg" defaultValue={valueOrEmpty(item?.weight_kg)} type="number" step="0.01" />
+              <TextInput name="volumetric_weight_kg" label="Poids volumétrique kg" defaultValue={valueOrEmpty(item?.volumetric_weight_kg)} type="number" step="0.01" />
+              <TextInput name="length_cm" label="Longueur cm" defaultValue={valueOrEmpty(item?.length_cm)} type="number" step="0.01" />
+              <TextInput name="width_cm" label="Largeur cm" defaultValue={valueOrEmpty(item?.width_cm)} type="number" step="0.01" />
+              <TextInput name="height_cm" label="Hauteur cm" defaultValue={valueOrEmpty(item?.height_cm)} type="number" step="0.01" />
+              <TextInput name="volume_cbm" label="Volume m³" defaultValue={valueOrEmpty(item?.volume_cbm)} type="number" step="0.001" />
+              <TextInput name="pieces_count" label="Nombre de pièces" defaultValue={valueOrEmpty(item?.pieces_count || 1)} type="number" step="1" />
+              <TextInput name="declared_value" label="Valeur déclarée" defaultValue={valueOrEmpty(item?.declared_value)} type="number" step="0.01" />
+              <TextInput name="declared_currency" label="Devise valeur" defaultValue={item?.declared_currency || item?.currency || ""} />
               <TextInput name="last_scan_location" label="Dernière localisation scan" defaultValue={item?.last_scan_location || ""} />
+              <label className="mt-2 flex items-center gap-2 text-[13px] text-[#334155]">
+                <input name="is_fragile" type="checkbox" defaultChecked={item?.is_fragile ?? false} className="rounded border-[#c9d0d8]" />
+                Colis fragile
+              </label>
+            </FormSection>
+
+            <FormSection title="Entrepôt">
+              <TextInput name="warehouse_name" label="Entrepôt" defaultValue={item?.warehouse_name || ""} />
+              <TextInput name="warehouse_zone" label="Zone" defaultValue={item?.warehouse_zone || ""} />
+              <TextInput name="warehouse_rack" label="Rack" defaultValue={item?.warehouse_rack || ""} />
+              <TextInput name="warehouse_location" label="Emplacement" defaultValue={item?.warehouse_location || ""} />
             </FormSection>
 
             <FormSection title="Finance">
@@ -851,6 +1305,10 @@ function PackageFormModal({
               <label className="mt-2 flex items-center gap-2 text-[13px] text-[#334155]">
                 <input name="public_tracking_enabled" type="checkbox" defaultChecked={item?.public_tracking_enabled ?? true} className="rounded border-[#c9d0d8]" />
                 Tracking public activé
+              </label>
+              <label className="block">
+                <FormLabel>Notes internes</FormLabel>
+                <textarea name="notes" defaultValue={item?.notes || ""} className={`${inputClass} h-24 py-2`} />
               </label>
             </FormSection>
           </div>
@@ -863,6 +1321,54 @@ function PackageFormModal({
             <button type="button" onClick={onClose} className={buttonClass}>Annuler</button>
             <button type="submit" disabled={saving} className={primaryButtonClass}>
               {saving ? "Enregistrement..." : mode === "edit" ? "Enregistrer" : "Créer le colis"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ImportPackagesModal({
+  importing,
+  error,
+  result,
+  onClose,
+  onSubmit,
+}: {
+  importing: boolean;
+  error: string;
+  result: { created: number; skipped: number } | null;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-8">
+      <div className="w-full max-w-[620px] overflow-hidden rounded-xl border border-[#cfd5dd] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#d8dce2] px-5 py-4">
+          <div>
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Importer des colis</h2>
+            <p className="mt-1 text-[13px] leading-5 text-[#687584]">
+              CSV accepté. Colonnes recommandées : dossier_reference, package_reference, package_type, description, weight_kg, length_cm, width_cm, height_cm, warehouse_name.
+            </p>
+          </div>
+          <button onClick={onClose} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4 p-5">
+          <label className="block rounded-md border border-dashed border-[#cfd5dd] bg-[#fbfcfd] p-5">
+            <FormLabel>Fichier CSV</FormLabel>
+            <input name="file" type="file" accept=".csv,text/csv" className="mt-2 w-full text-[13px]" />
+          </label>
+          {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
+          {result && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-[13px] text-emerald-800">
+              Import terminé : {result.created} colis créés, {result.skipped} lignes ignorées.
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className={buttonClass}>Fermer</button>
+            <button type="submit" disabled={importing} className={primaryButtonClass}>
+              {importing ? "Import..." : "Importer le CSV"}
             </button>
           </div>
         </form>
@@ -990,8 +1496,19 @@ function InventoryBadge({ status }: { status: InventoryStatus }) {
   return <span className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}>{inventoryLabels[status] || status}</span>;
 }
 
+function ValidationBadge({ status }: { status: PackageValidationStatus }) {
+  const tone = status === "VALIDATED"
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+    : status === "BLOCKED" || status === "REJECTED"
+      ? "bg-red-50 text-red-700 ring-red-100"
+      : status === "NEEDS_REVIEW"
+        ? "bg-amber-50 text-amber-800 ring-amber-100"
+        : "bg-slate-100 text-slate-700 ring-slate-200";
+  return <span className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}>{validationLabels[status] || status}</span>;
+}
+
 function PaymentBadge({ status }: { status: PaymentClearanceStatus }) {
-  const tone = status === "CLEARED" ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : status === "BLOCKED" ? "bg-red-50 text-red-700 ring-red-100" : "bg-amber-50 text-amber-800 ring-amber-100";
+  const tone = status === "CLEARED" || status === "PAID" ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : status === "BLOCKED" || status === "OVERDUE" ? "bg-red-50 text-red-700 ring-red-100" : "bg-amber-50 text-amber-800 ring-amber-100";
   return <span className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}>{paymentLabels[status] || status}</span>;
 }
 
@@ -1012,6 +1529,16 @@ function routeLabel(item: PackageRecord) {
   const destination = [item.destination_city, item.destination_country].filter(Boolean).join(", ");
   if (!origin && !destination) return "-";
   return `${origin || "Origine"} → ${destination || "Destination"}`;
+}
+
+function warehouseLocationLabel(item: PackageRecord) {
+  const parts = [item.warehouse_zone, item.warehouse_rack, item.warehouse_location].filter(Boolean);
+  return parts.length ? parts.join(" · ") : inventoryLabels[item.inventory_status] || "-";
+}
+
+function dimensionsLabel(item: PackageRecord) {
+  if (!item.length_cm && !item.width_cm && !item.height_cm) return "-";
+  return `${item.length_cm || "-"} x ${item.width_cm || "-"} x ${item.height_cm || "-"} cm`;
 }
 
 function routeLabelFromDossier(item: DossierRecord) {

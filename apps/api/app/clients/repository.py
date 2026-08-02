@@ -6,6 +6,7 @@ from math import ceil
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import engine
 
@@ -58,14 +59,24 @@ def _table_exists(conn, table_name: str) -> bool:
 def normalize_phone(value: str | None) -> str | None:
     if not value:
         return None
-    normalized = value.strip().replace(" ", "").replace("-", "")
-    return normalized or None
+    raw = value.strip()
+    prefix = "+" if raw.startswith("+") else ""
+    digits = "".join(character for character in raw if character.isdigit())
+    if digits.startswith("00"):
+        prefix, digits = "+", digits[2:]
+    if not digits:
+        return None
+    if len(digits) < 7 or len(digits) > 15:
+        raise ValueError("invalid_phone")
+    return f"{prefix}{digits}"
 
 
 def normalize_email(value: str | None) -> str | None:
     if not value:
         return None
     normalized = value.strip().lower()
+    if normalized and ("@" not in normalized or normalized.startswith("@") or normalized.endswith("@")):
+        raise ValueError("invalid_email")
     return normalized or None
 
 
@@ -167,6 +178,7 @@ def list_clients(
                     c.last_activity_at,
                     c.created_at,
                     c.updated_at,
+                    c.row_version,
                     coalesce(d.dossiers_count, 0)::int dossiers_count,
                     coalesce(s.shipments_count, 0)::int shipments_count
                 from clients c
@@ -231,6 +243,7 @@ def get_client(org_id: str, client_id: str) -> dict | None:
                     c.last_activity_at,
                     c.created_at,
                     c.updated_at,
+                    c.row_version,
                     coalesce(d.dossiers_count, 0)::int dossiers_count,
                     coalesce(s.shipments_count, 0)::int shipments_count
                 from clients c
@@ -299,19 +312,20 @@ def create_client(org_id: str, user_id: str, payload: dict) -> dict:
     if duplicate:
         raise ValueError("duplicate_client")
 
-    with engine.begin() as conn:
-        row = conn.execute(
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(
             text("""
                 insert into clients (
                     org_id, name, display_name, company_name, tax_id, phone, whatsapp_phone,
-                    email, country, city, address, customer_type, lifecycle_status,
+                    email, normalized_phone, normalized_email, country, city, address, customer_type, lifecycle_status,
                     source, preferred_language, preferred_currency, notes, credit_enabled,
                     credit_limit, current_balance, total_spent, last_activity_at,
                     created_by, updated_by
                 )
                 values (
                     :org_id, :name, :display_name, :company_name, :tax_id, :phone, :whatsapp_phone,
-                    :email, :country, :city, :address, :customer_type, :lifecycle_status,
+                    :email, :normalized_phone, :normalized_email, :country, :city, :address, :customer_type, :lifecycle_status,
                     :source, :preferred_language, :preferred_currency, :notes, :credit_enabled,
                     :credit_limit, :current_balance, :total_spent, now(),
                     :user_id, :user_id
@@ -328,6 +342,8 @@ def create_client(org_id: str, user_id: str, payload: dict) -> dict:
                 "phone": phone,
                 "whatsapp_phone": whatsapp_phone,
                 "email": email,
+                "normalized_phone": phone or whatsapp_phone,
+                "normalized_email": email,
                 "country": payload.get("country"),
                 "city": payload.get("city"),
                 "address": payload.get("address"),
@@ -341,8 +357,10 @@ def create_client(org_id: str, user_id: str, payload: dict) -> dict:
                 "credit_limit": payload.get("credit_limit") or 0,
                 "current_balance": payload.get("current_balance") or 0,
                 "total_spent": payload.get("total_spent") or 0,
-            },
-        ).fetchone()
+                },
+            ).fetchone()
+    except IntegrityError as exc:
+        raise ValueError("duplicate_client") from exc
 
     if row is None:
         raise RuntimeError("client_insert_failed")
@@ -384,11 +402,13 @@ def update_client(org_id: str, client_id: str, user_id: str, payload: dict) -> d
         "current_balance": payload.get("current_balance", existing.get("current_balance")),
         "total_spent": payload.get("total_spent", existing.get("total_spent")),
     }
+    expected_version = int(payload["row_version"])
     if not data["display_name"]:
         data["display_name"] = data["name"] or data["company_name"] or data["phone"] or data["email"]
 
-    with engine.begin() as conn:
-        conn.execute(
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
             text("""
                 update clients set
                     name = :name,
@@ -398,6 +418,8 @@ def update_client(org_id: str, client_id: str, user_id: str, payload: dict) -> d
                     phone = :phone,
                     whatsapp_phone = :whatsapp_phone,
                     email = :email,
+                    normalized_phone = :normalized_phone,
+                    normalized_email = :normalized_email,
                     country = :country,
                     city = :city,
                     address = :address,
@@ -412,13 +434,23 @@ def update_client(org_id: str, client_id: str, user_id: str, payload: dict) -> d
                     current_balance = :current_balance,
                     total_spent = :total_spent,
                     updated_by = :user_id,
-                    updated_at = now()
+                    updated_at = now(),
+                    row_version = row_version + 1
                 where org_id = :org_id
                   and id = :client_id
                   and deleted_at is null
+                  and row_version = :expected_version
             """),
-            dict(data, org_id=org_id, client_id=client_id, user_id=user_id),
-        )
+            dict(data, org_id=org_id, client_id=client_id, user_id=user_id,
+                 normalized_phone=phone or whatsapp_phone, normalized_email=email,
+                 expected_version=expected_version),
+            )
+    except IntegrityError as exc:
+        raise ValueError("duplicate_client") from exc
+    if result.rowcount == 0:
+        if get_client(org_id, client_id):
+            raise ValueError("stale_client_version")
+        return None
     return get_client(org_id, client_id)
 
 

@@ -32,6 +32,7 @@ export type ClientRecord = {
   last_activity_at: string | null;
   created_at: string;
   updated_at: string;
+  row_version: number;
 };
 
 export type ClientTimelineEvent = {
@@ -80,6 +81,7 @@ export type ClientsResponse = {
 };
 
 export type ClientPayload = {
+  row_version?: number;
   name?: string;
   display_name?: string;
   company_name?: string;

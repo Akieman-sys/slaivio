@@ -274,6 +274,7 @@ export function ClientsPage() {
       notes: clean(form.get("notes")),
       credit_enabled: form.get("credit_enabled") === "on",
       credit_limit: Number(form.get("credit_limit") || 0),
+      row_version: formClient?.row_version,
     };
 
     try {
@@ -1016,6 +1017,9 @@ function apiErrorMessage(error: unknown) {
     const detail = error.response?.data?.detail;
     const target = `${API_BASE_URL || "API_BASE_URL non configurée"}${error.config?.url || ""}`;
     if (detail === "duplicate_client") return "Un client avec ce téléphone ou cet email existe déjà dans cette agence.";
+    if (detail === "stale_client_version") return "Cette fiche a été modifiée par un autre membre. Fermez le formulaire, rechargez la fiche puis réessayez.";
+    if (detail === "invalid_phone") return "Le numéro doit contenir entre 7 et 15 chiffres.";
+    if (detail === "invalid_email") return "L’adresse email n’est pas valide.";
     if (detail === "name_company_phone_or_email_required") return "Ajoutez au moins un nom, une entreprise, un téléphone ou un email.";
     if (detail === "csv_required") return "Le fichier importé doit être un CSV.";
     if (detail === "empty_csv") return "Le fichier CSV est vide.";

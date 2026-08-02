@@ -1,9 +1,11 @@
 from app.api.clients import (
+    ClientPatchPayload,
     MAX_CLIENT_EXPORT_ROWS,
     MAX_CLIENT_IMPORT_BYTES,
     MAX_CLIENT_IMPORT_ROWS,
     router,
 )
+from app.clients.repository import normalize_email, normalize_phone
 from app.organizations.services.provisioning_service import CLIENT_ROLE_PERMISSIONS
 from fastapi.routing import APIRoute
 
@@ -61,3 +63,14 @@ def test_clients_bulk_operations_have_explicit_safety_limits():
     assert MAX_CLIENT_IMPORT_BYTES == 5 * 1024 * 1024
     assert MAX_CLIENT_IMPORT_ROWS == 10_000
     assert MAX_CLIENT_EXPORT_ROWS == 50_000
+
+
+def test_client_contact_normalization_is_deterministic():
+    assert normalize_phone("+243 999-123-456") == "+243999123456"
+    assert normalize_phone("00243 999 123 456") == "+243999123456"
+    assert normalize_email("  CLIENT@Example.COM ") == "client@example.com"
+
+
+def test_client_patch_requires_the_current_row_version():
+    payload = ClientPatchPayload(row_version=4, name="Nouveau nom")
+    assert payload.row_version == 4

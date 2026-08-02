@@ -66,6 +66,7 @@ class ClientPayload(BaseModel):
 
 
 class ClientPatchPayload(BaseModel):
+    row_version: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=160)
     display_name: str | None = Field(default=None, max_length=180)
     company_name: str | None = Field(default=None, max_length=180)
@@ -154,6 +155,8 @@ def clients_create(body: ClientPayload, tenant=Depends(get_current_tenant)):
     except ValueError as exc:
         if str(exc) == "duplicate_client":
             raise HTTPException(status_code=409, detail="duplicate_client") from exc
+        if str(exc) in {"invalid_phone", "invalid_email"}:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise
     return {"status": "ok", "client": client}
 
@@ -287,6 +290,10 @@ def clients_update(client_id: str, body: ClientPatchPayload, tenant=Depends(get_
     except ValueError as exc:
         if str(exc) == "duplicate_client":
             raise HTTPException(status_code=409, detail="duplicate_client") from exc
+        if str(exc) == "stale_client_version":
+            raise HTTPException(status_code=409, detail="stale_client_version") from exc
+        if str(exc) in {"invalid_phone", "invalid_email"}:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise
     if not client:
         raise HTTPException(status_code=404, detail="client_not_found")

@@ -1,3 +1,5 @@
+import tempfile
+
 import requests
 
 from app.core.config import settings
@@ -49,3 +51,24 @@ def download_meta_media_bytes(
     response.raise_for_status()
 
     return response.content
+
+
+def download_meta_media_to_tempfile(
+    media_url: str,
+    content_type: str | None = None,
+) -> str:
+    suffix = ".audio"
+    normalized_type = (content_type or "").lower()
+    if "ogg" in normalized_type:
+        suffix = ".ogg"
+    elif "mpeg" in normalized_type or "mp3" in normalized_type:
+        suffix = ".mp3"
+    elif "wav" in normalized_type:
+        suffix = ".wav"
+    elif "mp4" in normalized_type:
+        suffix = ".mp4"
+
+    content = download_meta_media_bytes(media_url)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(content)
+        return temp_file.name

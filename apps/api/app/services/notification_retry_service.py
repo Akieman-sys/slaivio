@@ -59,7 +59,7 @@ def retry_notification(org_id: str, notification_id: str) -> dict:
         reason="manual_or_due_retry",
         error_code=notification.get("error_code"),
         error_message=notification.get("error_message"),
-        provider=notification.get("provider") or "twilio",
+        provider=notification.get("provider") or "meta",
     )
 
     result = send_notification(org_id, notification_id)
@@ -74,7 +74,7 @@ def retry_notification(org_id: str, notification_id: str) -> dict:
             retry_number=notification.get("retry_count") or 0,
             status="RETRY_SENT",
             reason="retry_successfully_sent_to_provider",
-            provider=result.get("provider") or "twilio",
+            provider=result.get("provider") or "meta",
         )
 
     return result

@@ -34,7 +34,7 @@ def send_media_whatsapp(
         message=body.message,
     )
 
-    provider = get_whatsapp_provider()
+    provider = get_whatsapp_provider(org_id=tenant["org_id"])
 
     result = provider.send_media_message(
         to=body.recipient_phone,
@@ -46,7 +46,7 @@ def send_media_whatsapp(
         mark_notification_sent(
             notification_id=str(notification["id"]),
             provider_message_id=result.get("provider_message_id"),
-            provider=result.get("provider") or "twilio",
+            provider=result.get("provider") or "meta",
             provider_status=result.get("status"),
         )
 

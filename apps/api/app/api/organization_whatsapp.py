@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+from typing import Literal
+
 from pydantic import BaseModel
 from app.core.tenant_context import get_current_tenant
 from app.db.organization_whatsapp_repository import (
@@ -12,12 +14,8 @@ router = APIRouter()
 
 
 class UpsertWhatsappSettingsRequest(BaseModel):
-    provider: str = "twilio"
-    environment: str = "sandbox"
-    twilio_whatsapp_from: str | None = None
-    twilio_account_sid: str | None = None
-    twilio_subaccount_sid: str | None = None
-    twilio_messaging_service_sid: str | None = None
+    provider: Literal["meta"] = "meta"
+    environment: Literal["production"] = "production"
     inbound_webhook_url: str | None = None
     status_callback_url: str | None = None
     sender_status: str = "PENDING"
@@ -42,10 +40,6 @@ def save_whatsapp_settings(
         org_id=org_id,
         provider=body.provider,
         environment=body.environment,
-        twilio_whatsapp_from=body.twilio_whatsapp_from,
-        twilio_account_sid=body.twilio_account_sid,
-        twilio_subaccount_sid=body.twilio_subaccount_sid,
-        twilio_messaging_service_sid=body.twilio_messaging_service_sid,
         inbound_webhook_url=body.inbound_webhook_url,
         status_callback_url=body.status_callback_url,
         sender_status=body.sender_status,

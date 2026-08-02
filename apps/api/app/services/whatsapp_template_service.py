@@ -71,7 +71,7 @@ def send_whatsapp_template(
     )
 
     try:
-        provider = get_whatsapp_provider()
+        provider = get_whatsapp_provider(org_id=org_id)
 
         result = provider.send_template_message(
             to=recipient_phone,
@@ -83,7 +83,7 @@ def send_whatsapp_template(
             mark_notification_sent(
                 notification_id=str(notification["id"]),
                 provider_message_id=result.get("provider_message_id"),
-                provider=result.get("provider") or "twilio",
+                provider=result.get("provider") or "meta",
                 provider_status=result.get("status"),
             )
 

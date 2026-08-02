@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -29,7 +31,7 @@ class CreateTemplateRequest(BaseModel):
     category: str | None = None
     description: str | None = None
     variables: dict | None = None
-    provider: str = "twilio"
+    provider: Literal["meta"] = "meta"
     status: str = "APPROVED"
 
 

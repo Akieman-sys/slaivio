@@ -1,17 +1,17 @@
 from typing import Literal, Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from cryptography.fernet import Fernet
 
 
 Environment = Literal["development", "test", "staging", "production"]
-WhatsAppProvider = Literal["meta", "twilio", "infobip"]
-
-
 class Settings(BaseSettings):
     app_env: Environment = "development"
     public_base_url: str | None = None
     platform_quarantine_encryption_key: str | None = None
+    quarantine_replay_max_attempts: int = Field(default=5, ge=1, le=20)
+    quarantine_replay_lease_seconds: int = Field(default=900, ge=60, le=3600)
 
     database_url: str | None = None
     database_sslmode: str = "require"
@@ -36,14 +36,6 @@ class Settings(BaseSettings):
     meta_app_secret: str | None = None
     meta_redirect_uri: str | None = None
     meta_oauth_frontend_redirect_uri: str | None = None
-
-    whatsapp_provider: WhatsAppProvider = "meta"
-    twilio_account_sid: str | None = None
-    twilio_auth_token: str | None = None
-    twilio_whatsapp_from: str | None = None
-    twilio_validate_signature: bool = False
-    twilio_status_callback_path: str = "/webhook/twilio/status"
-    twilio_messaging_service_sid: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -81,8 +73,11 @@ class Settings(BaseSettings):
         errors: list[str] = []
         if not self.platform_quarantine_encryption_key:
             errors.append("PLATFORM_QUARANTINE_ENCRYPTION_KEY is required")
-        if self.manager_api_key == "change-me-dev-key" or len(self.manager_api_key) < 32:
-            errors.append("MANAGER_API_KEY must be a generated secret of at least 32 characters")
+        else:
+            try:
+                Fernet(self.platform_quarantine_encryption_key.encode("ascii"))
+            except (ValueError, UnicodeEncodeError):
+                errors.append("PLATFORM_QUARANTINE_ENCRYPTION_KEY must be a valid Fernet key")
         if self.meta_wa_verify_token == "slaivo_verify_token_secret" or len(
             self.meta_wa_verify_token
         ) < 24:
@@ -91,10 +86,8 @@ class Settings(BaseSettings):
             errors.append("CLERK_ISSUER_URL or CLERK_JWKS_URL is required")
         if not self.public_base_url or not self.public_base_url.startswith("https://"):
             errors.append("PUBLIC_BASE_URL must be an HTTPS URL")
-        if self.whatsapp_provider == "meta" and not self.meta_app_secret:
-            errors.append("META_APP_SECRET is required when Meta is active")
-        if self.whatsapp_provider == "twilio" and not self.twilio_validate_signature:
-            errors.append("TWILIO_VALIDATE_SIGNATURE must be true when Twilio is active")
+        if not self.meta_app_secret:
+            errors.append("META_APP_SECRET is required")
 
         if errors:
             raise ValueError("Invalid deployed configuration: " + "; ".join(errors))

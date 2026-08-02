@@ -11,7 +11,7 @@ from app.db.voice_transcription_repository import (
 )
 
 from app.db.message_repository import create_dossier_event
-from app.services.twilio_media_downloader import download_twilio_media_to_tempfile
+from app.services.meta_media_service import download_meta_media_to_tempfile
 from app.services.mistral_transcription_service import transcribe_audio_file
 
 
@@ -34,7 +34,7 @@ def create_voice_transcription_job(
         provider_message_id=provider_message_id,
         media_url=media_url,
         content_type=content_type,
-        provider="twilio",
+        provider="meta",
     )
 
     if job:
@@ -82,7 +82,7 @@ def process_voice_transcription(
     temp_path = None
 
     try:
-        temp_path = download_twilio_media_to_tempfile(
+        temp_path = download_meta_media_to_tempfile(
             media_url=job["media_url"],
             content_type=job.get("content_type"),
         )

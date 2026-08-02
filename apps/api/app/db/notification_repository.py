@@ -118,7 +118,7 @@ def get_notification_by_id(
 def mark_notification_sent(
     notification_id: str,
     provider_message_id: str | None = None,
-    provider: str = "twilio",
+    provider: str = "meta",
     provider_status: str | None = None,
 ):
     with engine.connect() as conn:
@@ -202,7 +202,7 @@ def create_notification_delivery_event(
     error_code: str | None = None,
     error_message: str | None = None,
     raw_payload: dict | None = None,
-    provider: str = "twilio",
+    provider: str = "meta",
 ):
     with engine.connect() as conn:
         result = conn.execute(
@@ -421,7 +421,7 @@ def create_notification_retry_event(
     reason: str | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
-    provider: str = "twilio",
+    provider: str = "meta",
 ):
     with engine.connect() as conn:
         result = conn.execute(

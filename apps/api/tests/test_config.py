@@ -56,3 +56,17 @@ def test_production_accepts_a_complete_secure_contract() -> None:
     )
 
     assert settings.is_deployed is True
+
+
+def test_production_rejects_an_invalid_quarantine_key() -> None:
+    with pytest.raises(ValidationError, match="valid Fernet key"):
+        settings_factory(
+            _env_file=None,
+            app_env="production",
+            database_url="postgresql+psycopg2://user:pass@db:5432/slaivio",
+            clerk_issuer_url="https://clerk.example.com",
+            meta_wa_verify_token="v" * 32,
+            public_base_url="https://api.slaivio.example",
+            platform_quarantine_encryption_key="not-a-fernet-key",
+            meta_app_secret="meta-secret",
+        )

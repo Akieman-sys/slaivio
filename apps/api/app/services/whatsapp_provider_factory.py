@@ -1,6 +1,3 @@
-from app.core.config import settings
-from fastapi import HTTPException
-from app.services.mock_whatsapp_provider import MockWhatsAppProvider
 from app.services.meta_whatsapp_provider import MetaWhatsAppProvider
 
 
@@ -8,18 +5,7 @@ def get_whatsapp_provider(
     org_id: str | None = None,
     preferred_role: str | None = None,
 ):
-    provider = settings.whatsapp_provider
-
-    if provider == "meta":
-        return MetaWhatsAppProvider(
-            org_id=org_id,
-            preferred_role=preferred_role,
-        )
-
-    if provider == "mock":
-        return MockWhatsAppProvider()
-
-    raise HTTPException(
-        status_code=500,
-        detail=f"Unsupported WhatsApp provider: {provider}",
+    return MetaWhatsAppProvider(
+        org_id=org_id,
+        preferred_role=preferred_role,
     )

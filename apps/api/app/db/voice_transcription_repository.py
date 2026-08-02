@@ -14,7 +14,7 @@ def create_voice_transcription(
     media_id: str | None = None,
     provider_message_id: str | None = None,
     content_type: str | None = None,
-    provider: str = "twilio",
+    provider: str = "meta",
 ):
     with engine.connect() as conn:
         result = conn.execute(

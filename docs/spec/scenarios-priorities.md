@@ -26,12 +26,12 @@ Covered by recent work:
 - Active tenant usage across backend operations.
 - Meta-only public WhatsApp surface.
 - Removal of demo login and demo WebSocket token.
-- Central `APP_ORG_ID` fallback for development.
+- Fail-closed tenant resolution without a central organization fallback.
 
 Remaining checks before calling this fully finished:
 
-- Ensure Railway backend has `APP_ORG_ID` set correctly.
-- Ensure `WHATSAPP_PROVIDER=meta` in production.
+- Ensure Railway backend no longer defines `APP_ORG_ID`.
+- Confirm the Meta-only runtime configuration is complete.
 - Confirm Meta webhook receives real inbound message and delivery status in the right org.
 - Confirm Clerk organization membership is synced by webhook.
 

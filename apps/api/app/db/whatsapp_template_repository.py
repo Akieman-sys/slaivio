@@ -13,7 +13,7 @@ def create_whatsapp_template(
     category: str | None = None,
     description: str | None = None,
     variables: dict | None = None,
-    provider: str = "twilio",
+    provider: str = "meta",
     status: str = "APPROVED",
 ):
     with engine.connect() as conn:

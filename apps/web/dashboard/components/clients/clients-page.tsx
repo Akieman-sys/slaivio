@@ -150,6 +150,8 @@ export function ClientsPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => loadClients(1), 220);
     return () => window.clearTimeout(timeout);
+    // The listed filters intentionally define when the debounced request runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, status, customerType, source, sort, activeView]);
 
   useEffect(() => {
@@ -160,7 +162,7 @@ export function ClientsPage() {
     if (!selected) return;
     if (activeTab === "history") loadTimeline(selected.id);
     if (activeTab === "duplicates") loadDuplicates(selected);
-  }, [activeTab, selected?.id]);
+  }, [activeTab, selected]);
 
   async function loadStats() {
     try {

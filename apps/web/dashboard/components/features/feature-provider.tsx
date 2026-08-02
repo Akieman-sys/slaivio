@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -9,7 +10,14 @@ import {
 
 import { getFeatures } from "@/services/features";
 
-const FeatureContext = createContext<any>(null);
+type Feature = { flag_key: string; enabled: boolean };
+type FeatureContextValue = {
+  features: Record<string, boolean>;
+  loading: boolean;
+  reload: () => Promise<void>;
+};
+
+const FeatureContext = createContext<FeatureContextValue | null>(null);
 
 export function FeatureProvider({
   children,
@@ -19,12 +27,12 @@ export function FeatureProvider({
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const data = await getFeatures();
       const map: Record<string, boolean> = {};
 
-      data.forEach((feature: any) => {
+      data.forEach((feature: Feature) => {
         map[feature.flag_key] = feature.enabled;
       });
 
@@ -34,11 +42,11 @@ export function FeatureProvider({
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
     <FeatureContext.Provider value={{ features, loading, reload: load }}>

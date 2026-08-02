@@ -24,7 +24,6 @@ import {
   FileText,
   FileSpreadsheet,
   Globe2,
-  Home,
   Inbox,
   LockKeyhole,
   Mail,
@@ -1210,6 +1209,8 @@ function ProcessStaticCard({
   );
 }
 
+// Retained as a reusable landing variant while the production page is consolidated.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LightDashboardPreview() {
   const menu: Array<[string, LucideIcon, string?]> = [
     ["Dashboard", Route],
@@ -1524,6 +1525,8 @@ function DemoTimelineItem({
   );
 }
 
+// Retained as a reusable landing variant while the production page is consolidated.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DemoDashboardPreview() {
   const menu: Array<[string, LucideIcon, string?]> = [
     ["Dashboard", Route],
@@ -1878,7 +1881,7 @@ function CoreFeaturesSection() {
     }, 6000);
 
     return () => window.clearInterval(interval);
-  }, [isPaused]);
+  }, [isPaused, coreFeatures.length]);
 
   const goToFeature = (direction: "previous" | "next") => {
     setActiveFeature((index) => {
@@ -2196,7 +2199,7 @@ function FeatureScreen({ type }: { type: (typeof coreFeatureMeta)[number]["scree
           ["Grace Mukendi", "Merci pour les informations", "09:15", ""],
           ["+237 6 98 76 54 32", "Bonjour, j'aimerais un devis", "Hier", ""],
           ["David Mwamba", "Mon colis est-il déjà arrivé ?", "Hier", ""],
-        ].map(([name, message, time, badge], index) => (
+        ].map(([name, message, time, badge]) => (
           <div key={name} className="flex items-start gap-3">
             <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[#FECACA] via-[#FED7AA] to-[#111827]" />
             <div className="min-w-0 flex-1">
@@ -2319,6 +2322,7 @@ function ScreenHeader({ title, action }: { title: string; action?: string }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AudioWave() {
   return (
     <div className="flex h-8 items-center gap-1" aria-hidden="true">
@@ -2972,6 +2976,7 @@ function FooterSocial({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Pill({ children, icon: Icon }: { children: ReactNode; icon: LucideIcon }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-[#12C76F]/20 bg-[#12C76F]/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[#0BAA5D]">

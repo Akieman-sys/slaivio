@@ -135,6 +135,8 @@ export function ShipmentsPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => loadShipments(1), 180);
     return () => window.clearTimeout(timeout);
+    // The listed filters intentionally define when the debounced request runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, status, mode, risk, sort, activeView]);
 
   useEffect(() => {
@@ -417,7 +419,7 @@ export function ShipmentsPage() {
             {formError ? <div className="mx-5 mb-3 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-700">{formError}</div> : null}
             <div className="flex justify-end gap-2 border-t border-[#d8dce2] px-5 py-4">
               <button type="button" className={buttonClass} onClick={() => setFormOpen(false)}>Annuler</button>
-              <button type="submit" className={primaryButtonClass} disabled={saving}>{saving ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />} Créer l'expédition</button>
+              <button type="submit" className={primaryButtonClass} disabled={saving}>{saving ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />} Créer l&apos;expédition</button>
             </div>
           </form>
         </div>

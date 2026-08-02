@@ -7,13 +7,11 @@ import {
   ChevronRight,
   Download,
   Edit3,
-  FileText,
   History,
   MessageCircle,
   MoreHorizontal,
   Package,
   Search,
-  Truck,
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -166,6 +164,8 @@ export function DossiersPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => loadDossiers(1), 220);
     return () => window.clearTimeout(timeout);
+    // The listed filters intentionally define when the debounced request runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, caseType, status, validation, payment, sort, activeView]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export function DossiersPage() {
   useEffect(() => {
     if (!selected || activeTab !== "history") return;
     loadTimeline(selected.id);
-  }, [selected?.id, activeTab]);
+  }, [selected, activeTab]);
 
   async function loadStats() {
     try {

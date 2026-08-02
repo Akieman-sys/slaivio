@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -9,7 +10,13 @@ import {
 
 import { getMyPermissions } from "@/services/permissions";
 
-const PermissionContext = createContext<any>(null);
+type PermissionContextValue = {
+  permissions: string[];
+  loading: boolean;
+  reload: () => Promise<void>;
+};
+
+const PermissionContext = createContext<PermissionContextValue | null>(null);
 
 export function PermissionProvider({
   children,
@@ -19,7 +26,7 @@ export function PermissionProvider({
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const data = await getMyPermissions();
       setPermissions(data.permissions || []);
@@ -28,11 +35,11 @@ export function PermissionProvider({
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
     <PermissionContext.Provider

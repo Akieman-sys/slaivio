@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -9,7 +10,23 @@ import {
 
 import { getEntitlements } from "@/services/entitlements";
 
-const EntitlementContext = createContext<any>(null);
+type EntitlementValue = boolean | number | null;
+
+type EntitlementItem = {
+  entitlement_key: string;
+  entitlement_type: "BOOLEAN" | "LIMIT";
+  boolean_value?: boolean | null;
+  limit_value?: number | null;
+};
+
+type EntitlementContextValue = {
+  planCode: string | null;
+  entitlements: Record<string, EntitlementValue>;
+  loading: boolean;
+  reload: () => Promise<void>;
+};
+
+const EntitlementContext = createContext<EntitlementContextValue | null>(null);
 
 export function EntitlementProvider({
   children,
@@ -17,23 +34,23 @@ export function EntitlementProvider({
   children: React.ReactNode;
 }) {
   const [planCode, setPlanCode] = useState<string | null>(null);
-  const [entitlements, setEntitlements] = useState<Record<string, any>>({});
+  const [entitlements, setEntitlements] = useState<Record<string, EntitlementValue>>({});
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const data = await getEntitlements();
       setPlanCode(data.plan_code);
 
-      const map: Record<string, any> = {};
+      const map: Record<string, EntitlementValue> = {};
 
-      data.entitlements.forEach((item: any) => {
+      data.entitlements.forEach((item: EntitlementItem) => {
         if (item.entitlement_type === "BOOLEAN") {
-          map[item.entitlement_key] = item.boolean_value;
+          map[item.entitlement_key] = item.boolean_value ?? null;
         }
 
         if (item.entitlement_type === "LIMIT") {
-          map[item.entitlement_key] = item.limit_value;
+          map[item.entitlement_key] = item.limit_value ?? null;
         }
       });
 
@@ -43,11 +60,11 @@ export function EntitlementProvider({
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
     <EntitlementContext.Provider

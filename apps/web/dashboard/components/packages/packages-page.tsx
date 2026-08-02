@@ -213,6 +213,8 @@ export function PackagesPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => loadPackages(1), 220);
     return () => window.clearTimeout(timeout);
+    // The listed filters intentionally define when the debounced request runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, status, condition, inventory, payment, validation, packageType, source, sort, activeView]);
 
   useEffect(() => {
@@ -222,7 +224,7 @@ export function PackagesPage() {
   useEffect(() => {
     if (!selected || activeTab !== "history") return;
     loadTimeline(selected.id);
-  }, [selected?.id, activeTab]);
+  }, [selected, activeTab]);
 
   async function loadStats() {
     try {

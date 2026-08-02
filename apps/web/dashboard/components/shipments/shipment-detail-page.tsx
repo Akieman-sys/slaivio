@@ -2,13 +2,11 @@
 
 import axios from "axios";
 import {
-  AlertTriangle,
   ArrowLeft,
   Bell,
   CheckCircle2,
   Clock,
   DollarSign,
-  FileText,
   Loader2,
   MapPin,
   Package,
@@ -92,6 +90,8 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
 
   useEffect(() => {
     load();
+    // Shipment id is the sole trigger; load is intentionally scoped to the current id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipmentId]);
 
   async function load() {
@@ -131,7 +131,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
   }, [shipment]);
 
   if (loading) {
-    return <div className="flex min-h-[calc(100vh-56px)] items-center justify-center bg-[#f7f8fa] text-[#64748b]"><Loader2 className="mr-2 animate-spin" size={18} /> Chargement de l'expédition...</div>;
+    return <div className="flex min-h-[calc(100vh-56px)] items-center justify-center bg-[#f7f8fa] text-[#64748b]"><Loader2 className="mr-2 animate-spin" size={18} /> Chargement de l&apos;expédition...</div>;
   }
 
   if (!shipment) {
@@ -357,7 +357,7 @@ function TrackingTab({ shipment, saving, onComplete }: { shipment: ExpeditionDet
       <Card title="Dernière position">
         <MapPin className="mb-3 text-[#12c76f]" size={24} />
         <div className="text-[18px] font-semibold">{lastLocation(shipment)}</div>
-        <p className="mt-2 text-[14px] leading-6 text-[#64748b]">Mettez à jour les étapes dès qu'un événement opérationnel est confirmé. La timeline servira ensuite aux notifications client.</p>
+        <p className="mt-2 text-[14px] leading-6 text-[#64748b]">Mettez à jour les étapes dès qu&apos;un événement opérationnel est confirmé. La timeline servira ensuite aux notifications client.</p>
       </Card>
     </div>
   );

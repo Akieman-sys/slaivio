@@ -6,6 +6,10 @@ import { NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
 
 const hasClerkKey = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const hasApiUrl = Boolean(
+  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL,
+);
+const isProduction = process.env.NODE_ENV === "production";
 const intlMiddleware = createIntlMiddleware(routing);
 
 const protectedPrefixes = [
@@ -29,6 +33,16 @@ export default function middleware(request: NextRequest, event: Parameters<typeo
   const { pathname } = request.nextUrl;
 
   if (isProtectedRoute(pathname)) {
+    if (isProduction && (!hasClerkKey || !hasApiUrl)) {
+      return new NextResponse(
+        "SLAIVIO is temporarily unavailable because its production configuration is incomplete.",
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
+
     if (hasClerkKey) {
       return clerkProtection(request, event);
     }

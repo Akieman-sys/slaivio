@@ -1,12 +1,9 @@
-const createNextIntlPlugin = require("next-intl/plugin");
+import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   generateBuildId() {
     return (
       process.env.RAILWAY_GIT_COMMIT_SHA ||
@@ -29,4 +26,4 @@ const nextConfig = {
   },
 };
 
-module.exports = withNextIntl(nextConfig);
+export default withNextIntl(nextConfig);

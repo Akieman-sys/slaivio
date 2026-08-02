@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { LifeBuoy, ShieldCheck } from "lucide-react";
 
 import { OnboardingStepper } from "@/components/onboarding/OnboardingStepper";
@@ -17,9 +18,11 @@ export function OnboardingShell({
       <div className="grid min-h-screen lg:grid-cols-[360px_1fr]">
         <aside className="bg-[#07111f] p-6 text-white">
           <Link href="/landing" className="flex items-center gap-3">
-            <img
+            <Image
               src="/slaivio-icon.png"
               alt="SLAIVIO"
+              width={48}
+              height={48}
               className="h-12 w-12 rounded-2xl object-cover ring-1 ring-white/10"
             />
             <div>

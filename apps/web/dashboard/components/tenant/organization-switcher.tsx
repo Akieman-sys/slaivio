@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   getTenantContext,
@@ -12,11 +12,17 @@ export function OrganizationSwitcher({
 }: {
   variant?: "light" | "dark";
 }) {
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [activeTenant, setActiveTenant] = useState<any>(null);
+  type Tenant = {
+    org_id: string;
+    organization_name?: string | null;
+    role_code?: string | null;
+  };
+
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const data = await getTenantContext();
       setTenants(data.tenants || []);
@@ -24,11 +30,11 @@ export function OrganizationSwitcher({
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function handleSwitch(orgId: string) {
     const active = await switchTenant(orgId);

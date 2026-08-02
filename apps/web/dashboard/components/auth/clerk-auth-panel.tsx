@@ -29,7 +29,7 @@ function ClerkAuthPanelContent({ mode }: { mode: "sign-in" | "sign-up" }) {
   if (!isLoaded) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
-        Chargement de l'authentification...
+        Chargement de l&apos;authentification...
       </div>
     );
   }

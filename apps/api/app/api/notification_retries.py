@@ -29,8 +29,11 @@ def get_retryable_notifications(
 
 
 @router.post("/notifications/{notification_id}/retry")
-def retry_one_notification(notification_id: str):
-    result = retry_notification(notification_id)
+def retry_one_notification(
+    notification_id: str,
+    tenant: dict = Depends(get_current_tenant),
+):
+    result = retry_notification(tenant["org_id"], notification_id)
 
     if result.get("status") == "error":
         raise HTTPException(

@@ -1,11 +1,12 @@
 import secrets
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.tenant_context import get_current_tenant
 from app.core.logger import logger
 from app.db.meta_connection_repository import create_whatsapp_connection
 from app.db.whatsapp_account_repository import upsert_whatsapp_account
@@ -35,11 +36,9 @@ class ExchangeCodeRequest(BaseModel):
 
 class OnboardWhatsappRequest(BaseModel):
     code: str
-    org_id: str = settings.app_org_id
 
 
 class SaveWhatsappConnectionRequest(BaseModel):
-    org_id: str = settings.app_org_id
     business_id: str
     waba_id: str
     phone_number_id: str
@@ -50,13 +49,11 @@ class SaveWhatsappConnectionRequest(BaseModel):
 
 
 class SubscribeWabaWebhookRequest(BaseModel):
-    org_id: str = settings.app_org_id
     waba_id: str
     access_token: str
 
 
 class CheckWabaWebhookRequest(BaseModel):
-    org_id: str = settings.app_org_id
     waba_id: str
     access_token: str
 
@@ -250,7 +247,11 @@ def get_phone_numbers(
 
 
 @router.post("/meta/oauth/onboard")
-def onboard_whatsapp(body: OnboardWhatsappRequest):
+def onboard_whatsapp(
+    body: OnboardWhatsappRequest,
+    tenant=Depends(get_current_tenant),
+):
+    org_id = tenant["org_id"]
     access_token = _exchange_oauth_code(body.code)
     businesses = _get_meta_collection(
         "get_businesses",
@@ -271,7 +272,7 @@ def onboard_whatsapp(body: OnboardWhatsappRequest):
         for waba in wabas:
             waba_id = waba["id"]
             upsert_whatsapp_account(
-                org_id=body.org_id,
+                org_id=org_id,
                 provider="META",
                 business_id=business_id,
                 waba_id=waba_id,
@@ -288,7 +289,7 @@ def onboard_whatsapp(body: OnboardWhatsappRequest):
 
             for phone_number in phone_numbers:
                 connection = create_whatsapp_connection(
-                    org_id=body.org_id,
+                    org_id=org_id,
                     business_id=business_id,
                     waba_id=waba_id,
                     phone_number_id=phone_number["id"],
@@ -304,7 +305,7 @@ def onboard_whatsapp(body: OnboardWhatsappRequest):
                 access_token=access_token,
             )
             update_waba_webhook_status(
-                org_id=body.org_id,
+                org_id=org_id,
                 waba_id=waba_id,
                 status="SUBSCRIBED" if subscription["ok"] else "FAILED",
                 raw_response=subscription["data"],
@@ -325,9 +326,12 @@ def onboard_whatsapp(body: OnboardWhatsappRequest):
 
 
 @router.post("/meta/connections")
-def save_whatsapp_connection(body: SaveWhatsappConnectionRequest):
+def save_whatsapp_connection(
+    body: SaveWhatsappConnectionRequest,
+    tenant=Depends(get_current_tenant),
+):
     connection = create_whatsapp_connection(
-        org_id=body.org_id,
+        org_id=tenant["org_id"],
         business_id=body.business_id,
         waba_id=body.waba_id,
         phone_number_id=body.phone_number_id,
@@ -344,9 +348,13 @@ def save_whatsapp_connection(body: SaveWhatsappConnectionRequest):
 
 
 @router.post("/meta/waba/webhook/subscribe")
-def subscribe_waba_webhook(body: SubscribeWabaWebhookRequest):
+def subscribe_waba_webhook(
+    body: SubscribeWabaWebhookRequest,
+    tenant=Depends(get_current_tenant),
+):
+    org_id = tenant["org_id"]
     account = get_whatsapp_account_by_waba(
-        org_id=body.org_id,
+        org_id=org_id,
         waba_id=body.waba_id,
     )
 
@@ -363,7 +371,7 @@ def subscribe_waba_webhook(body: SubscribeWabaWebhookRequest):
 
     if result["ok"]:
         account = update_waba_webhook_status(
-            org_id=body.org_id,
+            org_id=org_id,
             waba_id=body.waba_id,
             status="SUBSCRIBED",
             raw_response=result["data"],
@@ -378,7 +386,7 @@ def subscribe_waba_webhook(body: SubscribeWabaWebhookRequest):
         }
 
     account = update_waba_webhook_status(
-        org_id=body.org_id,
+        org_id=org_id,
         waba_id=body.waba_id,
         status="FAILED",
         raw_response=result["data"],
@@ -394,9 +402,13 @@ def subscribe_waba_webhook(body: SubscribeWabaWebhookRequest):
 
 
 @router.post("/meta/waba/webhook/check")
-def check_waba_webhook(body: CheckWabaWebhookRequest):
+def check_waba_webhook(
+    body: CheckWabaWebhookRequest,
+    tenant=Depends(get_current_tenant),
+):
+    org_id = tenant["org_id"]
     account = get_whatsapp_account_by_waba(
-        org_id=body.org_id,
+        org_id=org_id,
         waba_id=body.waba_id,
     )
 
@@ -414,7 +426,7 @@ def check_waba_webhook(body: CheckWabaWebhookRequest):
     status = "SUBSCRIBED" if result["ok"] else "FAILED"
 
     account = update_waba_webhook_status(
-        org_id=body.org_id,
+        org_id=org_id,
         waba_id=body.waba_id,
         status=status,
         raw_response=result["data"],

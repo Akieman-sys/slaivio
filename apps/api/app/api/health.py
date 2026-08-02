@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from app.core.config import settings
 from app.db.database import test_db_connection
 
 
@@ -11,9 +10,13 @@ router = APIRouter()
 def health():
     return {
         "status": "ok",
-        "env": settings.app_env,
-        "org_id": settings.app_org_id,
+        "service": "slaivio-api",
     }
+
+
+@router.get("/health/live")
+def liveness():
+    return {"status": "ok"}
 
 
 @router.get("/health/db")
@@ -26,6 +29,7 @@ def db_health():
 
 
 @router.get("/health/ready")
+@router.get("/ready", include_in_schema=False)
 def ready():
     test_db_connection()
 

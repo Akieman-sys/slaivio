@@ -1,20 +1,20 @@
-import os
-
 import requests
 from cachetools import TTLCache, cached
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from fastapi import HTTPException
-from jose import jwt
+import jwt
+from jwt import InvalidTokenError
+from jwt.algorithms import RSAAlgorithm
+from typing import cast
 
-
-CLERK_ISSUER_URL = os.getenv("CLERK_ISSUER_URL")
-JWKS_URL = os.getenv("CLERK_JWKS_URL")
+from app.core.config import settings
 
 
 def _resolve_jwks_url() -> str | None:
-    if JWKS_URL:
-        return JWKS_URL
-    if CLERK_ISSUER_URL:
-        return f"{CLERK_ISSUER_URL.rstrip('/')}/.well-known/jwks.json"
+    if settings.clerk_jwks_url:
+        return settings.clerk_jwks_url
+    if settings.clerk_issuer_url:
+        return f"{settings.clerk_issuer_url.rstrip('/')}/.well-known/jwks.json"
     return None
 
 _jwks_cache = TTLCache(maxsize=1, ttl=3600)
@@ -41,28 +41,40 @@ def get_jwks():
 def verify_clerk_token(
     token: str,
 ):
-    jwks = get_jwks()
-    header = jwt.get_unverified_header(token)
-    key = next(
-        (
-            item
-            for item in jwks["keys"]
-            if item["kid"] == header["kid"]
-        ),
-        None,
-    )
-
-    if not key:
+    try:
+        jwks = get_jwks()
+        header = jwt.get_unverified_header(token)
+        key = next(
+            (
+                item
+                for item in jwks["keys"]
+                if item["kid"] == header["kid"]
+            ),
+            None,
+        )
+    except (InvalidTokenError, KeyError, TypeError) as exc:
         raise HTTPException(
             status_code=401,
-            detail="clerk_key_not_found",
-        )
+            detail="invalid_clerk_token",
+        ) from exc
 
-    return jwt.decode(
-        token,
-        key,
-        algorithms=["RS256"],
-        options={
-            "verify_aud": False,
-        },
-    )
+    if not key:
+        raise HTTPException(status_code=401, detail="clerk_key_not_found")
+
+    try:
+        public_key = cast(RSAPublicKey, RSAAlgorithm.from_jwk(key))
+        return jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            issuer=settings.clerk_issuer_url,
+            options={
+                "verify_aud": False,
+                "verify_iss": bool(settings.clerk_issuer_url),
+            },
+        )
+    except (InvalidTokenError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid_clerk_token",
+        ) from exc

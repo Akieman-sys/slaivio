@@ -34,7 +34,6 @@ from app.api.pricing_settings import router as pricing_settings_router
 from app.api.whatsapp_enterprise import router as whatsapp_enterprise_router
 from app.api.whatsapp_health import router as whatsapp_health_router
 from app.core.exceptions import global_exception_handler
-from app.api.system_health import router as system_health_router
 from app.core.logger import logger
 from app.core.request_context import generate_request_id
 from app.api.conversation_assignments import (
@@ -80,6 +79,7 @@ from app.api.onboarding_experience import router as onboarding_experience_router
 from app.api.dashboard import router as dashboard_router
 from app.api.clients import router as clients_router
 from app.api.packages import router as packages_router
+from app.api.platform_quarantine import router as platform_quarantine_router
 
 
 app = FastAPI(title="Slaivio")
@@ -147,7 +147,6 @@ app.include_router(goods_settings_router)
 app.include_router(pricing_settings_router)
 app.include_router(whatsapp_enterprise_router)
 app.include_router(whatsapp_health_router)
-app.include_router(system_health_router)
 app.include_router(conversation_assignments_router)
 app.include_router(conversation_timeline_router)
 app.include_router(inbox_replies_router)
@@ -185,6 +184,7 @@ app.include_router(onboarding_experience_router)
 app.include_router(dashboard_router)
 app.include_router(clients_router)
 app.include_router(packages_router)
+app.include_router(platform_quarantine_router)
 
 
 @app.get("/")

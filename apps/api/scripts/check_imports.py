@@ -1,23 +1,21 @@
-modules = [
-    "app.main",
-    "app.api.webhook",
-    "app.api.manager",
-    "app.api.notifications",
-    "app.api.dossiers",
-    "app.api.followups",
-    "app.api.offices",
-    "app.api.pricing",
-    "app.api.knowledge",
-    "app.api.goods",
-    "app.api.batches",
-    "app.api.media",
-    "app.api.client_shipments",
-    "app.api.broadcasts",
-    "app.api.escalations",
-]
+"""Import the application exactly as the process manager does at startup."""
 
-for module in modules:
-    __import__(module)
-    print(f"OK import {module}")
+from importlib import import_module
+from pathlib import Path
+import sys
 
-print("ALL IMPORTS OK")
+
+API_ROOT = Path(__file__).resolve().parents[1]
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+
+def main() -> None:
+    module = import_module("app.main")
+    if not hasattr(module, "app"):
+        raise RuntimeError("app.main did not expose a FastAPI application")
+    print("OK import app.main")
+
+
+if __name__ == "__main__":
+    main()

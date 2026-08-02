@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Request, Response, HTTPException
 from app.core.config import settings
 from app.api.webhook import process_normalized_whatsapp_message
@@ -33,6 +35,8 @@ from app.ai.services.auto_reply_service import (
 from app.db.webhook_idempotency_repository import (
     claim_event,
 )
+from app.platform.quarantine_service import quarantine_inbound_event
+from app.services.meta_webhook_security import validate_meta_signature
 
 
 
@@ -64,7 +68,13 @@ async def verify_meta_webhook(request: Request):
 
 @router.post("/webhook/meta/whatsapp")
 async def meta_whatsapp_webhook(request: Request):
-    payload = await request.json()
+    raw_body = await request.body()
+    if not validate_meta_signature(
+        raw_body,
+        request.headers.get("X-Hub-Signature-256"),
+    ):
+        raise HTTPException(status_code=403, detail="invalid_meta_signature")
+    payload = json.loads(raw_body)
 
     delivery_statuses = extract_meta_delivery_statuses(payload)
 
@@ -92,12 +102,20 @@ async def meta_whatsapp_webhook(request: Request):
                 "resolved": False
             }
 
-            if route.get("resolved"):
-                org_id = route["org_id"]
-                whatsapp_number_id = str(route["number"]["id"])
-            else:
-                org_id = settings.app_org_id
-                whatsapp_number_id = None
+            if not route.get("resolved"):
+                quarantine_inbound_event(
+                    provider="meta",
+                    event_type="delivery_status",
+                    payload=item.get("raw") or item,
+                    failure_reason=route.get("reason") or "route_not_resolved",
+                    signature_verified=True,
+                    provider_event_id=event_key,
+                    provider_phone_number_id=provider_phone_number_id,
+                )
+                continue
+
+            org_id = route["org_id"]
+            whatsapp_number_id = str(route["number"]["id"])
 
             create_delivery_event(
                 org_id=org_id,
@@ -141,7 +159,6 @@ async def meta_whatsapp_webhook(request: Request):
         if phone_number_id:
             org_settings = find_org_by_meta_phone_number_id(phone_number_id)
 
-        org_id = org_settings["org_id"] if org_settings else settings.app_org_id
         handled = []
 
         for status_item in statuses:
@@ -163,6 +180,27 @@ async def meta_whatsapp_webhook(request: Request):
                     provider_message_id=provider_message_id,
                     provider_status=status,
                 )
+
+            org_id = notification.get("org_id") if notification else (
+                org_settings.get("org_id") if org_settings else None
+            )
+            if not org_id:
+                quarantine_inbound_event(
+                    provider="meta",
+                    event_type="notification_status",
+                    payload=status_item.get("raw") or status_item,
+                    failure_reason="notification_and_route_not_found",
+                    signature_verified=True,
+                    provider_event_id=f"status:{provider_message_id}:{status}",
+                    provider_phone_number_id=phone_number_id,
+                )
+                handled.append({
+                    "provider_message_id": provider_message_id,
+                    "status": "quarantined",
+                    "notification_found": False,
+                    "event_id": None,
+                })
+                continue
 
             event = create_notification_delivery_event(
                 org_id=org_id,
@@ -198,11 +236,16 @@ async def meta_whatsapp_webhook(request: Request):
             f"routing_failed:{phone_number_id}"
         )
 
-        return {
-            "status": "routing_failed",
-            "provider_phone_number_id": phone_number_id,
-            "reason": route.get("reason"),
-        }
+        envelope = quarantine_inbound_event(
+            provider="meta",
+            event_type="inbound_message",
+            payload=payload,
+            failure_reason=route.get("reason") or "route_not_resolved",
+            signature_verified=True,
+            provider_event_id=None,
+            provider_phone_number_id=phone_number_id,
+        )
+        return {"status": "quarantined", "event_id": str(envelope["id"])}
 
     resolved_number = route["number"]
     org_id = route["org_id"]

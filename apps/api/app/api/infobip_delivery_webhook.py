@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from app.core.config import settings
 
 from app.services.infobip_delivery_parser import (
@@ -30,6 +30,11 @@ router = APIRouter()
 
 @router.post("/webhook/infobip/delivery")
 async def infobip_delivery_webhook(request: Request):
+    if settings.is_deployed:
+        raise HTTPException(
+            status_code=503,
+            detail="Infobip webhooks are disabled until signature verification is configured",
+        )
     payload = await request.json()
 
     parsed_items = parse_infobip_delivery_payload(payload)
@@ -46,7 +51,6 @@ async def infobip_delivery_webhook(request: Request):
 
         notification = None
         notification_id = None
-        org_id = settings.app_org_id
 
         if provider_message_id:
             notification = get_notification_by_provider_message_id(
@@ -91,8 +95,17 @@ async def infobip_delivery_webhook(request: Request):
                         provider="infobip",
                     )
 
+        if not notification:
+            results.append({
+                "provider_message_id": provider_message_id,
+                "normalized_status": normalized_status,
+                "notification_found": False,
+                "delivery_event_id": None,
+            })
+            continue
+
         event = create_notification_delivery_event(
-            org_id=org_id,
+            org_id=notification["org_id"],
             notification_id=notification_id,
             provider_message_id=provider_message_id,
             status=normalized_status,

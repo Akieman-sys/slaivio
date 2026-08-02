@@ -347,10 +347,9 @@ def mark_notification_retryable(
 
 
 def list_retryable_notifications(
-    org_id: str | None = None,
+    org_id: str,
     limit: int = 50,
 ):
-    org_id = org_id or settings.app_org_id
     with engine.connect() as conn:
         result = conn.execute(
             text("""

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request
-from app.core.config import settings
+from fastapi import HTTPException
 from app.models.message import NormalizedMessage
 from app.services.deduplication import is_duplicate, mark_as_seen
 from app.services.understanding_orchestrator import understand_message
@@ -78,14 +78,15 @@ def normalize_whatsapp_payload(payload: dict) -> NormalizedMessage:
 async def process_normalized_whatsapp_message(
     normalized_message: NormalizedMessage,
     payload: dict,
-    org_id: str | None = None,
+    org_id: str = "",
     provider: str | None = None,
     provider_phone_number_id: str | None = None,
     whatsapp_number_id: str | None = None,
     waba_id: str | None = None,
     number_role: str | None = None,
 ):
-    org_id = org_id or settings.app_org_id
+    if not org_id:
+        raise ValueError("A verified organization is required before processing a message")
 
     if is_duplicate(normalized_message.dedupe_key):
         return {
@@ -582,11 +583,7 @@ async def process_normalized_whatsapp_message(
 
 @router.post("/webhook/whatsapp")
 async def receive_whatsapp_message(request: Request):
-    payload = await request.json()
-    normalized_message = normalize_whatsapp_payload(payload)
-
-    return await process_normalized_whatsapp_message(
-        normalized_message=normalized_message,
-        payload=payload,
-        org_id=settings.app_org_id,
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy webhook disabled; use a signed provider-specific endpoint",
     )

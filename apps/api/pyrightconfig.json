@@ -1,0 +1,14 @@
+{
+  "include": [
+    "app/core/config.py",
+    "app/core/clerk_auth.py",
+    "app/db/database.py",
+    "app/api/health.py",
+    "scripts/check_imports.py",
+    "tests"
+  ],
+  "exclude": ["**/__pycache__"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false
+}

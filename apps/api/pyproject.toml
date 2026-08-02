@@ -1,0 +1,21 @@
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers -ra"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Start with correctness rules that can gate the existing application safely.
+# Broader style and import rules will be enabled domain by domain.
+select = ["E9", "F63", "F7", "F82"]

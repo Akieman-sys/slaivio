@@ -9,7 +9,7 @@ from app.services.intake_service import (
     get_missing_intake_fields,
     build_human_intake_message,
 )
-from app.services.goods_rules_engine import find_goods_rule_answer
+from app.services.goods_rules_engine import build_goods_reply, find_goods_rule_answer
 from app.core.config import settings
 
 
@@ -290,12 +290,12 @@ def _confirmed_client_reply(
 def generate_reply(
     intent: str,
     org_name: str,
-    org_id: str | None = None,
+    org_id: str,
     understanding: dict | None = None,
     dossier: dict | None = None,
     text: str = "",
 ) -> dict:
-    resolved_org_id = org_id or settings.app_org_id
+    resolved_org_id = org_id
     fields = _merge_fields(
         dossier=dossier,
         understanding=understanding,

@@ -148,10 +148,9 @@ def process_voice_transcription(
 
 
 def process_due_voice_transcriptions(
-    org_id: str | None = None,
+    org_id: str,
     limit: int = 10,
 ):
-    org_id = org_id or settings.app_org_id
     jobs = list_pending_voice_transcriptions(
         org_id=org_id,
         limit=limit,

@@ -227,6 +227,23 @@ def find_org_by_infobip_number(
         return dict(result._mapping) if result else None
 
 
+def find_org_by_twilio_number(twilio_whatsapp_from: str):
+    normalized = normalize_whatsapp_number(twilio_whatsapp_from)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                select *
+                from organization_whatsapp_settings
+                where provider = 'twilio'
+                  and twilio_whatsapp_from = :twilio_whatsapp_from
+                  and is_active = true
+                limit 1
+            """),
+            {"twilio_whatsapp_from": normalized},
+        ).fetchone()
+        return dict(result._mapping) if result else None
+
+
 
 def list_whatsapp_settings(org_id: str):
     with engine.connect() as conn:

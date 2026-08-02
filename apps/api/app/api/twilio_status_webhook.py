@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Request, HTTPException
-from app.core.config import settings
 from app.services.twilio_webhook_security import validate_twilio_request
 from app.services.twilio_status_parser import parse_twilio_status_callback
 from app.db.notification_repository import (
@@ -7,6 +6,7 @@ from app.db.notification_repository import (
     create_notification_delivery_event,
     update_notification_provider_status,
 )
+from app.platform.quarantine_service import quarantine_inbound_event
 from app.services.notification_retry_service import is_retryable_failure
 from app.db.notification_repository import (
     mark_notification_retryable,
@@ -97,8 +97,19 @@ async def receive_twilio_status_callback(request: Request):
                 )
 
 
+    if not notification:
+        envelope = quarantine_inbound_event(
+            provider="twilio",
+            event_type="delivery_status",
+            payload=parsed["raw"],
+            failure_reason="notification_not_routed",
+            signature_verified=True,
+            provider_event_id=provider_message_id,
+        )
+        return {"status": "quarantined", "event_id": str(envelope["id"])}
+
     event = create_notification_delivery_event(
-        org_id=notification.get("org_id") if notification else settings.app_org_id,
+        org_id=notification["org_id"],
         notification_id=notification_id,
         provider_message_id=provider_message_id,
         status=provider_status,

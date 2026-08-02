@@ -33,8 +33,8 @@ def is_retryable_failure(
     return False
 
 
-def retry_notification(notification_id: str) -> dict:
-    notification = get_notification_by_id(notification_id)
+def retry_notification(org_id: str, notification_id: str) -> dict:
+    notification = get_notification_by_id(org_id, notification_id)
 
     if not notification:
         return {
@@ -62,7 +62,7 @@ def retry_notification(notification_id: str) -> dict:
         provider=notification.get("provider") or "twilio",
     )
 
-    result = send_notification(notification_id)
+    result = send_notification(org_id, notification_id)
 
     if result.get("status") == "sent":
         mark_notification_retry_success(notification_id)
@@ -81,10 +81,9 @@ def retry_notification(notification_id: str) -> dict:
 
 
 def retry_due_notifications(
-    org_id: str | None = None,
+    org_id: str,
     limit: int = 50,
 ) -> dict:
-    org_id = org_id or settings.app_org_id
     notifications = list_retryable_notifications(
         org_id=org_id,
         limit=limit,
@@ -93,7 +92,7 @@ def retry_due_notifications(
     results = []
 
     for notification in notifications:
-        result = retry_notification(str(notification["id"]))
+        result = retry_notification(org_id, str(notification["id"]))
 
         results.append({
             "notification_id": str(notification["id"]),

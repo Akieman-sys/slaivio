@@ -6,6 +6,8 @@ from app.core.config import settings
 
 
 async def validate_twilio_request(request: Request, form_data: dict) -> bool:
+    if settings.is_deployed and not settings.twilio_validate_signature:
+        return False
     if not settings.twilio_validate_signature:
         return True
 

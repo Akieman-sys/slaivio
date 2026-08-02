@@ -62,8 +62,12 @@ def mark_notification_sent_endpoint(
 
 
 @router.post("/notifications/{notification_id}/send")
-def send_notification_endpoint(notification_id: str):
+def send_notification_endpoint(
+    notification_id: str,
+    tenant=Depends(get_current_tenant),
+):
     result = send_notification(
+        org_id=tenant["org_id"],
         notification_id=notification_id,
     )
 

@@ -34,9 +34,8 @@ def format_office_block(office: dict | None) -> str:
 def get_shipment_status_message(
     status: str,
     shipment: dict,
-    org_id: str | None = None,
+    org_id: str,
 ) -> str | None:
-    org_id = org_id or settings.app_org_id
     tracking_id = shipment.get("tracking_id") or "N/A"
 
     destination_city = shipment.get("destination_city")

@@ -1,8 +1,5 @@
 from fastapi import WebSocket
 
-from app.core.config import settings
-
-
 class ConnectionManager:
     def __init__(self):
         self.connections: dict[str, dict[str, WebSocket]] = {}
@@ -74,7 +71,9 @@ class ConnectionManager:
         self,
         payload: dict,
     ):
-        org_id = payload.get("org_id") or settings.app_org_id
+        org_id = payload.get("org_id")
+        if not org_id:
+            raise ValueError("org_id is required for tenant-scoped broadcasts")
         await self.broadcast_to_org(
             org_id,
             payload,

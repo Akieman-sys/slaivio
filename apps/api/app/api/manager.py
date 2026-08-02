@@ -17,7 +17,6 @@ from app.db.notification_repository import create_notification_outbox
 from app.db.office_repository import find_office
 from app.services.final_pricing_service import calculate_final_price
 from fastapi import Depends
-from app.core.config import settings
 from app.core.security import require_manager_api_key
 
 
@@ -28,7 +27,9 @@ router = APIRouter()
 def get_manager_org_id(
     x_org_id: str | None = Header(default=None, alias="X-Org-Id"),
 ):
-    return x_org_id or settings.app_org_id
+    if not x_org_id:
+        raise HTTPException(status_code=400, detail="X-Org-Id is required")
+    return x_org_id
 
 
 class ConfirmPackageRequest(BaseModel):

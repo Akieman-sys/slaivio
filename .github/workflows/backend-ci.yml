@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "apps/api/**"
+      - "infra/sql/**"
       - ".github/workflows/backend-ci.yml"
   push:
     branches: [main]
     paths:
       - "apps/api/**"
+      - "infra/sql/**"
       - ".github/workflows/backend-ci.yml"
 
 permissions:

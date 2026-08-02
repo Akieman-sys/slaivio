@@ -928,6 +928,33 @@ function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  function downloadErrorReport() {
+    if (!result?.errors.length) return;
+    const lines = [
+      "ligne,erreur",
+      ...result.errors.map((item) => `${item.row},${JSON.stringify(importErrorLabel(item.error))}`),
+    ];
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "slaivio-import-clients-erreurs.csv";
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  function downloadTemplate() {
+    const headers = "nom,entreprise,telephone,whatsapp,email,pays,ville,statut,type,langue,devise,credit_enabled,credit_limit,notes";
+    const example = "Jean Dupont,,+243999000000,+243999000000,jean@example.com,RDC,Kinshasa,lead,individual,FR,USD,false,0,Client exemple";
+    const blob = new Blob(["\ufeff" + headers + "\r\n" + example + "\r\n"], { type: "text/csv;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "slaivio-modele-import-clients.csv";
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
       <div className="w-full max-w-lg rounded-lg border border-[#d8dce2] bg-white shadow-2xl">
@@ -935,14 +962,25 @@ function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
           <div>
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Importer des clients</h2>
             <p className="mt-1 text-[13px] text-[#687584]">CSV supporté: nom, entreprise, téléphone, whatsapp, email, pays, ville, statut, type.</p>
+            <button type="button" onClick={downloadTemplate} className="mt-2 text-[12px] font-semibold text-[#315fbc] underline">
+              Télécharger le modèle CSV
+            </button>
           </div>
           <button onClick={onClose} className={iconButtonClass}><X size={17} /></button>
         </div>
         <form onSubmit={onSubmit} className="space-y-4 p-5">
           {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
           {result && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-[13px] text-emerald-800">
-              {result.created} créé(s), {result.skipped} doublon(s) ignoré(s), {result.errors.length} erreur(s).
+            <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-[13px] text-emerald-800">
+              <p>{result.processed} ligne(s) traitée(s) : {result.created} créée(s), {result.skipped} doublon(s) ignoré(s), {result.errors.length} erreur(s).</p>
+              {result.errors.slice(0, 5).map((item) => (
+                <p key={`${item.row}-${item.error}`} className="text-red-700">Ligne {item.row} : {importErrorLabel(item.error)}</p>
+              ))}
+              {result.errors.length > 0 && (
+                <button type="button" onClick={downloadErrorReport} className="font-semibold text-[#315fbc] underline">
+                  Télécharger le rapport d’erreurs
+                </button>
+              )}
             </div>
           )}
           <label className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[#b9c1cc] bg-[#fbfcfd] p-5 text-center text-[13px] text-[#5f6b76] hover:bg-[#f6f8fb]">
@@ -1130,6 +1168,12 @@ function apiErrorMessage(error: unknown) {
     if (detail === "name_company_phone_or_email_required") return "Ajoutez au moins un nom, une entreprise, un téléphone ou un email.";
     if (detail === "csv_required") return "Le fichier importé doit être un CSV.";
     if (detail === "empty_csv") return "Le fichier CSV est vide.";
+    if (detail === "invalid_csv_encoding") return "Le CSV doit être encodé en UTF-8.";
+    if (detail === "invalid_csv_headers") return "Les en-têtes CSV sont vides ou présents plusieurs fois.";
+    if (detail === "invalid_csv_row_shape") return "Une ligne CSV contient plus de valeurs que les colonnes déclarées.";
+    if (detail === "client_import_too_large") return "Le fichier CSV dépasse la limite de 5 Mo.";
+    if (detail === "client_import_too_many_rows") return "Le fichier CSV dépasse la limite de 10 000 lignes.";
+    if (detail === "client_export_too_large") return "L’export dépasse 50 000 clients. Ajoutez des filtres puis réessayez.";
     if (error.response?.status === 401) return "Session expirée. Reconnectez-vous.";
     if (error.response?.status === 403) return "Vous n’avez pas accès à cette organisation.";
     if (!error.response) return `API injoignable vers ${target}. Vérifiez NEXT_PUBLIC_API_BASE_URL côté frontend et redéployez Render.`;
@@ -1137,4 +1181,15 @@ function apiErrorMessage(error: unknown) {
     return detail || `Erreur API (${error.response?.status || "réseau"}) sur ${target}.`;
   }
   return "Une erreur inattendue est survenue.";
+}
+
+function importErrorLabel(error: string) {
+  if (error === "duplicate_client") return "Client déjà existant";
+  if (error === "invalid_phone") return "Numéro de téléphone invalide";
+  if (error === "invalid_email") return "Adresse email invalide";
+  if (error === "invalid_customer_type") return "Type invalide (individual, business, agent ou partner)";
+  if (error === "invalid_lifecycle_status") return "Statut invalide (lead, active, pending, inactive ou blocked)";
+  if (error === "invalid_credit_limit") return "Limite de crédit invalide";
+  if (error === "name_company_phone_or_email_required") return "Nom, entreprise, téléphone ou email requis";
+  return "Ligne non importée";
 }

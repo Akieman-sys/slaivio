@@ -54,6 +54,7 @@ export type ClientDuplicate = Pick<
 };
 
 export type ClientImportResult = {
+  processed: number;
   created: number;
   skipped: number;
   errors: Array<{ row: number; error: string }>;

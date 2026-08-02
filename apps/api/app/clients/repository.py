@@ -1019,7 +1019,8 @@ def import_clients(org_id: str, user_id: str, rows: list[dict]) -> dict:
     errors: list[dict] = []
     created_clients: list[dict] = []
 
-    for index, row in enumerate(rows, start=1):
+    for index, row in enumerate(rows, start=2):
+        row_number = int(row.get("_csv_row") or index)
         payload = {
             "display_name": row.get("display_name") or row.get("nom_affiche"),
             "name": row.get("name") or row.get("nom") or row.get("client"),
@@ -1041,9 +1042,21 @@ def import_clients(org_id: str, user_id: str, rows: list[dict]) -> dict:
             "credit_limit": row.get("credit_limit") or 0,
         }
         if payload["customer_type"] not in CLIENT_TYPES:
-            payload["customer_type"] = "individual"
+            errors.append({"row": row_number, "error": "invalid_customer_type"})
+            continue
         if payload["lifecycle_status"] not in CLIENT_STATUSES:
-            payload["lifecycle_status"] = "lead"
+            errors.append({"row": row_number, "error": "invalid_lifecycle_status"})
+            continue
+        if not any(payload.get(key) for key in ("name", "company_name", "phone", "email")):
+            errors.append({"row": row_number, "error": "name_company_phone_or_email_required"})
+            continue
+        try:
+            payload["credit_limit"] = float(payload["credit_limit"] or 0)
+            if payload["credit_limit"] < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append({"row": row_number, "error": "invalid_credit_limit"})
+            continue
 
         try:
             client = create_client(org_id, user_id, payload)
@@ -1053,8 +1066,14 @@ def import_clients(org_id: str, user_id: str, rows: list[dict]) -> dict:
             if str(exc) == "duplicate_client":
                 skipped += 1
                 continue
-            errors.append({"row": index, "error": str(exc)})
-        except Exception as exc:  # pragma: no cover - defensive import reporting
-            errors.append({"row": index, "error": str(exc)})
+            errors.append({"row": row_number, "error": str(exc)})
+        except Exception:  # pragma: no cover - defensive import reporting
+            errors.append({"row": row_number, "error": "client_import_row_failed"})
 
-    return {"created": created, "skipped": skipped, "errors": errors, "clients": created_clients[:20]}
+    return {
+        "processed": len(rows),
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+        "clients": created_clients[:20],
+    }

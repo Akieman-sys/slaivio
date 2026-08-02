@@ -32,6 +32,16 @@ MAX_CLIENT_IMPORT_ROWS = 10_000
 MAX_CLIENT_EXPORT_ROWS = 50_000
 
 
+def csv_safe_value(value):
+    """Prevent spreadsheet applications from evaluating exported cells as formulas."""
+    if value is None:
+        return ""
+    rendered = str(value)
+    if rendered.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{rendered}"
+    return rendered
+
+
 class ClientPayload(BaseModel):
     name: str | None = Field(default=None, max_length=160)
     display_name: str | None = Field(default=None, max_length=180)
@@ -238,7 +248,7 @@ def clients_export(
     )
     if len(rows) > MAX_CLIENT_EXPORT_ROWS:
         raise HTTPException(status_code=413, detail="client_export_too_large")
-    output = io.StringIO()
+    output = io.StringIO(newline="")
     fieldnames = [
         "display_name",
         "name",
@@ -262,11 +272,11 @@ def clients_export(
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
-        writer.writerow({key: row.get(key, "") for key in fieldnames})
+        writer.writerow({key: csv_safe_value(row.get(key)) for key in fieldnames})
     output.seek(0)
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
+        iter(["\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="slaivio-clients.csv"'},
     )
 
@@ -282,14 +292,26 @@ async def clients_import(file: UploadFile = File(...), tenant=Depends(get_curren
         decoded = content.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=422, detail="invalid_csv_encoding") from exc
-    reader = csv.DictReader(io.StringIO(decoded))
+    reader = csv.DictReader(io.StringIO(decoded, newline=""))
     if not reader.fieldnames:
         raise HTTPException(status_code=422, detail="empty_csv")
+    normalized_headers = [str(header or "").strip().lower() for header in reader.fieldnames]
+    if any(not header for header in normalized_headers) or len(set(normalized_headers)) != len(normalized_headers):
+        raise HTTPException(status_code=422, detail="invalid_csv_headers")
+    reader.fieldnames = normalized_headers
     rows = []
-    for row_number, row in enumerate(reader, start=1):
-        if row_number > MAX_CLIENT_IMPORT_ROWS:
+    for csv_row_number, row in enumerate(reader, start=2):
+        if len(rows) >= MAX_CLIENT_IMPORT_ROWS:
             raise HTTPException(status_code=413, detail="client_import_too_many_rows")
-        rows.append({str(key).strip(): (value or "").strip() for key, value in row.items()})
+        if None in row:
+            raise HTTPException(status_code=422, detail="invalid_csv_row_shape")
+        normalized_row = {str(key).strip().lower(): (value or "").strip() for key, value in row.items()}
+        if not any(normalized_row.values()):
+            continue
+        normalized_row["_csv_row"] = csv_row_number
+        rows.append(normalized_row)
+    if not rows:
+        raise HTTPException(status_code=422, detail="empty_csv")
     return {"status": "ok", "result": import_clients(tenant["org_id"], _user_id(tenant), rows)}
 
 

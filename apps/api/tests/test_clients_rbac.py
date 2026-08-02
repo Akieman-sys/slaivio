@@ -4,6 +4,7 @@ from app.api.clients import (
     MAX_CLIENT_EXPORT_ROWS,
     MAX_CLIENT_IMPORT_BYTES,
     MAX_CLIENT_IMPORT_ROWS,
+    csv_safe_value,
     router,
 )
 from app.clients.repository import CLIENT_RELATION_TABLES, normalize_email, normalize_phone
@@ -76,6 +77,12 @@ def test_clients_bulk_operations_have_explicit_safety_limits():
     assert MAX_CLIENT_IMPORT_BYTES == 5 * 1024 * 1024
     assert MAX_CLIENT_IMPORT_ROWS == 10_000
     assert MAX_CLIENT_EXPORT_ROWS == 50_000
+
+
+def test_client_csv_export_neutralizes_spreadsheet_formulas():
+    assert csv_safe_value('=HYPERLINK("https://example.test")').startswith("'=")
+    assert csv_safe_value("  +cmd").startswith("'  +")
+    assert csv_safe_value("Client normal") == "Client normal"
 
 
 def test_client_contact_normalization_is_deterministic():

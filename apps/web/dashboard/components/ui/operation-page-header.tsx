@@ -13,12 +13,12 @@ export function OperationPageHeader({
 }) {
   return (
     <header className="border-b border-[#d8dce2] bg-white">
-      <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-h-[72px] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[13px] text-[#616b77]">
             <span>Opérations</span><span aria-hidden="true">›</span><span className="font-medium text-[#1f2328]">{title}</span>
           </div>
-          <h1 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[#1f2328]">{title}</h1>
+          <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.025em] text-[#1f2328]">{title}</h1>
           <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#616b77]">{description}</p>
         </div>
         {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}

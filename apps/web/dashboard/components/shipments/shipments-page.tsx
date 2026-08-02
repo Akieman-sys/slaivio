@@ -244,8 +244,8 @@ export function ShipmentsPage() {
   ], [stats]);
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-[#f7f8fa] px-8 py-6 text-[#1f2328]">
-      <section className="mx-auto overflow-hidden rounded-lg border border-[#d8dce2] bg-white shadow-sm">
+    <div className="min-h-full bg-[#f7f7f6] text-[#1f2328]">
+      <section className="overflow-hidden bg-white">
         <OperationPageHeader title="Expéditions" description="Pilotez les transports réels de vos colis : routes, ETA, statuts, clients concernés, documents, coûts et risques."
           actions={<>
               <button className={buttonClass} onClick={handleExport}><Download size={16} /> Exporter</button>

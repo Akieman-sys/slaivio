@@ -92,10 +92,10 @@ export function OrganizationSwitcher({
         className={
           variant === "dark"
             ? "text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
-            : "px-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-400"
+            : "px-1 text-[11px] font-normal text-[#777]"
         }
       >
-        Organisation active
+        {variant === "dark" ? "Organisation active" : "Espace actif"}
       </div>
 
       <select
@@ -106,7 +106,7 @@ export function OrganizationSwitcher({
         className={
           variant === "dark"
             ? "mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
-            : "mt-1 w-full truncate rounded-md border border-[#dededb] bg-white px-2.5 py-2 text-[13px] font-medium text-slate-800 outline-none transition hover:border-slate-400 focus:border-[#7771ed] focus:ring-2 focus:ring-[#7771ed]/15 disabled:cursor-wait disabled:opacity-60"
+            : "mt-1 w-full truncate rounded-[4px] border-0 bg-[#eeeeec] px-2.5 py-2 text-[13px] font-normal text-[#333] outline-none transition hover:bg-[#e7e7e4] focus:ring-2 focus:ring-[#7771ed]/20 disabled:cursor-wait disabled:opacity-60"
         }
       >
         {tenants.map((tenant) => (

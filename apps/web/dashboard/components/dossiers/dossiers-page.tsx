@@ -335,8 +335,8 @@ export function DossiersPage() {
   ], [stats]);
 
   return (
-    <div className="min-h-full bg-[#f5f6f8] px-4 py-4 text-[#1f2328] md:px-6">
-      <div className="mx-auto max-w-[1520px] overflow-hidden rounded-[10px] border border-[#d8dce2] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.10)]">
+    <div className="min-h-full bg-[#f7f7f6] text-[#1f2328]">
+      <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Dossiers cargo" description="Chaque demande client devient un dossier traçable : route, colis, devis, paiement, messages et expéditions liés."
           actions={<>
               <button onClick={handleExport} className={buttonClass}>

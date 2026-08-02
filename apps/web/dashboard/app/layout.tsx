@@ -11,10 +11,10 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Slaivio - Cargo OS",
+    default: "Slaivio",
     template: "%s | Slaivio",
   },
-  description: "Enterprise cargo operations platform for agencies.",
+  description: "Plateforme opérationnelle Slaivio pour les agences.",
   icons: {
     icon: [
       {

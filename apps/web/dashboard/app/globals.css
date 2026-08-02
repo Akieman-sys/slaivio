@@ -36,7 +36,7 @@ body {
   min-width: 0;
   overflow-x: clip;
   font-family:
-    var(--font-slaivio, Inter),
+    var(--font-inter),
     "Neue Haas Grotesk Display Pro",
     "Neue Haas Grotesk Text",
     Inter,

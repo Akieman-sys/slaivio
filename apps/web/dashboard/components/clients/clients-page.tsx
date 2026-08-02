@@ -155,6 +155,7 @@ export function ClientsPage() {
   const [importResult, setImportResult] = useState<ClientImportResult | null>(null);
   const [importError, setImportError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [clientAction, setClientAction] = useState<"archive" | "restore" | null>(null);
   const listRequestId = useRef(0);
@@ -396,8 +397,7 @@ export function ClientsPage() {
 
   async function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const file = new FormData(event.currentTarget).get("file");
-    if (!(file instanceof File) || !file.name) {
+    if (!importFile?.name) {
       setImportError("Sélectionnez un fichier CSV.");
       return;
     }
@@ -405,7 +405,7 @@ export function ClientsPage() {
     setImportError("");
     setImportResult(null);
     try {
-      const result = await importClients(file);
+      const result = await importClients(importFile);
       setImportResult(result);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
@@ -574,11 +574,14 @@ export function ClientsPage() {
           importing={importing}
           error={importError}
           result={importResult}
+          selectedFile={importFile}
+          onFileChange={setImportFile}
           onClose={() => {
             if (importing) return;
             setImportOpen(false);
             setImportError("");
             setImportResult(null);
+            setImportFile(null);
           }}
           onSubmit={submitImport}
         />
@@ -951,10 +954,12 @@ function ClientFormModal({
   );
 }
 
-function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
+function ImportClientsModal({ importing, error, result, selectedFile, onFileChange, onClose, onSubmit }: {
   importing: boolean;
   error: string;
   result: ClientImportResult | null;
+  selectedFile: File | null;
+  onFileChange: (file: File | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -1016,11 +1021,12 @@ function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
           <label className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[#b9c1cc] bg-[#fbfcfd] p-5 text-center text-[13px] text-[#5f6b76] hover:bg-[#f6f8fb]">
             <Import size={22} />
             <span className="mt-2 font-medium text-[#1f2328]">Choisir un fichier CSV</span>
-            <input name="file" type="file" accept=".csv,text/csv" className="mt-3 text-[13px]" />
+            <input name="file" type="file" accept=".csv,text/csv" onChange={(event) => onFileChange(event.target.files?.[0] || null)} className="mt-3 text-[13px]" />
+            {selectedFile && <span className="mt-2 font-medium text-emerald-700">{selectedFile.name}</span>}
           </label>
           <div className="flex justify-end gap-2 border-t border-[#eef0f3] pt-4">
             <button type="button" onClick={onClose} disabled={importing} className={`${buttonClass} disabled:opacity-40`}>Fermer</button>
-            <button disabled={importing} className={`${primaryButtonClass} disabled:opacity-60`}>{importing ? "Import..." : "Importer"}</button>
+            <button type="submit" disabled={importing} className={`${primaryButtonClass} disabled:opacity-60`}>{importing ? "Import..." : "Importer"}</button>
           </div>
         </form>
       </div>

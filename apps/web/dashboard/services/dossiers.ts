@@ -95,6 +95,18 @@ export type DossierTimelineEvent = {
   metadata: Record<string, unknown>;
 };
 
+export type DossierDocument = {
+  id: string; document_type: string; file_name: string; mime_type: string;
+  size_bytes: number; checksum_sha256: string; verification_status: string;
+  notes: string | null; uploaded_by: string; created_at: string;
+};
+
+export type DossierChecklistItem = {
+  id: string; code: string; label: string; required: boolean;
+  status: "PENDING" | "COMPLETED" | "NOT_APPLICABLE";
+  completed_at: string | null; completed_by: string | null; row_version: number;
+};
+
 export type DossierMessage = {
   id: string;
   sender_phone: string | null;
@@ -197,6 +209,29 @@ export async function getDossierStats() {
 
 export async function getDossierTimeline(id: string) {
   return (await api.get<{ status: "ok"; items: DossierTimelineEvent[] }>(`/dossiers/${id}/timeline`)).data.items;
+}
+
+export async function listDossierDocuments(id: string) {
+  return (await api.get<{ items: DossierDocument[] }>(`/dossiers/${id}/documents`)).data.items;
+}
+
+export async function uploadDossierDocument(id: string, file: File, documentType: string, notes?: string) {
+  const form = new FormData();
+  form.append("file", file); form.append("document_type", documentType);
+  if (notes) form.append("notes", notes);
+  return (await api.post(`/dossiers/${id}/documents`, form, { headers: { "Content-Type": "multipart/form-data" } })).data.document as DossierDocument;
+}
+
+export async function downloadDossierDocument(id: string, documentId: string) {
+  return (await api.get<{ url: string }>(`/dossiers/${id}/documents/${documentId}/download`)).data.url;
+}
+
+export async function listDossierChecklist(id: string) {
+  return (await api.get<{ items: DossierChecklistItem[] }>(`/dossiers/${id}/checklist`)).data.items;
+}
+
+export async function updateDossierChecklistItem(id: string, item: DossierChecklistItem, status: DossierChecklistItem["status"]) {
+  return (await api.patch(`/dossiers/${id}/checklist/${item.id}`, { status, row_version: item.row_version })).data.item as DossierChecklistItem;
 }
 
 export async function exportDossiers(params: {

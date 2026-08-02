@@ -1,7 +1,10 @@
 import csv
+import hashlib
 import io
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 from starlette.responses import StreamingResponse
 
@@ -23,6 +26,15 @@ from app.db.dossier_repository import (
     restore_dossier,
     update_dossier,
 )
+from app.core.config import settings
+from app.db.dossier_document_repository import (
+    create_document,
+    get_document,
+    list_checklist,
+    list_documents,
+    update_checklist_item,
+)
+from app.services.dossier_document_storage import create_document_download_url, upload_private_document
 
 
 router = APIRouter()
@@ -110,6 +122,17 @@ class DossierPatchPayload(BaseModel):
             raise ValueError("invalid_validation_status")
         if self.payment_status is not None and self.payment_status not in DOSSIER_PAYMENT_STATUSES:
             raise ValueError("invalid_payment_status")
+        return self
+
+
+class ChecklistPatchPayload(BaseModel):
+    status: str
+    row_version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_status(self):
+        if self.status not in {"PENDING", "COMPLETED", "NOT_APPLICABLE"}:
+            raise ValueError("invalid_checklist_status")
         return self
 
 
@@ -348,3 +371,65 @@ def dossiers_restore(
     if not dossier:
         raise HTTPException(status_code=404, detail="archived_dossier_not_found")
     return {"status": "ok", "dossier": dossier}
+
+
+@router.get("/dossiers/{dossier_id}/documents", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossier_documents(dossier_id: str, tenant=Depends(get_current_tenant)):
+    if not get_dossier(tenant["org_id"], dossier_id):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "items": list_documents(tenant["org_id"], dossier_id)}
+
+
+@router.post("/dossiers/{dossier_id}/documents", dependencies=[Depends(require_permission("dossiers.update"))])
+async def dossier_document_upload(
+    dossier_id: str, file: UploadFile = File(...),
+    document_type: str = Form(default="OTHER"), notes: str | None = Form(default=None),
+    tenant=Depends(get_current_tenant),
+):
+    if not get_dossier(tenant["org_id"], dossier_id):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    if file.content_type not in {"application/pdf", "image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=415, detail="unsupported_document_type")
+    content = await file.read(settings.dossier_document_max_bytes + 1)
+    if not content or len(content) > settings.dossier_document_max_bytes:
+        raise HTTPException(status_code=413, detail="document_too_large")
+    safe_name = Path(file.filename or "document").name
+    object_path = f"{tenant['org_id']}/{dossier_id}/{uuid4().hex}-{safe_name}"
+    try:
+        upload_private_document(object_path, content, file.content_type)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    document = create_document(tenant["org_id"], dossier_id, _user_id(tenant), {
+        "document_type": document_type[:50].upper(), "file_name": safe_name,
+        "object_path": object_path, "mime_type": file.content_type,
+        "size_bytes": len(content), "checksum_sha256": hashlib.sha256(content).hexdigest(),
+        "notes": notes[:500] if notes else None,
+    })
+    return {"status": "ok", "document": document}
+
+
+@router.get("/dossiers/{dossier_id}/documents/{document_id}/download", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossier_document_download(dossier_id: str, document_id: str, tenant=Depends(get_current_tenant)):
+    document = get_document(tenant["org_id"], document_id)
+    if not document or document["dossier_id"] != dossier_id:
+        raise HTTPException(status_code=404, detail="document_not_found")
+    try:
+        url = create_document_download_url(document["object_path"])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"status": "ok", "url": url, "expires_in": 300}
+
+
+@router.get("/dossiers/{dossier_id}/checklist", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossier_checklist(dossier_id: str, tenant=Depends(get_current_tenant)):
+    if not get_dossier(tenant["org_id"], dossier_id):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "items": list_checklist(tenant["org_id"], dossier_id)}
+
+
+@router.patch("/dossiers/{dossier_id}/checklist/{item_id}", dependencies=[Depends(require_permission("dossiers.update"))])
+def dossier_checklist_update(dossier_id: str, item_id: str, body: ChecklistPatchPayload, tenant=Depends(get_current_tenant)):
+    item = update_checklist_item(tenant["org_id"], dossier_id, item_id, _user_id(tenant), body.status, body.row_version)
+    if not item:
+        raise HTTPException(status_code=409, detail="stale_checklist_version")
+    return {"status": "ok", "item": item}

@@ -16,6 +16,11 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers/{dossier_id}", "DELETE"): "dossiers.archive",
     ("/dossiers/{dossier_id}/restore", "POST"): "dossiers.archive",
     ("/dossiers/{dossier_id}/timeline", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/documents", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/documents", "POST"): "dossiers.update",
+    ("/dossiers/{dossier_id}/documents/{document_id}/download", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/checklist", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/checklist/{item_id}", "PATCH"): "dossiers.update",
 }
 
 

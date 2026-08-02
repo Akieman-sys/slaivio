@@ -14,6 +14,7 @@ import {
   Package,
   RotateCcw,
   Search,
+  Upload,
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -29,11 +30,18 @@ import {
   getDossier,
   getDossierStats,
   getDossierTimeline,
+  downloadDossierDocument,
+  listDossierChecklist,
+  listDossierDocuments,
   listDossiers,
   listArchivedDossiers,
   restoreDossier,
+  updateDossierChecklistItem,
+  uploadDossierDocument,
   updateDossier,
   type DossierCaseType,
+  type DossierChecklistItem,
+  type DossierDocument,
   type DossierIntakeStatus,
   type DossierPaymentStatus,
   type DossierPayload,
@@ -145,7 +153,7 @@ const pagerButtonClass = "flex h-8 w-8 items-center justify-center rounded-md bo
 
 type Pagination = { page: number; page_size: number; total: number; total_pages: number };
 type DossierFormMode = "create" | "edit";
-type DetailTab = "summary" | "client" | "shipments" | "messages" | "notifications" | "history";
+type DetailTab = "summary" | "client" | "shipments" | "documents" | "checklist" | "messages" | "notifications" | "history";
 
 export function DossiersPage() {
   const [dossiers, setDossiers] = useState<DossierRecord[]>([]);
@@ -153,6 +161,8 @@ export function DossiersPage() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, page_size: 30, total: 0, total_pages: 0 });
   const [selected, setSelected] = useState<DossierRecord | null>(null);
   const [timeline, setTimeline] = useState<DossierTimelineEvent[]>([]);
+  const [documents, setDocuments] = useState<DossierDocument[]>([]);
+  const [checklist, setChecklist] = useState<DossierChecklistItem[]>([]);
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
   const [query, setQuery] = useState("");
@@ -189,6 +199,12 @@ export function DossiersPage() {
   useEffect(() => {
     if (!selected || activeTab !== "history") return;
     loadTimeline(selected.id);
+  }, [selected, activeTab]);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (activeTab === "documents") listDossierDocuments(selected.id).then(setDocuments).catch(() => setDocuments([]));
+    if (activeTab === "checklist") listDossierChecklist(selected.id).then(setChecklist).catch(() => setChecklist([]));
   }, [selected, activeTab]);
 
   async function loadStats() {
@@ -496,6 +512,19 @@ export function DossiersPage() {
           action={dossierAction}
           onArchive={handleArchive}
           onRestore={handleRestore}
+          documents={documents}
+          checklist={checklist}
+          onUpload={async (file, type, notes) => {
+            await uploadDossierDocument(selected.id, file, type, notes);
+            setDocuments(await listDossierDocuments(selected.id));
+          }}
+          onDownload={async (documentId) => {
+            window.open(await downloadDossierDocument(selected.id, documentId), "_blank", "noopener,noreferrer");
+          }}
+          onChecklist={async (item, nextStatus) => {
+            const updated = await updateDossierChecklistItem(selected.id, item, nextStatus);
+            setChecklist((items) => items.map((current) => current.id === updated.id ? updated : current));
+          }}
         />
       )}
 
@@ -603,6 +632,11 @@ function DossierDetails({
   action,
   onArchive,
   onRestore,
+  documents,
+  checklist,
+  onUpload,
+  onDownload,
+  onChecklist,
 }: {
   dossier: DossierRecord;
   loading: boolean;
@@ -616,6 +650,11 @@ function DossierDetails({
   action: "archive" | "restore" | null;
   onArchive: () => void;
   onRestore: () => void;
+  documents: DossierDocument[];
+  checklist: DossierChecklistItem[];
+  onUpload: (file: File, type: string, notes?: string) => Promise<void>;
+  onDownload: (documentId: string) => Promise<void>;
+  onChecklist: (item: DossierChecklistItem, status: DossierChecklistItem["status"]) => Promise<void>;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -633,6 +672,8 @@ function DossierDetails({
     { key: "summary", label: "Résumé" },
     { key: "client", label: "Client" },
     { key: "shipments", label: "Colis & expéditions" },
+    { key: "documents", label: "Documents" },
+    { key: "checklist", label: "Checklist" },
     { key: "messages", label: "Messages" },
     { key: "notifications", label: "Notifications" },
     { key: "history", label: "Historique" },
@@ -687,6 +728,8 @@ function DossierDetails({
           {activeTab === "summary" && <SummaryTab dossier={dossier} />}
           {activeTab === "client" && <ClientTab dossier={dossier} />}
           {activeTab === "shipments" && <ShipmentsTab dossier={dossier} />}
+          {activeTab === "documents" && <DocumentsTab documents={documents} onUpload={onUpload} onDownload={onDownload} />}
+          {activeTab === "checklist" && <ChecklistTab items={checklist} onChange={onChecklist} />}
           {activeTab === "messages" && <MessagesTab dossier={dossier} />}
           {activeTab === "notifications" && <NotificationsTab dossier={dossier} />}
           {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
@@ -749,6 +792,31 @@ function ShipmentsTab({ dossier }: { dossier: DossierRecord }) {
       ))}
     </div>
   );
+}
+
+function DocumentsTab({ documents, onUpload, onDownload }: { documents: DossierDocument[]; onUpload: (file: File, type: string, notes?: string) => Promise<void>; onDownload: (id: string) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const file = form.get("file"); if (!(file instanceof File) || !file.size) return;
+    setSaving(true);
+    try { await onUpload(file, String(form.get("type") || "OTHER"), String(form.get("notes") || "") || undefined); event.currentTarget.reset(); }
+    finally { setSaving(false); }
+  }
+  return <div className="space-y-4">
+    <PermissionGuard permission="dossiers.update"><form onSubmit={submit} className="rounded-md border border-[#d8dce2] p-4">
+      <div className="grid gap-3 sm:grid-cols-2"><input name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" className="text-[13px]" /><select name="type" className="h-9 rounded-md border px-2 text-[13px]"><option value="IDENTITY">Identité</option><option value="INVOICE">Facture</option><option value="CUSTOMS">Douane</option><option value="OTHER">Autre</option></select></div>
+      <input name="notes" maxLength={500} placeholder="Note interne facultative" className="mt-3 h-9 w-full rounded-md border px-3 text-[13px]" />
+      <button disabled={saving} className={`${buttonClass} mt-3`}><Upload size={15} />{saving ? "Envoi…" : "Téléverser"}</button>
+      <p className="mt-2 text-[11px] text-[#687584]">PDF ou image, 10 Mo maximum. Stockage privé.</p>
+    </form></PermissionGuard>
+    {documents.length === 0 ? <EmptyState title="Aucun document" text="Ajoutez les pièces nécessaires au traitement réel du dossier." /> : documents.map((doc) => <button key={doc.id} onClick={() => onDownload(doc.id)} className="flex w-full items-center justify-between rounded-md border p-3 text-left text-[13px]"><span><strong>{doc.file_name}</strong><br /><small>{doc.document_type} · {(doc.size_bytes / 1024).toFixed(0)} Ko</small></span><Download size={16} /></button>)}
+  </div>;
+}
+
+function ChecklistTab({ items, onChange }: { items: DossierChecklistItem[]; onChange: (item: DossierChecklistItem, status: DossierChecklistItem["status"]) => Promise<void> }) {
+  if (!items.length) return <EmptyState title="Checklist indisponible" text="La checklist sera créée par la migration pour chaque dossier." />;
+  return <div className="space-y-2">{items.map((item) => <label key={item.id} className="flex items-center gap-3 rounded-md border p-3 text-[13px]"><input type="checkbox" checked={item.status === "COMPLETED"} onChange={(event) => onChange(item, event.target.checked ? "COMPLETED" : "PENDING")} /><span className={item.status === "COMPLETED" ? "line-through text-[#687584]" : ""}>{item.label}{item.required ? " *" : ""}</span></label>)}</div>;
 }
 
 function MessagesTab({ dossier }: { dossier: DossierRecord }) {

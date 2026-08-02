@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     supabase_db_host: str | None = None
     supabase_db_port: int = 5432
     supabase_db_name: str | None = None
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+    dossier_documents_bucket: str = "dossier-documents"
+    dossier_document_max_bytes: int = Field(default=10_485_760, ge=1_048_576, le=52_428_800)
 
     clerk_issuer_url: str | None = None
     clerk_jwks_url: str | None = None

@@ -13,6 +13,7 @@ from app.organizations.services.provisioning_service import (
     CLIENT_ROLE_PERMISSIONS,
 )
 from fastapi.routing import APIRoute
+from pathlib import Path
 
 
 EXPECTED_ROUTE_PERMISSIONS = {
@@ -109,3 +110,13 @@ def test_client_merge_contract_is_versioned_and_idempotent():
     assert "dossiers" in CLIENT_RELATION_TABLES
     assert "messages_raw" in CLIENT_RELATION_TABLES
     assert "cargo_packages" in CLIENT_RELATION_TABLES
+
+
+def test_clients_database_isolation_migration_guards_relationships():
+    migration = Path(__file__).parents[3] / "infra/sql/031_clients_database_tenant_isolation.sql"
+    sql = " ".join(migration.read_text(encoding="utf-8").lower().split())
+    assert "unique index if not exists uq_clients_org_id_id on clients(org_id, id)" in sql
+    assert "foreign key (org_id, client_id) references clients(org_id, id)" in sql
+    assert "source_client_id" in sql
+    assert "target_client_id" in sql
+    assert "tenant isolation violation" in sql

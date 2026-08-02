@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from math import ceil
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import text
 
@@ -39,6 +40,23 @@ DOSSIER_INTAKE_STATUSES = {"PARTIAL", "COMPLETE", "WAITING_CLIENT", "WAITING_PAC
 DOSSIER_VALIDATION_STATUSES = {"PENDING", "VALIDATED", "REJECTED", "NEEDS_REVIEW"}
 DOSSIER_PAYMENT_STATUSES = {"PENDING", "WAITING", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"}
 
+DOSSIER_STATUS_TRANSITIONS = {
+    "LEAD": {"DRAFT", "QUOTED", "CANCELLED"},
+    "DRAFT": {"LEAD", "QUOTED", "WAITING_PACKAGES", "CANCELLED"},
+    "QUOTED": {"DRAFT", "WAITING_PACKAGES", "CANCELLED"},
+    "WAITING_PACKAGES": {"IN_WAREHOUSE", "CANCELLED"},
+    "IN_WAREHOUSE": {"WAITING_PACKAGES", "READY_TO_SHIP", "CANCELLED"},
+    "READY_TO_SHIP": {"IN_WAREHOUSE", "IN_TRANSIT", "CANCELLED"},
+    "IN_TRANSIT": {"ARRIVED"},
+    "ARRIVED": {"CUSTOMS", "READY_FOR_DELIVERY"},
+    "CUSTOMS": {"READY_FOR_DELIVERY"},
+    "READY_FOR_DELIVERY": {"DELIVERED"},
+    "DELIVERED": {"COMPLETED"},
+    "COMPLETED": {"CLOSED"},
+    "CLOSED": set(),
+    "CANCELLED": set(),
+}
+
 
 def _safe(value: Any) -> Any:
     if isinstance(value, Decimal):
@@ -61,7 +79,31 @@ def _table_exists(conn, table_name: str) -> bool:
 
 
 def _dossier_reference_sql() -> str:
-    return "coalesce(d.tracking_id, 'DOS-' || upper(left(d.id::text, 8)))"
+    return "d.dossier_reference"
+
+
+def validate_dossier_transition(existing: dict, updated: dict) -> None:
+    previous_status = existing["status_global"]
+    next_status = updated["status_global"]
+    if next_status != previous_status and next_status not in DOSSIER_STATUS_TRANSITIONS[previous_status]:
+        raise ValueError("invalid_dossier_status_transition")
+    if next_status in {"READY_TO_SHIP", "IN_TRANSIT"}:
+        if updated.get("intake_status") != "COMPLETE":
+            raise ValueError("dossier_intake_incomplete")
+        if updated.get("validation_status") != "VALIDATED":
+            raise ValueError("dossier_not_validated")
+        required = ("origin_country", "destination_country", "shipping_mode")
+        if any(not updated.get(field) for field in required):
+            raise ValueError("dossier_route_incomplete")
+
+
+def validate_dossier_financials(dossier: dict) -> None:
+    if dossier.get("quoted_total") is not None and not dossier.get("quoted_currency"):
+        raise ValueError("quoted_currency_required")
+    if dossier.get("final_total") is not None and not dossier.get("final_currency"):
+        raise ValueError("final_currency_required")
+    if dossier.get("supplier_payment_amount") is not None and not dossier.get("supplier_payment_currency"):
+        raise ValueError("supplier_payment_currency_required")
 
 
 def _client_display_sql() -> str:
@@ -202,6 +244,7 @@ def list_dossiers(
                     d.supplier_payment_currency,
                     d.created_at,
                     d.updated_at,
+                    d.row_version,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
@@ -315,6 +358,7 @@ def get_dossier(org_id: str, dossier_id: str) -> dict | None:
                     d.supplier_payment_currency,
                     d.created_at,
                     d.updated_at,
+                    d.row_version,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
@@ -418,6 +462,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
     client_id = payload.get("client_id")
     if not client_id:
         raise ValueError("client_required")
+    validate_dossier_financials(payload)
 
     with engine.begin() as conn:
         if not _client_exists(conn, org_id, client_id):
@@ -425,7 +470,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
         row = conn.execute(
             text("""
                 insert into dossiers (
-                    org_id, client_id, case_type, status_global, intake_status,
+                    org_id, client_id, dossier_reference, case_type, status_global, intake_status,
                     validation_status, primary_channel, origin_country, origin_city,
                     destination_country, destination_city, goods_type,
                     estimated_weight_kg, estimated_volume_cbm, shipping_mode,
@@ -434,7 +479,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     supplier_payment_amount, supplier_payment_currency
                 )
                 values (
-                    :org_id, :client_id, :case_type, :status_global, :intake_status,
+                    :org_id, :client_id, :dossier_reference, :case_type, :status_global, :intake_status,
                     :validation_status, :primary_channel, :origin_country, :origin_city,
                     :destination_country, :destination_city, :goods_type,
                     :estimated_weight_kg, :estimated_volume_cbm, :shipping_mode,
@@ -447,6 +492,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
             {
                 "org_id": org_id,
                 "client_id": client_id,
+                "dossier_reference": f"DOS-{datetime.now().year}-{uuid4().hex[:10].upper()}",
                 "case_type": payload.get("case_type") or "UNKNOWN",
                 "status_global": payload.get("status_global") or "LEAD",
                 "intake_status": payload.get("intake_status") or "PARTIAL",
@@ -503,11 +549,14 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
         "supplier_payment_amount", "supplier_payment_currency",
     }
     data = {key: payload.get(key, existing.get(key)) for key in allowed}
+    expected_version = int(payload["row_version"])
+    validate_dossier_transition(existing, data)
+    validate_dossier_financials(data)
 
     with engine.begin() as conn:
         if data.get("client_id") and not _client_exists(conn, org_id, data["client_id"]):
             raise ValueError("client_not_found")
-        conn.execute(
+        result = conn.execute(
             text("""
                 update dossiers set
                     client_id = :client_id,
@@ -534,11 +583,21 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
                     client_full_name = :client_full_name,
                     supplier_payment_amount = :supplier_payment_amount,
                     supplier_payment_currency = :supplier_payment_currency,
-                    updated_at = now()
-                where org_id = :org_id and id = :dossier_id
+                    updated_at = now(),
+                    row_version = row_version + 1
+                where org_id = :org_id
+                  and id = :dossier_id
+                  and row_version = :expected_version
             """),
-            dict(data, org_id=org_id, dossier_id=dossier_id),
+            dict(
+                data,
+                org_id=org_id,
+                dossier_id=dossier_id,
+                expected_version=expected_version,
+            ),
         )
+        if result.rowcount == 0:
+            raise ValueError("stale_dossier_version")
         conn.execute(
             text("""
                 insert into dossier_events (org_id, dossier_id, event_type, payload)

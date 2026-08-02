@@ -198,39 +198,39 @@ def update_dossier_from_intent(org_id: str, dossier_id: str, intent: str):
     status_global = None
 
     if intent == "SEND_CARGO_REQUEST":
-        case_type = "SEND_CARGO"
-        status_global = "PARTIAL"
+        case_type = "COMMERCIAL_CARGO"
+        status_global = "DRAFT"
 
     elif intent == "TRANSITAIRE_REQUEST":
-        case_type = "TRANSITAIRE"
-        status_global = "PARTIAL"
+        case_type = "IMPORT"
+        status_global = "DRAFT"
 
     elif intent in ["PRICE_REQUEST", "PRICING_REQUEST"]:
-        case_type = "PRICE_INQUIRY"
+        case_type = "QUOTE"
         status_global = "LEAD"
 
     elif intent == "TRACKING_REQUEST":
-        case_type = "TRACKING_SUPPORT"
-        status_global = "ACTIVE"
+        case_type = "UNKNOWN"
+        status_global = "DRAFT"
 
     elif intent in ["WAREHOUSE_ADDRESS_REQUEST", "ADDRESS_REQUEST"]:
-        case_type = "INFO_REQUEST"
+        case_type = "UNKNOWN"
         status_global = "LEAD"
 
     elif intent == "DEPARTURE_SCHEDULE_REQUEST":
-        case_type = "INFO_REQUEST"
+        case_type = "UNKNOWN"
         status_global = "LEAD"
 
     elif intent == "SUPPLIER_PAYMENT_REQUEST":
-        case_type = "SUPPLIER_PAYMENT"
-        status_global = "PARTIAL"
+        case_type = "PURCHASE"
+        status_global = "DRAFT"
 
     elif intent == "HUMAN_HELP_REQUEST":
-        case_type = "SUPPORT"
-        status_global = "NEEDS_HUMAN"
+        case_type = "UNKNOWN"
+        status_global = "DRAFT"
 
     elif intent == "GREETING":
-        case_type = "GENERAL_CONVERSATION"
+        case_type = "UNKNOWN"
         status_global = "LEAD"
 
     elif intent == "CONFIRMATION":
@@ -607,7 +607,7 @@ def mark_dossier_waiting_for_package(org_id: str, dossier_id: str):
             text("""
                 update dossiers
                 set
-                    status_global = 'WAITING_FOR_PACKAGE',
+                    status_global = 'WAITING_PACKAGES',
                     updated_at = now()
                 where id = :dossier_id
                   and org_id = :org_id
@@ -640,7 +640,7 @@ def update_dossier_final_pricing(
                     final_total = :total,
                     final_currency = :currency,
                     payment_status = 'WAITING',
-                    status_global = 'WAITING_PAYMENT',
+                    status_global = 'QUOTED',
                     updated_at = now()
                 where id = :dossier_id
                   and org_id = :org_id

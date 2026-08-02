@@ -139,7 +139,7 @@ def confirm_package(
     updated_package_dossier = update_dossier_status(
         org_id=org_id,
         dossier_id=body.dossier_id,
-        status_global="PACKAGE_RECEIVED",
+        status_global="IN_WAREHOUSE",
     )
 
     create_dossier_event(
@@ -208,7 +208,7 @@ def confirm_payment(
                 update dossiers
                 set
                     payment_status = 'PAID',
-                    status_global = 'READY_FOR_DEPARTURE',
+                    status_global = 'READY_TO_SHIP',
                     updated_at = now()
                 where id = :dossier_id
                   and org_id = :org_id
@@ -411,7 +411,7 @@ def confirm_arrival_destination(
     updated_dossier = update_dossier_status(
         org_id=org_id,
         dossier_id=body.dossier_id,
-        status_global="ARRIVED_DESTINATION",
+        status_global="ARRIVED",
     )
 
     create_dossier_event(
@@ -486,7 +486,7 @@ def ready_for_pickup(
     updated_dossier = update_dossier_status(
         org_id=org_id,
         dossier_id=body.dossier_id,
-        status_global="READY_FOR_PICKUP",
+        status_global="READY_FOR_DELIVERY",
     )
 
     create_dossier_event(
@@ -611,7 +611,7 @@ def confirm_private_arrival(
             text("""
                 update dossiers
                 set
-                    status_global = 'ARRIVED_DESTINATION',
+                    status_global = 'ARRIVED',
                     updated_at = now()
                 where org_id = :org_id
                   and id = :dossier_id

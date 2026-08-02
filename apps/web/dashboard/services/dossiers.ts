@@ -60,6 +60,7 @@ export type DossierRecord = {
   shipment_count: number;
   created_at: string;
   updated_at: string | null;
+  row_version: number;
   messages?: DossierMessage[];
   events?: DossierEvent[];
   notifications?: DossierNotification[];
@@ -80,6 +81,7 @@ export type DossierStats = {
 
 export type DossierPayload = Partial<Omit<DossierRecord, "id" | "org_id" | "dossier_reference" | "message_count" | "event_count" | "shipment_count" | "created_at" | "updated_at" | "messages" | "events" | "notifications" | "shipments">> & {
   client_id: string;
+  row_version?: number;
 };
 
 export type DossierTimelineEvent = {

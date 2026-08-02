@@ -371,7 +371,7 @@ async def process_normalized_whatsapp_message(
                 dossier_id=dossier_id,
                 event_type="DOSSIER_WAITING_FOR_PACKAGE",
                 payload={
-                    "status_global": "WAITING_FOR_PACKAGE",
+                    "status_global": "WAITING_PACKAGES",
                     "reason": "intake_completed_package_not_received_yet",
                 },
             )

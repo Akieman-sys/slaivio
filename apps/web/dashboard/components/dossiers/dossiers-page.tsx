@@ -56,6 +56,11 @@ const statusLabels: Record<DossierStatus, string> = {
   CANCELLED: "Annulé",
 };
 
+const initialStatusLabels: Partial<Record<DossierStatus, string>> = {
+  LEAD: statusLabels.LEAD,
+  DRAFT: statusLabels.DRAFT,
+};
+
 const statusStyles: Record<DossierStatus, string> = {
   LEAD: "bg-blue-50 text-blue-700 ring-blue-100",
   DRAFT: "bg-slate-100 text-slate-700 ring-slate-200",
@@ -285,6 +290,7 @@ export function DossiersPage() {
       client_full_name: clean(form.get("client_full_name")),
       supplier_payment_amount: numberOrNull(form.get("supplier_payment_amount")),
       supplier_payment_currency: clean(form.get("supplier_payment_currency")),
+      row_version: formDossier?.row_version,
     };
     if (!payload.client_id) {
       setSaving(false);
@@ -799,7 +805,7 @@ function DossierFormModal({ mode, dossier, saving, error, onClose, onSubmit }: {
               </select>
             </label>
             <SelectField name="case_type" label="Type" defaultValue={dossier?.case_type || "UNKNOWN"} options={caseTypeLabels} />
-            <SelectField name="status_global" label="Statut" defaultValue={dossier?.status_global || "LEAD"} options={statusLabels} />
+            <SelectField name="status_global" label="Statut" defaultValue={dossier?.status_global || "LEAD"} options={mode === "create" ? initialStatusLabels : statusLabels} />
             <SelectField name="intake_status" label="Collecte infos" defaultValue={dossier?.intake_status || "PARTIAL"} options={intakeLabels} />
             <SelectField name="validation_status" label="Validation" defaultValue={dossier?.validation_status || "PENDING"} options={validationLabels} />
             <InputField name="origin_city" label="Ville origine" defaultValue={dossier?.origin_city} />
@@ -885,7 +891,7 @@ function SelectFilter({ value, onChange, label, children }: { value: string; onC
   );
 }
 
-function SelectField<T extends string>({ name, label, defaultValue, options }: { name: string; label: string; defaultValue: T; options: Record<T, string> }) {
+function SelectField<T extends string>({ name, label, defaultValue, options }: { name: string; label: string; defaultValue: T; options: Partial<Record<T, string>> }) {
   return (
     <label>
       <FormLabel>{label}</FormLabel>
@@ -956,6 +962,15 @@ function apiErrorMessage(error: unknown) {
   if (error.response.status === 401) return "Session expirée ou non authentifiée.";
   if (error.response.status === 403) return "Vous n’avez pas accès à cette organisation.";
   if (error.response.status === 404) return "Ressource introuvable.";
-  if (error.response.status === 409) return "Conflit détecté.";
+  const detail = error.response.data?.detail;
+  if (detail === "stale_dossier_version") return "Ce dossier a été modifié par un autre membre. Fermez le formulaire, rechargez la fiche puis réessayez.";
+  if (detail === "invalid_dossier_status_transition") return "Ce changement de statut n’est pas autorisé depuis l’état actuel du dossier.";
+  if (detail === "dossier_intake_incomplete") return "La collecte des informations doit être complète avant de préparer l’expédition.";
+  if (detail === "dossier_not_validated") return "Le dossier doit être validé avant de préparer l’expédition.";
+  if (detail === "dossier_route_incomplete") return "Renseignez les pays d’origine et de destination ainsi que le mode d’expédition.";
+  if (detail === "quoted_currency_required") return "La devise du devis est obligatoire lorsqu’un montant est renseigné.";
+  if (detail === "final_currency_required") return "La devise finale est obligatoire lorsqu’un montant final est renseigné.";
+  if (detail === "supplier_payment_currency_required") return "La devise fournisseur est obligatoire lorsqu’un paiement fournisseur est renseigné.";
+  if (error.response.status === 409) return "Conflit détecté. Rechargez le dossier avant de réessayer.";
   return `Erreur API (${error.response.status}).`;
 }

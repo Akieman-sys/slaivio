@@ -99,8 +99,8 @@ def create_real_dossier(
                 values (
                     :org_id,
                     :client_id,
-                    'SEND_CARGO',
-                    'PENDING_CONFIRMATION',
+                    'COMMERCIAL_CARGO',
+                    'DRAFT',
                     'PARTIAL',
                     'PENDING',
                     :origin_country,

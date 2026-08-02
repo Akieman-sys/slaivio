@@ -38,18 +38,18 @@ class DossierPayload(BaseModel):
     destination_country: str | None = Field(default=None, max_length=80)
     destination_city: str | None = Field(default=None, max_length=80)
     goods_type: str | None = Field(default=None, max_length=160)
-    estimated_weight_kg: float | None = None
-    estimated_volume_cbm: float | None = None
+    estimated_weight_kg: float | None = Field(default=None, ge=0)
+    estimated_volume_cbm: float | None = Field(default=None, ge=0)
     shipping_mode: str | None = Field(default=None, max_length=80)
     tracking_id: str | None = Field(default=None, max_length=120)
-    quoted_total: float | None = None
+    quoted_total: float | None = Field(default=None, ge=0)
     quoted_currency: str | None = Field(default=None, max_length=12)
     pricing_status: str | None = Field(default=None, max_length=40)
-    final_total: float | None = None
+    final_total: float | None = Field(default=None, ge=0)
     final_currency: str | None = Field(default=None, max_length=12)
     payment_status: str = "PENDING"
     client_full_name: str | None = Field(default=None, max_length=180)
-    supplier_payment_amount: float | None = None
+    supplier_payment_amount: float | None = Field(default=None, ge=0)
     supplier_payment_currency: str | None = Field(default=None, max_length=12)
 
     @model_validator(mode="after")
@@ -64,10 +64,13 @@ class DossierPayload(BaseModel):
             raise ValueError("invalid_validation_status")
         if self.payment_status not in DOSSIER_PAYMENT_STATUSES:
             raise ValueError("invalid_payment_status")
+        if self.status_global not in {"LEAD", "DRAFT"}:
+            raise ValueError("invalid_initial_dossier_status")
         return self
 
 
 class DossierPatchPayload(BaseModel):
+    row_version: int = Field(ge=1)
     client_id: str | None = None
     case_type: str | None = None
     status_global: str | None = None
@@ -79,18 +82,18 @@ class DossierPatchPayload(BaseModel):
     destination_country: str | None = Field(default=None, max_length=80)
     destination_city: str | None = Field(default=None, max_length=80)
     goods_type: str | None = Field(default=None, max_length=160)
-    estimated_weight_kg: float | None = None
-    estimated_volume_cbm: float | None = None
+    estimated_weight_kg: float | None = Field(default=None, ge=0)
+    estimated_volume_cbm: float | None = Field(default=None, ge=0)
     shipping_mode: str | None = Field(default=None, max_length=80)
     tracking_id: str | None = Field(default=None, max_length=120)
-    quoted_total: float | None = None
+    quoted_total: float | None = Field(default=None, ge=0)
     quoted_currency: str | None = Field(default=None, max_length=12)
     pricing_status: str | None = Field(default=None, max_length=40)
-    final_total: float | None = None
+    final_total: float | None = Field(default=None, ge=0)
     final_currency: str | None = Field(default=None, max_length=12)
     payment_status: str | None = None
     client_full_name: str | None = Field(default=None, max_length=180)
-    supplier_payment_amount: float | None = None
+    supplier_payment_amount: float | None = Field(default=None, ge=0)
     supplier_payment_currency: str | None = Field(default=None, max_length=12)
 
     @model_validator(mode="after")
@@ -239,6 +242,11 @@ def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
             raise HTTPException(status_code=404, detail="client_not_found") from exc
         if str(exc) == "client_required":
             raise HTTPException(status_code=422, detail="client_required") from exc
+        if str(exc) in {
+            "quoted_currency_required", "final_currency_required",
+            "supplier_payment_currency_required",
+        }:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise
     return {"status": "ok", "dossier": dossier}
 
@@ -275,6 +283,14 @@ def dossiers_update(dossier_id: str, body: DossierPatchPayload, tenant=Depends(g
     except ValueError as exc:
         if str(exc) == "client_not_found":
             raise HTTPException(status_code=404, detail="client_not_found") from exc
+        if str(exc) in {"stale_dossier_version", "invalid_dossier_status_transition"}:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if str(exc) in {
+            "dossier_intake_incomplete", "dossier_not_validated", "dossier_route_incomplete",
+            "quoted_currency_required", "final_currency_required",
+            "supplier_payment_currency_required",
+        }:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise
     if not dossier:
         raise HTTPException(status_code=404, detail="dossier_not_found")

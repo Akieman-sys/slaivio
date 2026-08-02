@@ -6,6 +6,28 @@ from sqlalchemy import text
 from app.db.database import engine
 
 
+DOSSIER_CASE_TYPE_ALIASES = {
+    "PROCUREMENT_REQUEST": "PURCHASE",
+    "QUOTE_REQUEST": "QUOTE",
+    "RESTRICTION_CHECK": "UNKNOWN",
+    "SEND_CARGO": "COMMERCIAL_CARGO",
+}
+
+
+def _canonical_dossier_case_type(case_type: str) -> str:
+    canonical = DOSSIER_CASE_TYPE_ALIASES.get(case_type, case_type)
+    allowed = {
+        "UNKNOWN",
+        "IMPORT",
+        "EXPORT",
+        "PURCHASE",
+        "QUOTE",
+        "PERSONAL_EFFECTS",
+        "COMMERCIAL_CARGO",
+    }
+    return canonical if canonical in allowed else "UNKNOWN"
+
+
 def _json(value):
     return json.dumps(value or {}, default=str)
 
@@ -93,6 +115,7 @@ def create_commercial_dossier(
     fields: dict | None = None,
 ):
     fields = fields or {}
+    dossier_case_type = _canonical_dossier_case_type(case_type)
 
     with engine.connect() as conn:
         row = conn.execute(
@@ -136,7 +159,7 @@ def create_commercial_dossier(
             {
                 "org_id": org_id,
                 "client_id": client_id,
-                "case_type": case_type,
+                "case_type": dossier_case_type,
                 "origin_country": fields.get("origin_country"),
                 "origin_city": fields.get("origin_city"),
                 "destination_country": fields.get("destination_country"),

@@ -13,6 +13,7 @@ import { getMyPermissions } from "@/services/permissions";
 type PermissionContextValue = {
   permissions: string[];
   loading: boolean;
+  available: boolean;
   reload: () => Promise<void>;
 };
 
@@ -25,13 +26,16 @@ export function PermissionProvider({
 }) {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [available, setAvailable] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const data = await getMyPermissions();
       setPermissions(data.permissions || []);
+      setAvailable(true);
     } catch {
       setPermissions([]);
+      setAvailable(false);
     } finally {
       setLoading(false);
     }
@@ -46,6 +50,7 @@ export function PermissionProvider({
       value={{
         permissions,
         loading,
+        available,
         reload: load,
       }}
     >

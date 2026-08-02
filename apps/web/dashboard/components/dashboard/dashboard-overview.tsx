@@ -120,7 +120,7 @@ export function DashboardOverviewPage() {
   }, [getToken, isLoaded, isSignedIn]);
 
   return (
-    <DashboardFrame>
+    <>
       <div className="mx-auto max-w-[1240px] px-6 py-8 sm:px-10 lg:px-12">
         <h1 className="text-[28px] font-semibold tracking-[-0.035em]">Accueil</h1>
         <p className={`mt-3 text-sm ${agencyState === "error" ? "text-red-600" : "text-slate-500"}`}>
@@ -131,7 +131,7 @@ export function DashboardOverviewPage() {
         </p>
         <ConnectedAccountCard home={homeData} state={agencyState} />
       </div>
-    </DashboardFrame>
+    </>
   );
 }
 

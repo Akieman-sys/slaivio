@@ -21,6 +21,8 @@ export function OrganizationSwitcher({
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -37,9 +39,17 @@ export function OrganizationSwitcher({
   }, [load]);
 
   async function handleSwitch(orgId: string) {
-    const active = await switchTenant(orgId);
-    setActiveTenant(active);
-    window.location.reload();
+    if (!orgId || orgId === activeTenant?.org_id) return;
+    setSwitching(true);
+    setError("");
+    try {
+      const active = await switchTenant(orgId);
+      setActiveTenant(active);
+      window.location.reload();
+    } catch {
+      setError("Changement impossible");
+      setSwitching(false);
+    }
   }
 
   if (loading) {
@@ -62,7 +72,7 @@ export function OrganizationSwitcher({
         className={
           variant === "dark"
             ? "rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-xs text-slate-400"
-            : "rounded-xl border p-3 text-xs text-gray-500"
+            : "rounded-md border border-[#dededb] bg-white p-2.5 text-xs text-slate-500"
         }
       >
         Aucune organisation active.
@@ -75,14 +85,14 @@ export function OrganizationSwitcher({
       className={
         variant === "dark"
           ? "rounded-2xl border border-white/10 bg-white/[0.04] p-3"
-          : "rounded-xl border bg-white p-3"
+          : "rounded-md border-0 bg-transparent p-0"
       }
     >
       <div
         className={
           variant === "dark"
             ? "text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
-            : "text-xs text-gray-500"
+            : "px-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-400"
         }
       >
         Organisation active
@@ -91,10 +101,12 @@ export function OrganizationSwitcher({
       <select
         value={activeTenant?.org_id || ""}
         onChange={(event) => handleSwitch(event.target.value)}
+        disabled={switching}
+        aria-label="Organisation active"
         className={
           variant === "dark"
             ? "mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
-            : "mt-2 w-full rounded-lg border px-3 py-2 text-sm"
+            : "mt-1 w-full truncate rounded-md border border-[#dededb] bg-white px-2.5 py-2 text-[13px] font-medium text-slate-800 outline-none transition hover:border-slate-400 focus:border-[#7771ed] focus:ring-2 focus:ring-[#7771ed]/15 disabled:cursor-wait disabled:opacity-60"
         }
       >
         {tenants.map((tenant) => (
@@ -103,6 +115,7 @@ export function OrganizationSwitcher({
           </option>
         ))}
       </select>
+      {error && <p className="mt-1 px-1 text-[11px] text-red-600">{error}</p>}
     </div>
   );
 }

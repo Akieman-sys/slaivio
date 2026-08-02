@@ -13,6 +13,10 @@
   --success: #059669;
   --warning: #f59e0b;
   --danger: #dc2626;
+  --workspace: #f6f6f4;
+  --ink: #202124;
+  --line: #dededb;
+  --violet: #5b55e7;
   --shadow-soft: 0 22px 60px rgba(17, 24, 39, 0.1);
   --shadow-panel: 0 12px 36px rgba(17, 24, 39, 0.06);
 }

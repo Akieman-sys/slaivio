@@ -2,6 +2,7 @@ import axios from "axios";
 
 type AccessTokenProvider = () => Promise<string | null>;
 let accessTokenProvider: AccessTokenProvider | null = null;
+export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
 
 function normalizeApiBaseUrl(value?: string) {
   if (!value) return undefined;
@@ -43,3 +44,17 @@ api.interceptors.request.use(async (config) => {
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (
+      typeof window !== "undefined" &&
+      axios.isAxiosError(error) &&
+      error.response?.status === 401
+    ) {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+    return Promise.reject(error);
+  },
+);

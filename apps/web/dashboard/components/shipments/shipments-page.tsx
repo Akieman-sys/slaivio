@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import {
   createShipment,
   exportShipments,
@@ -245,19 +246,12 @@ export function ShipmentsPage() {
   return (
     <div className="min-h-[calc(100vh-56px)] bg-[#f7f8fa] px-8 py-6 text-[#1f2328]">
       <section className="mx-auto overflow-hidden rounded-lg border border-[#d8dce2] bg-white shadow-sm">
-        <header className="border-b border-[#d8dce2] px-6 py-5">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div className="text-[13px] text-[#5f6b7a]">Operations <span className="mx-1">›</span> Expéditions</div>
-            <div className="flex items-center gap-2">
+        <OperationPageHeader title="Expéditions" description="Pilotez les transports réels de vos colis : routes, ETA, statuts, clients concernés, documents, coûts et risques."
+          actions={<>
               <button className={buttonClass} onClick={handleExport}><Download size={16} /> Exporter</button>
               <button className={primaryButtonClass} onClick={() => setFormOpen(true)}><Plus size={16} /> Nouvelle expédition</button>
-            </div>
-          </div>
-          <h1 className="text-[32px] font-semibold tracking-[-0.02em] text-[#1f2328]">Expéditions</h1>
-          <p className="mt-3 max-w-3xl text-[15px] leading-6 text-[#5f6b7a]">
-            Pilotez les transports réels de vos colis : routes, ETA, statuts, clients concernés, documents, coûts et risques.
-          </p>
-        </header>
+            </>}
+        />
 
         <div className="grid grid-cols-2 border-b border-[#d8dce2] md:grid-cols-3 xl:grid-cols-6">
           {kpis.map((item) => (

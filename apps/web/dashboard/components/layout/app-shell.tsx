@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePermissions } from "@/components/permissions/permission-provider";
 import { OrganizationSwitcher } from "@/components/tenant/organization-switcher";
 import { appNavigation, canAccessRoute, searchableAppRoutes } from "@/config/app-navigation";
+import { SESSION_EXPIRED_EVENT } from "@/services/api";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -31,6 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [compact, setCompact] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const initialGroup = appNavigation.find((group) => group.routes.some((route) => pathname.startsWith(route.href)))?.label ?? "Opérations";
   const [activeGroup, setActiveGroup] = useState<string | null>(initialGroup);
 
@@ -57,6 +59,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
+
+  useEffect(() => {
+    const onSessionExpired = () => setSessionExpired(true);
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
   }, []);
 
   function openRoute(href: string) {
@@ -124,6 +132,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             {results.map((route) => <button key={route.href} onClick={() => openRoute(route.href)} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-[#efefed] focus:bg-[#efefed] focus:outline-none"><route.icon size={16} className="text-slate-500" /><span>{route.label}</span><span className="ml-auto text-xs text-slate-400">{route.href}</span></button>)}
           </div>
         </div>
+      </div>}
+
+      {sessionExpired && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4" role="alertdialog" aria-modal="true" aria-labelledby="session-expired-title">
+        <section className="w-full max-w-sm rounded-lg border border-slate-300 bg-white p-6 shadow-2xl">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-50 text-amber-700"><ShieldAlert size={19} /></div>
+          <h2 id="session-expired-title" className="mt-4 text-lg font-semibold text-slate-950">Votre session a expiré</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Reconnectez-vous avant de poursuivre. Les données déjà affichées restent intactes, mais aucune nouvelle action ne sera envoyée.</p>
+          <button onClick={() => { const returnTo = `${window.location.pathname}${window.location.search}`; window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`); }} className="mt-5 inline-flex h-9 w-full items-center justify-center rounded-md bg-[#292928] px-4 text-sm font-semibold text-white hover:bg-black">Se reconnecter</button>
+        </section>
       </div>}
     </div>
   );

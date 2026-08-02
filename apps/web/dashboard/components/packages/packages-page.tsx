@@ -31,6 +31,7 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { listDossiers, type DossierRecord } from "@/services/dossiers";
 import {
   addPackageMedia,
@@ -431,20 +432,8 @@ export function PackagesPage() {
   return (
     <div className="min-h-full bg-[#f5f6f8] px-4 py-4 text-[#1f2328] md:px-6">
       <div className="mx-auto max-w-[1520px] overflow-hidden rounded-[10px] border border-[#d8dce2] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.10)]">
-        <header className="border-b border-[#d8dce2]">
-          <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-[13px] text-[#616b77]">
-                <span>Operations</span>
-                <span>›</span>
-                <span className="font-medium text-[#1f2328]">Colis</span>
-              </div>
-              <h1 className="mt-4 text-[32px] font-semibold tracking-[-0.03em]">Colis</h1>
-              <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#616b77]">
-                Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+        <OperationPageHeader title="Colis" description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
+          actions={<>
               <button onClick={() => setImportOpen(true)} className={buttonClass}>
                 <Upload size={16} />
                 Importer
@@ -457,10 +446,8 @@ export function PackagesPage() {
                 <span className="text-lg leading-none">+</span>
                 Nouveau colis
               </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 overflow-x-auto border-t border-[#eef0f3] px-5 py-2">
+            </>}
+          tabs={<>
             {views.map((view) => (
               <button
                 key={view.key}
@@ -472,8 +459,8 @@ export function PackagesPage() {
                 {view.label}
               </button>
             ))}
-          </div>
-        </header>
+          </>}
+        />
 
         <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
           {statCards.map((card) => (

@@ -26,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
@@ -155,6 +155,9 @@ export function ClientsPage() {
   const [importResult, setImportResult] = useState<ClientImportResult | null>(null);
   const [importError, setImportError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [clientAction, setClientAction] = useState<"archive" | "restore" | null>(null);
+  const listRequestId = useRef(0);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
   const archivedAllowed = permissionsAvailable && permissions.includes("clients.archive");
@@ -186,6 +189,7 @@ export function ClientsPage() {
   }
 
   async function loadClients(nextPage = page) {
+    const requestId = ++listRequestId.current;
     setLoading(true);
     setError("");
     try {
@@ -202,37 +206,47 @@ export function ClientsPage() {
         page_size: 30,
         sort,
       });
+      if (requestId !== listRequestId.current) return;
       setClients(response.items);
       setPagination(response.pagination);
       if (selected && !response.items.some((item) => item.id === selected.id)) setSelected(null);
     } catch (err) {
+      if (requestId !== listRequestId.current) return;
       setError(apiErrorMessage(err));
       setClients([]);
       setSelected(null);
     } finally {
-      setLoading(false);
+      if (requestId === listRequestId.current) setLoading(false);
     }
   }
 
   async function archiveSelectedClient() {
-    if (!selected || !window.confirm(`Archiver ${selected.display_name || selected.name || "ce client"} ? Ses dossiers et opérations seront conservés.`)) return;
+    if (clientAction || !selected || !window.confirm(`Archiver ${selected.display_name || selected.name || "ce client"} ? Ses dossiers et opérations seront conservés.`)) return;
+    setClientAction("archive");
+    setError("");
     try {
       await deleteClient(selected.id, selected.row_version);
       setSelected(null);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
       setError(apiErrorMessage(err));
+    } finally {
+      setClientAction(null);
     }
   }
 
   async function restoreSelectedClient() {
-    if (!selected) return;
+    if (clientAction || !selected) return;
+    setClientAction("restore");
+    setError("");
     try {
       await restoreClient(selected.id, selected.row_version);
       setSelected(null);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
       setError(apiErrorMessage(err));
+    } finally {
+      setClientAction(null);
     }
   }
 
@@ -356,6 +370,9 @@ export function ClientsPage() {
   }
 
   async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    setError("");
     try {
       const blob = await exportClients({
         q: query || undefined,
@@ -372,6 +389,8 @@ export function ClientsPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       setError(apiErrorMessage(err));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -413,9 +432,9 @@ export function ClientsPage() {
                 <Upload size={16} />
                 Importer
               </button></PermissionGuard>
-              <PermissionGuard permission="clients.export"><button onClick={handleExport} className={buttonClass}>
+              <PermissionGuard permission="clients.export"><button onClick={handleExport} disabled={exporting} className={`${buttonClass} disabled:cursor-wait disabled:opacity-60`}>
                 <Download size={16} />
-                Exporter
+                {exporting ? "Export..." : "Exporter"}
               </button></PermissionGuard>
               <PermissionGuard permission="clients.create"><button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
@@ -486,7 +505,13 @@ export function ClientsPage() {
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
               <AlertCircle size={17} className="mt-0.5" />
-              <p>{error}</p>
+              <div className="flex-1">
+                <p>{error}</p>
+                <button onClick={() => loadClients(page)} disabled={loading} className="mt-2 font-semibold underline disabled:opacity-50">
+                  {loading ? "Nouvelle tentative..." : "Réessayer"}
+                </button>
+              </div>
+              <button onClick={() => setError("")} aria-label="Fermer l’alerte"><X size={15} /></button>
             </div>
           )}
 
@@ -524,6 +549,7 @@ export function ClientsPage() {
           archived={Boolean(currentView.archived)}
           onArchive={archiveSelectedClient}
           onRestore={restoreSelectedClient}
+          clientAction={clientAction}
         />
       )}
 
@@ -534,6 +560,7 @@ export function ClientsPage() {
           saving={saving}
           error={formError}
           onClose={() => {
+            if (saving) return;
             setFormOpen(false);
             setFormClient(null);
             setFormError("");
@@ -548,6 +575,7 @@ export function ClientsPage() {
           error={importError}
           result={importResult}
           onClose={() => {
+            if (importing) return;
             setImportOpen(false);
             setImportError("");
             setImportResult(null);
@@ -647,6 +675,7 @@ function ClientDetails({
   archived,
   onArchive,
   onRestore,
+  clientAction,
 }: {
   client: ClientRecord;
   loading: boolean;
@@ -663,6 +692,7 @@ function ClientDetails({
   archived: boolean;
   onArchive: () => void;
   onRestore: () => void;
+  clientAction: "archive" | "restore" | null;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -700,7 +730,7 @@ function ClientDetails({
               </div>
               <div className="flex gap-1">
                 {!archived && <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>}
-                <PermissionGuard permission="clients.archive" fallback={<span title="Permission clients.archive requise" className="inline-flex h-8 items-center rounded-md border border-[#ddd] bg-[#f5f5f3] px-2 text-[11px] text-[#777]">Archivage non autorisé</span>}>{archived ? <button onClick={onRestore} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100" aria-label="Restaurer le client"><RotateCcw size={15} /> Restaurer</button> : <button onClick={onArchive} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50" aria-label="Archiver le client"><Archive size={15} /> Archiver</button>}</PermissionGuard>
+                <PermissionGuard permission="clients.archive" fallback={<span title="Permission clients.archive requise" className="inline-flex h-8 items-center rounded-md border border-[#ddd] bg-[#f5f5f3] px-2 text-[11px] text-[#777]">Archivage non autorisé</span>}>{archived ? <button onClick={onRestore} disabled={clientAction !== null} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60" aria-label="Restaurer le client"><RotateCcw size={15} /> {clientAction === "restore" ? "Restauration..." : "Restaurer"}</button> : <button onClick={onArchive} disabled={clientAction !== null} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-wait disabled:opacity-60" aria-label="Archiver le client"><Archive size={15} /> {clientAction === "archive" ? "Archivage..." : "Archiver"}</button>}</PermissionGuard>
                 <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>
@@ -879,7 +909,7 @@ function ClientFormModal({
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">{title}</h2>
             <p className="mt-1 text-[13px] text-[#687584]">Renseignez uniquement les informations réelles disponibles.</p>
           </div>
-          <button onClick={onClose} className={iconButtonClass}><X size={17} /></button>
+          <button onClick={onClose} disabled={saving} className={`${iconButtonClass} disabled:opacity-40`}><X size={17} /></button>
         </div>
         <form onSubmit={onSubmit} className="space-y-5 p-5">
           {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
@@ -910,7 +940,7 @@ function ClientFormModal({
             <textarea name="notes" rows={4} defaultValue={client?.notes || ""} className="mt-1 w-full rounded-md border border-[#cfd5dd] px-3 py-2 text-[13px] outline-none focus:border-[#2f7df6]" />
           </label>
           <div className="flex justify-end gap-2 border-t border-[#eef0f3] pt-4">
-            <button type="button" onClick={onClose} className={buttonClass}>Annuler</button>
+            <button type="button" onClick={onClose} disabled={saving} className={`${buttonClass} disabled:opacity-40`}>Annuler</button>
             <button disabled={saving} className={`${primaryButtonClass} disabled:opacity-60`}>
               {saving ? "Enregistrement..." : mode === "edit" ? "Enregistrer" : "Créer le client"}
             </button>
@@ -966,7 +996,7 @@ function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
               Télécharger le modèle CSV
             </button>
           </div>
-          <button onClick={onClose} className={iconButtonClass}><X size={17} /></button>
+          <button onClick={onClose} disabled={importing} className={`${iconButtonClass} disabled:opacity-40`}><X size={17} /></button>
         </div>
         <form onSubmit={onSubmit} className="space-y-4 p-5">
           {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
@@ -989,7 +1019,7 @@ function ImportClientsModal({ importing, error, result, onClose, onSubmit }: {
             <input name="file" type="file" accept=".csv,text/csv" className="mt-3 text-[13px]" />
           </label>
           <div className="flex justify-end gap-2 border-t border-[#eef0f3] pt-4">
-            <button type="button" onClick={onClose} className={buttonClass}>Fermer</button>
+            <button type="button" onClick={onClose} disabled={importing} className={`${buttonClass} disabled:opacity-40`}>Fermer</button>
             <button disabled={importing} className={`${primaryButtonClass} disabled:opacity-60`}>{importing ? "Import..." : "Importer"}</button>
           </div>
         </form>
@@ -1163,6 +1193,9 @@ function apiErrorMessage(error: unknown) {
     const target = `${API_BASE_URL || "API_BASE_URL non configurée"}${error.config?.url || ""}`;
     if (detail === "duplicate_client") return "Un client avec ce téléphone ou cet email existe déjà dans cette agence.";
     if (detail === "stale_client_version") return "Cette fiche a été modifiée par un autre membre. Fermez le formulaire, rechargez la fiche puis réessayez.";
+    if (detail === "restore_identity_conflict") return "Restauration impossible : un client actif utilise déjà ce téléphone ou cet email. Ouvrez les doublons pour les fusionner.";
+    if (detail === "merge_relationship_conflict") return "La fusion rencontre une relation devenue incompatible. Les données ont été conservées ; rechargez les fiches avant de réessayer.";
+    if (detail === "merge_client_not_found" || detail === "merge_target_not_found") return "Une des fiches a été modifiée, archivée ou fusionnée. Rechargez la liste.";
     if (detail === "invalid_phone") return "Le numéro doit contenir entre 7 et 15 chiffres.";
     if (detail === "invalid_email") return "L’adresse email n’est pas valide.";
     if (detail === "name_company_phone_or_email_required") return "Ajoutez au moins un nom, une entreprise, un téléphone ou un email.";
@@ -1176,6 +1209,8 @@ function apiErrorMessage(error: unknown) {
     if (detail === "client_export_too_large") return "L’export dépasse 50 000 clients. Ajoutez des filtres puis réessayez.";
     if (error.response?.status === 401) return "Session expirée. Reconnectez-vous.";
     if (error.response?.status === 403) return "Vous n’avez pas accès à cette organisation.";
+    if (error.response?.status === 429) return "Trop de demandes ont été envoyées. Patientez quelques secondes puis réessayez.";
+    if (error.response && error.response.status >= 500) return "Le service Clients rencontre un problème temporaire. Vos données ne sont pas perdues ; réessayez dans quelques instants.";
     if (!error.response) return `API injoignable vers ${target}. Vérifiez NEXT_PUBLIC_API_BASE_URL côté frontend et redéployez Render.`;
     if (error.response.status === 404) return `Route API introuvable (${target}). Vérifiez que le backend Railway a le dernier code.`;
     return detail || `Erreur API (${error.response?.status || "réseau"}) sur ${target}.`;

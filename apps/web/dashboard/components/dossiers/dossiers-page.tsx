@@ -18,6 +18,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
   createDossier,
@@ -339,14 +340,14 @@ export function DossiersPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Dossiers cargo" description="Chaque demande client devient un dossier traçable : route, colis, devis, paiement, messages et expéditions liés."
           actions={<>
-              <button onClick={handleExport} className={buttonClass}>
+              <PermissionGuard permission="dossiers.export"><button onClick={handleExport} className={buttonClass}>
                 <Download size={16} />
                 Exporter
-              </button>
-              <button onClick={openCreate} className={primaryButtonClass}>
+              </button></PermissionGuard>
+              <PermissionGuard permission="dossiers.create"><button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau dossier
-              </button>
+              </button></PermissionGuard>
             </>}
           tabs={<>
             {views.map((view) => (
@@ -598,7 +599,7 @@ function DossierDetails({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={onEdit} className={buttonClass}><Edit3 size={15} />Modifier</button>
+              <PermissionGuard permission="dossiers.update"><button onClick={onEdit} className={buttonClass}><Edit3 size={15} />Modifier</button></PermissionGuard>
               <button onClick={close} className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd5dd] bg-white hover:bg-[#f7f8fa]" aria-label="Fermer">
                 <X size={17} />
               </button>

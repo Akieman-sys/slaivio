@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 from starlette.responses import StreamingResponse
 
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 from app.db.dossier_repository import (
     DOSSIER_CASE_TYPES,
     DOSSIER_INTAKE_STATUSES,
@@ -116,7 +117,7 @@ def _validate_query_value(value: str | None, allowed: set[str], detail: str):
         raise HTTPException(status_code=422, detail=detail)
 
 
-@router.get("/dossiers")
+@router.get("/dossiers", dependencies=[Depends(require_permission("dossiers.read"))])
 def dossiers_index(
     q: str | None = Query(default=None, max_length=120),
     status_global: str | None = None,
@@ -157,12 +158,12 @@ def dossiers_index(
     }
 
 
-@router.get("/dossiers/stats")
+@router.get("/dossiers/stats", dependencies=[Depends(require_permission("dossiers.read"))])
 def dossiers_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": dossier_stats(tenant["org_id"])}
 
 
-@router.get("/dossiers/export")
+@router.get("/dossiers/export", dependencies=[Depends(require_permission("dossiers.export"))])
 def dossiers_export(
     q: str | None = Query(default=None, max_length=120),
     status_global: str | None = None,
@@ -173,6 +174,11 @@ def dossiers_export(
     sort: str = "updated_desc",
     tenant=Depends(get_current_tenant),
 ):
+    _validate_query_value(status_global, DOSSIER_STATUSES, "invalid_status_global")
+    _validate_query_value(case_type, DOSSIER_CASE_TYPES, "invalid_case_type")
+    _validate_query_value(intake_status, DOSSIER_INTAKE_STATUSES, "invalid_intake_status")
+    _validate_query_value(validation_status, DOSSIER_VALIDATION_STATUSES, "invalid_validation_status")
+    _validate_query_value(payment_status, DOSSIER_PAYMENT_STATUSES, "invalid_payment_status")
     rows = export_dossiers(
         tenant["org_id"],
         q=q,
@@ -220,7 +226,11 @@ def dossiers_export(
     )
 
 
-@router.post("/dossiers", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/dossiers",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("dossiers.create"))],
+)
 def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
     try:
         dossier = create_dossier(tenant["org_id"], _user_id(tenant), body.model_dump())
@@ -233,7 +243,10 @@ def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "dossier": dossier}
 
 
-@router.get("/dossiers/{dossier_id}")
+@router.get(
+    "/dossiers/{dossier_id}",
+    dependencies=[Depends(require_permission("dossiers.read"))],
+)
 def dossiers_show(dossier_id: str, tenant=Depends(get_current_tenant)):
     dossier = get_dossier(tenant["org_id"], dossier_id)
     if not dossier:
@@ -241,7 +254,10 @@ def dossiers_show(dossier_id: str, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "dossier": dossier, "data": dossier}
 
 
-@router.get("/dossiers/{dossier_id}/timeline")
+@router.get(
+    "/dossiers/{dossier_id}/timeline",
+    dependencies=[Depends(require_permission("dossiers.read"))],
+)
 def dossiers_timeline(dossier_id: str, tenant=Depends(get_current_tenant)):
     dossier = get_dossier(tenant["org_id"], dossier_id)
     if not dossier:
@@ -249,7 +265,10 @@ def dossiers_timeline(dossier_id: str, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "items": dossier_timeline(tenant["org_id"], dossier_id)}
 
 
-@router.patch("/dossiers/{dossier_id}")
+@router.patch(
+    "/dossiers/{dossier_id}",
+    dependencies=[Depends(require_permission("dossiers.update"))],
+)
 def dossiers_update(dossier_id: str, body: DossierPatchPayload, tenant=Depends(get_current_tenant)):
     try:
         dossier = update_dossier(tenant["org_id"], dossier_id, _user_id(tenant), body.model_dump(exclude_unset=True))

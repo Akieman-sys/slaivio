@@ -21,6 +21,15 @@ CLIENT_ROLE_PERMISSIONS = {
     "WAREHOUSE": ("clients.read",),
 }
 
+DOSSIER_ROLE_PERMISSIONS = {
+    "OWNER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.export"),
+    "MANAGER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.export"),
+    "OPERATOR": ("dossiers.read", "dossiers.create", "dossiers.update"),
+    "SUPPORT": ("dossiers.read", "dossiers.export"),
+    "WAREHOUSE": ("dossiers.read",),
+    "FINANCE": ("dossiers.read",),
+}
+
 CLIENT_ROLE_PERMISSION_INSERT_SQL = """
     insert into role_permissions (role_id, permission_id)
     select r.id, p.id
@@ -75,6 +84,20 @@ def ensure_client_role_permissions(org_id: str):
         conn.commit()
 
 
+def ensure_dossier_role_permissions(org_id: str):
+    with engine.connect() as conn:
+        for role_code, permission_codes in DOSSIER_ROLE_PERMISSIONS.items():
+            conn.execute(
+                text(CLIENT_ROLE_PERMISSION_INSERT_SQL),
+                {
+                    "org_id": org_id,
+                    "role_code": role_code,
+                    "permission_codes": list(permission_codes),
+                },
+            )
+        conn.commit()
+
+
 def provision_organization(
     clerk_org_id: str,
     organization_name: str,
@@ -87,4 +110,5 @@ def provision_organization(
         org_id = str(org["id"])
         ensure_default_roles(org_id)
         ensure_client_role_permissions(org_id)
+        ensure_dossier_role_permissions(org_id)
     return org

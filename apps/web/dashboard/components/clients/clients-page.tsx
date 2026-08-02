@@ -44,6 +44,7 @@ import {
   importClients,
   listClients,
   listArchivedClients,
+  mergeClients,
   restoreClient,
   updateClient,
   type ClientCustomerType,
@@ -144,6 +145,7 @@ export function ClientsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [mergingDuplicateId, setMergingDuplicateId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<ClientFormMode>("create");
@@ -232,6 +234,27 @@ export function ClientsPage() {
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
       setError(apiErrorMessage(err));
+    }
+  }
+
+  async function mergeDuplicate(source: ClientDuplicate) {
+    if (!selected || !window.confirm(`Fusionner ${source.display_name || source.name || "ce doublon"} dans ${selected.display_name || selected.name || "la fiche principale"} ? Cette action déplacera toutes ses opérations.`)) return;
+    setMergingDuplicateId(source.id);
+    try {
+      const merged = await mergeClients({
+        source_client_id: source.id,
+        target_client_id: selected.id,
+        source_version: source.row_version,
+        target_version: selected.row_version,
+        idempotency_key: crypto.randomUUID(),
+      });
+      setSelected(merged);
+      setDuplicates(await findClientDuplicates({ client_id: merged.id }));
+      await Promise.all([loadStats(), loadClients(page)]);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setMergingDuplicateId(null);
     }
   }
 
@@ -488,6 +511,8 @@ export function ClientsPage() {
           timelineLoading={timelineLoading}
           duplicates={duplicates}
           duplicatesLoading={duplicatesLoading}
+          mergingDuplicateId={mergingDuplicateId}
+          onMergeDuplicate={mergeDuplicate}
           onClose={() => setSelected(null)}
           onEdit={() => openEdit(selected)}
           archived={Boolean(currentView.archived)}
@@ -613,6 +638,8 @@ function ClientDetails({
   timelineLoading,
   duplicates,
   duplicatesLoading,
+  mergingDuplicateId,
+  onMergeDuplicate,
   onClose,
   onEdit,
   archived,
@@ -627,6 +654,8 @@ function ClientDetails({
   timelineLoading: boolean;
   duplicates: ClientDuplicate[];
   duplicatesLoading: boolean;
+  mergingDuplicateId: string | null;
+  onMergeDuplicate: (source: ClientDuplicate) => void;
   onClose: () => void;
   onEdit: () => void;
   archived: boolean;
@@ -699,7 +728,7 @@ function ClientDetails({
             {activeTab === "messages" && <ModulePlaceholder icon={MessageCircle} title="Messages client" text="Cette vue affichera les conversations WhatsApp, emails et messages liés à ce client lorsque le module Communication les aura synchronisés." />}
             {activeTab === "payments" && <ModulePlaceholder icon={ShieldAlert} title="Paiements client" text="Cette vue affichera les factures, paiements reçus, soldes et relances provenant du module Finance. Aucun montant n’est inventé ici." />}
             {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
-            {activeTab === "duplicates" && <DuplicatesTab duplicates={duplicates} loading={duplicatesLoading} />}
+            {activeTab === "duplicates" && <DuplicatesTab duplicates={duplicates} loading={duplicatesLoading} mergingId={mergingDuplicateId} onMerge={onMergeDuplicate} />}
             {activeTab === "notes" && <NotesTab client={client} />}
           </div>
         </div>
@@ -769,7 +798,7 @@ function HistoryTab({ events, loading }: { events: ClientTimelineEvent[]; loadin
   );
 }
 
-function DuplicatesTab({ duplicates, loading }: { duplicates: ClientDuplicate[]; loading: boolean }) {
+function DuplicatesTab({ duplicates, loading, mergingId, onMerge }: { duplicates: ClientDuplicate[]; loading: boolean; mergingId: string | null; onMerge: (source: ClientDuplicate) => void }) {
   if (loading) return <LoadingLines />;
   if (duplicates.length === 0) return <EmptyState title="Aucun doublon détecté" text="Aucun autre client ne partage actuellement le même téléphone, email ou nom proche dans cette organisation." />;
   return (
@@ -783,6 +812,7 @@ function DuplicatesTab({ duplicates, loading }: { duplicates: ClientDuplicate[];
             </div>
             <span className="rounded-full bg-amber-50 px-2 py-1 text-[12px] font-medium text-amber-700 ring-1 ring-amber-100">{duplicateLabel(item.match_reason)}</span>
           </div>
+          <PermissionGuard permission="clients.merge"><button onClick={() => onMerge(item)} disabled={mergingId !== null} className="mt-3 inline-flex h-8 items-center rounded-md border border-[#cfd5dd] bg-white px-3 text-[12px] font-medium hover:bg-[#f7f8fa] disabled:opacity-50">{mergingId === item.id ? "Fusion en cours…" : "Fusionner dans cette fiche"}</button></PermissionGuard>
         </div>
       ))}
     </div>

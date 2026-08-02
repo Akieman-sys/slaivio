@@ -1,11 +1,12 @@
 from app.api.clients import (
     ClientPatchPayload,
+    ClientMergePayload,
     MAX_CLIENT_EXPORT_ROWS,
     MAX_CLIENT_IMPORT_BYTES,
     MAX_CLIENT_IMPORT_ROWS,
     router,
 )
-from app.clients.repository import normalize_email, normalize_phone
+from app.clients.repository import CLIENT_RELATION_TABLES, normalize_email, normalize_phone
 from app.organizations.services.provisioning_service import CLIENT_ROLE_PERMISSIONS
 from fastapi.routing import APIRoute
 
@@ -14,6 +15,7 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/clients", "GET"): "clients.read",
     ("/clients", "POST"): "clients.create",
     ("/clients/stats", "GET"): "clients.read",
+    ("/clients/merge", "POST"): "clients.merge",
     ("/clients/archived", "GET"): "clients.archive",
     ("/clients/export", "GET"): "clients.export",
     ("/clients/import", "POST"): "clients.import",
@@ -76,3 +78,18 @@ def test_client_contact_normalization_is_deterministic():
 def test_client_patch_requires_the_current_row_version():
     payload = ClientPatchPayload(row_version=4, name="Nouveau nom")
     assert payload.row_version == 4
+
+
+def test_client_merge_contract_is_versioned_and_idempotent():
+    payload = ClientMergePayload(
+        source_client_id="source-client",
+        target_client_id="target-client",
+        source_version=2,
+        target_version=7,
+        idempotency_key="8c87b75a-1b09-42cb-b1ad-874a51c72bca",
+    )
+    assert payload.source_version == 2
+    assert payload.target_version == 7
+    assert "dossiers" in CLIENT_RELATION_TABLES
+    assert "messages_raw" in CLIENT_RELATION_TABLES
+    assert "cargo_packages" in CLIENT_RELATION_TABLES

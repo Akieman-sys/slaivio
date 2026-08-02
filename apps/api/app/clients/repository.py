@@ -36,6 +36,12 @@ CLIENT_EXPORT_COLUMNS = [
     "notes",
 ]
 
+CLIENT_RELATION_TABLES = (
+    "dossiers", "messages_raw", "notification_outbox", "followup_tasks", "shipments",
+    "cargo_packages", "expedition_packages", "expedition_financial_lines",
+    "commercial_cases", "quote_requests", "procurement_requests", "cargo_restriction_checks",
+)
+
 
 def _safe(value: Any) -> Any:
     if isinstance(value, Decimal):
@@ -560,6 +566,151 @@ def restore_client(org_id: str, client_id: str, user_id: str) -> dict | None:
     return get_client(org_id, client_id)
 
 
+def merge_clients(
+    org_id: str,
+    source_client_id: str,
+    target_client_id: str,
+    user_id: str,
+    *,
+    source_version: int,
+    target_version: int,
+    idempotency_key: str,
+) -> dict:
+    if source_client_id == target_client_id:
+        raise ValueError("merge_same_client")
+    try:
+        with engine.begin() as conn:
+            previous = conn.execute(
+                text("""
+                    select target_client_id::text
+                    from client_merge_operations
+                    where org_id = :org_id and idempotency_key = :idempotency_key
+                """),
+                {"org_id": org_id, "idempotency_key": idempotency_key},
+            ).scalar()
+            if previous:
+                client = get_client(org_id, str(previous))
+                if not client:
+                    raise ValueError("merge_target_not_found")
+                return client
+
+            rows = conn.execute(
+                text("""
+                    select * from clients
+                    where org_id = :org_id
+                      and id in (:source_client_id, :target_client_id)
+                      and deleted_at is null
+                    order by id
+                    for update
+                """),
+                {
+                    "org_id": org_id,
+                    "source_client_id": source_client_id,
+                    "target_client_id": target_client_id,
+                },
+            ).fetchall()
+            clients = {str(row._mapping["id"]): dict(row._mapping) for row in rows}
+            source = clients.get(source_client_id)
+            target = clients.get(target_client_id)
+            if source is None or target is None:
+                raise ValueError("merge_client_not_found")
+            if int(source["row_version"]) != source_version or int(target["row_version"]) != target_version:
+                raise ValueError("stale_client_version")
+
+            conn.execute(
+                text("""
+                    update clients set
+                        deleted_at = now(), archived_by = :user_id,
+                        normalized_phone = null, normalized_email = null,
+                        updated_by = :user_id, updated_at = now(), row_version = row_version + 1
+                    where org_id = :org_id and id = :source_client_id
+                """),
+                {"org_id": org_id, "source_client_id": source_client_id, "user_id": user_id},
+            )
+            conn.execute(
+                text("""
+                    update clients set
+                        name = coalesce(nullif(name, ''), :source_name),
+                        display_name = coalesce(nullif(display_name, ''), :source_display_name),
+                        company_name = coalesce(nullif(company_name, ''), :source_company_name),
+                        phone = coalesce(nullif(phone, ''), :source_phone),
+                        whatsapp_phone = coalesce(nullif(whatsapp_phone, ''), :source_whatsapp_phone),
+                        email = coalesce(nullif(email, ''), :source_email),
+                        normalized_phone = coalesce(normalized_phone, :source_normalized_phone),
+                        normalized_email = coalesce(normalized_email, :source_normalized_email),
+                        updated_by = :user_id, updated_at = now(), row_version = row_version + 1
+                    where org_id = :org_id and id = :target_client_id
+                """),
+                {
+                    "org_id": org_id, "target_client_id": target_client_id, "user_id": user_id,
+                    "source_name": source.get("name"), "source_display_name": source.get("display_name"),
+                    "source_company_name": source.get("company_name"), "source_phone": source.get("phone"),
+                    "source_whatsapp_phone": source.get("whatsapp_phone"), "source_email": source.get("email"),
+                    "source_normalized_phone": source.get("normalized_phone"),
+                    "source_normalized_email": source.get("normalized_email"),
+                },
+            )
+
+            moved: dict[str, int] = {}
+            for table_name in CLIENT_RELATION_TABLES:
+                if not _table_exists(conn, table_name):
+                    continue
+                result = conn.execute(
+                    text(f"""
+                        update {table_name}
+                        set client_id = :target_client_id
+                        where org_id = :org_id and client_id = :source_client_id
+                    """),
+                    {
+                        "org_id": org_id,
+                        "source_client_id": source_client_id,
+                        "target_client_id": target_client_id,
+                    },
+                )
+                moved[table_name] = result.rowcount
+
+            conn.execute(
+                text("""
+                    update client_identity_conflicts
+                    set resolved_at = now(), resolved_by = :user_id
+                    where org_id = :org_id
+                      and client_id = :source_client_id
+                      and resolved_at is null
+                """),
+                {"org_id": org_id, "source_client_id": source_client_id, "user_id": user_id},
+            )
+            conn.execute(
+                text("""
+                    insert into client_merge_operations (
+                        org_id, source_client_id, target_client_id, actor_id,
+                        idempotency_key, moved_relations
+                    ) values (
+                        :org_id, :source_client_id, :target_client_id, :user_id,
+                        :idempotency_key, cast(:moved_relations as jsonb)
+                    )
+                """),
+                {
+                    "org_id": org_id, "source_client_id": source_client_id,
+                    "target_client_id": target_client_id, "user_id": user_id,
+                    "idempotency_key": idempotency_key, "moved_relations": json.dumps(moved),
+                },
+            )
+            _audit_client(
+                conn, org_id=org_id, user_id=user_id, client_id=target_client_id,
+                action="client.merged", changed_fields=[],
+            )
+            _audit_client(
+                conn, org_id=org_id, user_id=user_id, client_id=source_client_id,
+                action="client.merged_into", changed_fields=[],
+            )
+    except IntegrityError as exc:
+        raise ValueError("merge_relationship_conflict") from exc
+    merged = get_client(org_id, target_client_id)
+    if not merged:
+        raise ValueError("merge_target_not_found")
+    return merged
+
+
 def client_stats(org_id: str) -> dict:
     with engine.connect() as conn:
         row = conn.execute(
@@ -638,6 +789,7 @@ def find_client_duplicates(
                     city,
                     customer_type,
                     lifecycle_status,
+                    row_version,
                     case
                         when :phone is not null and (phone = :phone or whatsapp_phone = :phone) then 'phone'
                         when :email is not null and email = :email then 'email'
@@ -707,6 +859,8 @@ def client_timeline(org_id: str, client_id: str, *, limit: int = 50) -> list[dic
                     "client.updated": "Client mis à jour",
                     "client.archived": "Client archivé",
                     "client.restored": "Client restauré",
+                    "client.merged": "Doublon fusionné dans ce client",
+                    "client.merged_into": "Client fusionné dans une fiche principale",
                 }
                 events = [
                     {

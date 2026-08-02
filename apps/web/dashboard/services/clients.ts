@@ -47,7 +47,7 @@ export type ClientTimelineEvent = {
 
 export type ClientDuplicate = Pick<
   ClientRecord,
-  "id" | "display_name" | "name" | "company_name" | "phone" | "whatsapp_phone" | "email" | "country" | "city" | "customer_type" | "lifecycle_status"
+  "id" | "display_name" | "name" | "company_name" | "phone" | "whatsapp_phone" | "email" | "country" | "city" | "customer_type" | "lifecycle_status" | "row_version"
 > & {
   match_reason: "phone" | "email" | "name" | string;
   created_at: string;
@@ -139,6 +139,16 @@ export async function listArchivedClients(params: { q?: string; page?: number; p
 
 export async function restoreClient(id: string) {
   return (await api.post<{ status: "ok"; client: ClientRecord }>(`/clients/${id}/restore`)).data.client;
+}
+
+export async function mergeClients(payload: {
+  source_client_id: string;
+  target_client_id: string;
+  source_version: number;
+  target_version: number;
+  idempotency_key: string;
+}) {
+  return (await api.post<{ status: "ok"; client: ClientRecord }>("/clients/merge", payload)).data.client;
 }
 
 export async function getClientStats() {

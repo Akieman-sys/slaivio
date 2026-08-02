@@ -17,6 +17,7 @@ from app.clients.repository import (
     get_client,
     import_clients,
     list_clients,
+    merge_clients,
     restore_client,
     soft_delete_client,
     update_client,
@@ -100,6 +101,20 @@ class ClientPatchPayload(BaseModel):
         return self
 
 
+class ClientMergePayload(BaseModel):
+    source_client_id: str = Field(min_length=1, max_length=64)
+    target_client_id: str = Field(min_length=1, max_length=64)
+    source_version: int = Field(ge=1)
+    target_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_merge(self):
+        if self.source_client_id == self.target_client_id:
+            raise ValueError("merge_same_client")
+        return self
+
+
 def _user_id(tenant: dict) -> str:
     return str(tenant.get("user_id") or "")
 
@@ -143,6 +158,24 @@ def clients_index(
 @router.get("/clients/stats", dependencies=[Depends(require_permission("clients.read"))])
 def clients_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": client_stats(tenant["org_id"])}
+
+
+@router.post("/clients/merge", dependencies=[Depends(require_permission("clients.merge"))])
+def clients_merge(body: ClientMergePayload, tenant=Depends(get_current_tenant)):
+    try:
+        client = merge_clients(
+            tenant["org_id"], body.source_client_id, body.target_client_id,
+            _user_id(tenant), source_version=body.source_version,
+            target_version=body.target_version, idempotency_key=body.idempotency_key,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        if detail in {"stale_client_version", "merge_relationship_conflict"}:
+            raise HTTPException(status_code=409, detail=detail) from exc
+        if detail in {"merge_client_not_found", "merge_target_not_found"}:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise
+    return {"status": "ok", "client": client}
 
 
 @router.get(

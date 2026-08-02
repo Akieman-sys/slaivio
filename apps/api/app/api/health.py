@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.logger import logger
-from app.db.database import test_db_connection
+from app.db.database import classify_database_error, test_db_connection
 
 
 router = APIRouter()
@@ -37,7 +37,11 @@ def _database_health_response(ready: bool = False):
     try:
         test_db_connection()
     except SQLAlchemyError as exc:
-        logger.error("database_readiness_failed:%s", type(exc).__name__)
+        logger.error(
+            "database_readiness_failed:%s:%s",
+            type(exc).__name__,
+            classify_database_error(exc),
+        )
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "not_ready", "database": "unavailable"},

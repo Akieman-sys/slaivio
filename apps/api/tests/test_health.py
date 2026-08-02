@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from app.main import app
+from app.db.database import classify_database_error
 
 
 client = TestClient(app)
@@ -55,3 +56,15 @@ def test_readiness_returns_sanitized_503_when_database_is_unavailable(
         "database": "unavailable",
     }
     assert "secret" not in response.text
+
+
+def test_database_errors_are_classified_without_exposing_credentials() -> None:
+    assert classify_database_error(
+        Exception("FATAL: tenant/user postgres.project not found")
+    ) == "unknown_tenant_or_user"
+    assert classify_database_error(
+        Exception("password authentication failed for user postgres")
+    ) == "invalid_credentials"
+    assert classify_database_error(Exception("unexpected secret=value")) == (
+        "connection_failed"
+    )

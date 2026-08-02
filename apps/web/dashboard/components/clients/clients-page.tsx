@@ -3,6 +3,7 @@
 import axios from "axios";
 import {
   AlertCircle,
+  Archive,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   Package,
   Phone,
   Search,
+  RotateCcw,
   ShieldAlert,
   Truck,
   Upload,
@@ -30,8 +32,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { usePermissions } from "@/components/permissions/permission-provider";
 import {
   createClient,
+  deleteClient,
   exportClients,
   findClientDuplicates,
   getClient,
@@ -39,6 +43,8 @@ import {
   getClientTimeline,
   importClients,
   listClients,
+  listArchivedClients,
+  restoreClient,
   updateClient,
   type ClientCustomerType,
   type ClientDuplicate,
@@ -94,10 +100,11 @@ const emptyStats: ClientStats = {
 };
 
 type ClientView = {
-  key: "all" | "lead" | "active" | "pending" | "business";
+  key: "all" | "lead" | "active" | "pending" | "business" | "archived";
   label: string;
   status?: ClientLifecycleStatus;
   customerType?: ClientCustomerType;
+  archived?: boolean;
 };
 
 const views: ClientView[] = [
@@ -106,6 +113,7 @@ const views: ClientView[] = [
   { key: "active", label: "Actifs", status: "active" },
   { key: "pending", label: "À suivre", status: "pending" },
   { key: "business", label: "Entreprises", customerType: "business" },
+  { key: "archived", label: "Archivés", archived: true },
 ];
 
 const buttonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
@@ -118,6 +126,7 @@ type ClientFormMode = "create" | "edit";
 type DetailTab = "summary" | "operations" | "messages" | "payments" | "history" | "duplicates" | "notes";
 
 export function ClientsPage() {
+  const { permissions, available: permissionsAvailable } = usePermissions();
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [stats, setStats] = useState<ClientStats>(emptyStats);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, page_size: 30, total: 0, total_pages: 0 });
@@ -147,6 +156,7 @@ export function ClientsPage() {
   const [importing, setImporting] = useState(false);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
+  const visibleViews = views.filter((view) => !view.archived || (permissionsAvailable && permissions.includes("clients.archive")));
   const page = pagination.page || 1;
 
   useEffect(() => {
@@ -178,7 +188,11 @@ export function ClientsPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await listClients({
+      const response = currentView.archived ? await listArchivedClients({
+        q: query || undefined,
+        page: nextPage,
+        page_size: 30,
+      }) : await listClients({
         q: query || undefined,
         status: currentView.status || status || undefined,
         customer_type: currentView.customerType || customerType || undefined,
@@ -196,6 +210,28 @@ export function ClientsPage() {
       setSelected(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function archiveSelectedClient() {
+    if (!selected || !window.confirm(`Archiver ${selected.display_name || selected.name || "ce client"} ? Ses dossiers et opérations seront conservés.`)) return;
+    try {
+      await deleteClient(selected.id);
+      setSelected(null);
+      await Promise.all([loadStats(), loadClients(1)]);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function restoreSelectedClient() {
+    if (!selected) return;
+    try {
+      await restoreClient(selected.id);
+      setSelected(null);
+      await Promise.all([loadStats(), loadClients(1)]);
+    } catch (err) {
+      setError(apiErrorMessage(err));
     }
   }
 
@@ -360,7 +396,7 @@ export function ClientsPage() {
               </button></PermissionGuard>
             </>}
           tabs={<>
-            {views.map((view) => (
+            {visibleViews.map((view) => (
               <button
                 key={view.key}
                 onClick={() => setActiveView(view.key)}
@@ -454,6 +490,9 @@ export function ClientsPage() {
           duplicatesLoading={duplicatesLoading}
           onClose={() => setSelected(null)}
           onEdit={() => openEdit(selected)}
+          archived={Boolean(currentView.archived)}
+          onArchive={archiveSelectedClient}
+          onRestore={restoreSelectedClient}
         />
       )}
 
@@ -576,6 +615,9 @@ function ClientDetails({
   duplicatesLoading,
   onClose,
   onEdit,
+  archived,
+  onArchive,
+  onRestore,
 }: {
   client: ClientRecord;
   loading: boolean;
@@ -587,6 +629,9 @@ function ClientDetails({
   duplicatesLoading: boolean;
   onClose: () => void;
   onEdit: () => void;
+  archived: boolean;
+  onArchive: () => void;
+  onRestore: () => void;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -623,7 +668,8 @@ function ClientDetails({
                 <p className="mt-1 text-[13px] text-[#687584]">{typeLabels[client.customer_type]} · {sourceLabels[client.source]}</p>
               </div>
               <div className="flex gap-1">
-                <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>
+                {!archived && <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>}
+                <PermissionGuard permission="clients.archive">{archived ? <button onClick={onRestore} className={iconButtonClass} aria-label="Restaurer le client" title="Restaurer"><RotateCcw size={16} /></button> : <button onClick={onArchive} className={`${iconButtonClass} hover:text-red-600`} aria-label="Archiver le client" title="Archiver"><Archive size={16} /></button>}</PermissionGuard>
                 <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>

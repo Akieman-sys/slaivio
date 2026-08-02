@@ -14,6 +14,7 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/clients", "GET"): "clients.read",
     ("/clients", "POST"): "clients.create",
     ("/clients/stats", "GET"): "clients.read",
+    ("/clients/archived", "GET"): "clients.archive",
     ("/clients/export", "GET"): "clients.export",
     ("/clients/import", "POST"): "clients.import",
     ("/clients/duplicates", "GET"): "clients.read",
@@ -21,6 +22,7 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/clients/{client_id}", "PATCH"): "clients.update",
     ("/clients/{client_id}", "DELETE"): "clients.archive",
     ("/clients/{client_id}/timeline", "GET"): "clients.read",
+    ("/clients/{client_id}/restore", "POST"): "clients.archive",
 }
 
 

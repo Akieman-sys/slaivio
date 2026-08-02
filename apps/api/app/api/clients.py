@@ -17,6 +17,7 @@ from app.clients.repository import (
     get_client,
     import_clients,
     list_clients,
+    restore_client,
     soft_delete_client,
     update_client,
 )
@@ -142,6 +143,25 @@ def clients_index(
 @router.get("/clients/stats", dependencies=[Depends(require_permission("clients.read"))])
 def clients_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": client_stats(tenant["org_id"])}
+
+
+@router.get(
+    "/clients/archived",
+    dependencies=[Depends(require_permission("clients.archive"))],
+)
+def clients_archived(
+    q: str | None = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    tenant=Depends(get_current_tenant),
+):
+    return {
+        "status": "ok",
+        **list_clients(
+            tenant["org_id"], q=q, page=page, page_size=page_size,
+            sort="activity_desc", archived=True,
+        ),
+    }
 
 
 @router.post(
@@ -309,3 +329,19 @@ def clients_delete(client_id: str, tenant=Depends(get_current_tenant)):
     if not deleted:
         raise HTTPException(status_code=404, detail="client_not_found")
     return {"status": "ok"}
+
+
+@router.post(
+    "/clients/{client_id}/restore",
+    dependencies=[Depends(require_permission("clients.archive"))],
+)
+def clients_restore(client_id: str, tenant=Depends(get_current_tenant)):
+    try:
+        client = restore_client(tenant["org_id"], client_id, _user_id(tenant))
+    except ValueError as exc:
+        if str(exc) == "restore_identity_conflict":
+            raise HTTPException(status_code=409, detail="restore_identity_conflict") from exc
+        raise
+    if not client:
+        raise HTTPException(status_code=404, detail="archived_client_not_found")
+    return {"status": "ok", "client": client}

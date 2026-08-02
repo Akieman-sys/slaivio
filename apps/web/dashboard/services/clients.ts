@@ -33,6 +33,7 @@ export type ClientRecord = {
   created_at: string;
   updated_at: string;
   row_version: number;
+  deleted_at?: string | null;
 };
 
 export type ClientTimelineEvent = {
@@ -130,6 +131,14 @@ export async function updateClient(id: string, payload: ClientPayload) {
 
 export async function deleteClient(id: string) {
   return (await api.delete<{ status: "ok" }>(`/clients/${id}`)).data;
+}
+
+export async function listArchivedClients(params: { q?: string; page?: number; page_size?: number } = {}) {
+  return (await api.get<ClientsResponse>("/clients/archived", { params })).data;
+}
+
+export async function restoreClient(id: string) {
+  return (await api.post<{ status: "ok"; client: ClientRecord }>(`/clients/${id}/restore`)).data.client;
 }
 
 export async function getClientStats() {

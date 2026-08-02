@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+import json
 from math import ceil
 from typing import Any
 
@@ -56,6 +57,27 @@ def _table_exists(conn, table_name: str) -> bool:
     return bool(conn.execute(text("select to_regclass(:table_name)"), {"table_name": f"public.{table_name}"}).scalar())
 
 
+def _audit_client(conn, *, org_id: str, user_id: str, client_id: str, action: str,
+                  changed_fields: list[str] | None = None) -> None:
+    conn.execute(
+        text("""
+            insert into audit_logs (
+                org_id, actor_id, entity_type, entity_id, action, metadata, severity
+            ) values (
+                :org_id, :user_id, 'client', :client_id, :action,
+                cast(:metadata as jsonb), 'INFO'
+            )
+        """),
+        {
+            "org_id": org_id,
+            "user_id": user_id,
+            "client_id": client_id,
+            "action": action,
+            "metadata": json.dumps({"changed_fields": sorted(changed_fields or [])}),
+        },
+    )
+
+
 def normalize_phone(value: str | None) -> str | None:
     if not value:
         return None
@@ -88,8 +110,10 @@ def _build_filters(
     source: str | None,
     country: str | None,
     city: str | None,
+    *,
+    archived: bool = False,
 ) -> tuple[str, dict]:
-    filters = ["org_id = :org_id", "deleted_at is null"]
+    filters = ["org_id = :org_id", "deleted_at is not null" if archived else "deleted_at is null"]
     params: dict[str, Any] = {"org_id": org_id}
 
     if q:
@@ -135,11 +159,14 @@ def list_clients(
     page: int = 1,
     page_size: int = 20,
     sort: str = "created_desc",
+    archived: bool = False,
 ) -> dict:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
     offset = (page - 1) * page_size
-    where_clause, params = _build_filters(org_id, q, status, customer_type, source, country, city)
+    where_clause, params = _build_filters(
+        org_id, q, status, customer_type, source, country, city, archived=archived
+    )
     order_by = {
         "created_asc": "created_at asc",
         "name_asc": "coalesce(display_name, name, phone, email) asc nulls last",
@@ -179,6 +206,7 @@ def list_clients(
                     c.created_at,
                     c.updated_at,
                     c.row_version,
+                    c.deleted_at,
                     coalesce(d.dossiers_count, 0)::int dossiers_count,
                     coalesce(s.shipments_count, 0)::int shipments_count
                 from clients c
@@ -359,6 +387,11 @@ def create_client(org_id: str, user_id: str, payload: dict) -> dict:
                 "total_spent": payload.get("total_spent") or 0,
                 },
             ).fetchone()
+            if row is not None:
+                _audit_client(
+                    conn, org_id=org_id, user_id=user_id, client_id=str(row[0]),
+                    action="client.created", changed_fields=list(payload.keys()),
+                )
     except IntegrityError as exc:
         raise ValueError("duplicate_client") from exc
 
@@ -445,6 +478,12 @@ def update_client(org_id: str, client_id: str, user_id: str, payload: dict) -> d
                  normalized_phone=phone or whatsapp_phone, normalized_email=email,
                  expected_version=expected_version),
             )
+            if result.rowcount > 0:
+                _audit_client(
+                    conn, org_id=org_id, user_id=user_id, client_id=client_id,
+                    action="client.updated",
+                    changed_fields=[key for key in payload if key != "row_version"],
+                )
     except IntegrityError as exc:
         raise ValueError("duplicate_client") from exc
     if result.rowcount == 0:
@@ -459,14 +498,66 @@ def soft_delete_client(org_id: str, client_id: str, user_id: str) -> bool:
         result = conn.execute(
             text("""
                 update clients
-                set deleted_at = now(), updated_by = :user_id, updated_at = now()
+                set deleted_at = now(), archived_by = :user_id, updated_by = :user_id,
+                    updated_at = now(), row_version = row_version + 1
                 where org_id = :org_id
                   and id = :client_id
                   and deleted_at is null
             """),
             {"org_id": org_id, "client_id": client_id, "user_id": user_id},
         )
+        if result.rowcount > 0:
+            _audit_client(
+                conn, org_id=org_id, user_id=user_id, client_id=client_id,
+                action="client.archived",
+            )
     return result.rowcount > 0
+
+
+def restore_client(org_id: str, client_id: str, user_id: str) -> dict | None:
+    try:
+        with engine.begin() as conn:
+            archived = conn.execute(
+                text("""
+                    select phone, whatsapp_phone, email
+                    from clients
+                    where org_id = :org_id and id = :client_id and deleted_at is not null
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchone()
+            if archived is None:
+                return None
+            result = conn.execute(
+                text("""
+                    update clients
+                    set deleted_at = null,
+                        archived_by = null,
+                        normalized_phone = :normalized_phone,
+                        normalized_email = :normalized_email,
+                        updated_by = :user_id,
+                        updated_at = now(),
+                        row_version = row_version + 1
+                    where org_id = :org_id
+                      and id = :client_id
+                      and deleted_at is not null
+                """),
+                {
+                    "org_id": org_id,
+                    "client_id": client_id,
+                    "user_id": user_id,
+                    "normalized_phone": normalize_phone(archived[0] or archived[1]),
+                    "normalized_email": normalize_email(archived[2]),
+                },
+            )
+            if result.rowcount == 0:
+                return None
+            _audit_client(
+                conn, org_id=org_id, user_id=user_id, client_id=client_id,
+                action="client.restored",
+            )
+    except IntegrityError as exc:
+        raise ValueError("restore_identity_conflict") from exc
+    return get_client(org_id, client_id)
 
 
 def client_stats(org_id: str) -> dict:
@@ -597,6 +688,38 @@ def client_timeline(org_id: str, client_id: str, *, limit: int = 50) -> list[dic
         )
 
     with engine.connect() as conn:
+        if _table_exists(conn, "audit_logs"):
+            audit_rows = conn.execute(
+                text("""
+                    select id::text, action, metadata, created_at
+                    from audit_logs
+                    where org_id = :org_id
+                      and entity_type = 'client'
+                      and entity_id = :client_id
+                    order by created_at desc
+                    limit 30
+                """),
+                {"org_id": org_id, "client_id": client_id},
+            ).fetchall()
+            if audit_rows:
+                action_titles = {
+                    "client.created": "Client créé",
+                    "client.updated": "Client mis à jour",
+                    "client.archived": "Client archivé",
+                    "client.restored": "Client restauré",
+                }
+                events = [
+                    {
+                        "id": f"audit-{item.id}",
+                        "type": "audit",
+                        "title": action_titles.get(item.action, item.action),
+                        "description": "Action enregistrée dans le journal d’audit.",
+                        "occurred_at": item.created_at,
+                        "metadata": item.metadata or {},
+                    }
+                    for item in audit_rows
+                ]
+
         if _table_exists(conn, "dossiers"):
             rows = conn.execute(
                 text("""

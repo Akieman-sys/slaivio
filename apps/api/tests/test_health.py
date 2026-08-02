@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
 from app.main import app
 
@@ -37,3 +38,20 @@ def test_readiness_checks_the_database(monkeypatch) -> None:
 
     compatibility_response = client.get("/ready")
     assert compatibility_response.status_code == 200
+
+
+def test_readiness_returns_sanitized_503_when_database_is_unavailable(
+    monkeypatch,
+) -> None:
+    def fail_connection():
+        raise OperationalError("select 1", {}, Exception("secret database detail"))
+
+    monkeypatch.setattr("app.api.health.test_db_connection", fail_connection)
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "database": "unavailable",
+    }
+    assert "secret" not in response.text

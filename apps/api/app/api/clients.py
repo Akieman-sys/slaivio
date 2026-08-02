@@ -1,10 +1,11 @@
 import csv
 import io
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 from starlette.responses import StreamingResponse
 
+from app.audit.services.audit_service import audit_event
 from app.clients.repository import (
     CLIENT_SOURCES,
     CLIENT_STATUSES,
@@ -129,6 +130,24 @@ def _user_id(tenant: dict) -> str:
     return str(tenant.get("user_id") or "")
 
 
+def _audit_client_bulk_operation(
+    *, tenant: dict, request: Request, action: str, metadata: dict
+) -> None:
+    audit_event(
+        org_id=tenant["org_id"],
+        actor_id=_user_id(tenant),
+        actor_name=tenant.get("actor_name") or _user_id(tenant),
+        actor_role=tenant.get("actor_role"),
+        entity_type="client_collection",
+        entity_id=None,
+        action=action,
+        metadata=metadata,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        severity="INFO",
+    )
+
+
 @router.get("/clients", dependencies=[Depends(require_permission("clients.read"))])
 def clients_index(
     q: str | None = Query(default=None, max_length=120),
@@ -226,6 +245,7 @@ def clients_create(body: ClientPayload, tenant=Depends(get_current_tenant)):
 
 @router.get("/clients/export", dependencies=[Depends(require_permission("clients.export"))])
 def clients_export(
+    request: Request,
     q: str | None = Query(default=None, max_length=120),
     status_filter: str | None = Query(default=None, alias="status"),
     customer_type: str | None = None,
@@ -248,6 +268,23 @@ def clients_export(
     )
     if len(rows) > MAX_CLIENT_EXPORT_ROWS:
         raise HTTPException(status_code=413, detail="client_export_too_large")
+    _audit_client_bulk_operation(
+        tenant=tenant,
+        request=request,
+        action="clients.exported",
+        metadata={
+            "row_count": len(rows),
+            "filters": {
+                "has_search": bool(q),
+                "status": status_filter,
+                "customer_type": customer_type,
+                "source": source,
+                "country": country,
+                "city": city,
+                "sort": sort,
+            },
+        },
+    )
     output = io.StringIO(newline="")
     fieldnames = [
         "display_name",
@@ -282,7 +319,11 @@ def clients_export(
 
 
 @router.post("/clients/import", dependencies=[Depends(require_permission("clients.import"))])
-async def clients_import(file: UploadFile = File(...), tenant=Depends(get_current_tenant)):
+async def clients_import(
+    request: Request,
+    file: UploadFile = File(...),
+    tenant=Depends(get_current_tenant),
+):
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=422, detail="csv_required")
     content = await file.read(MAX_CLIENT_IMPORT_BYTES + 1)
@@ -312,7 +353,19 @@ async def clients_import(file: UploadFile = File(...), tenant=Depends(get_curren
         rows.append(normalized_row)
     if not rows:
         raise HTTPException(status_code=422, detail="empty_csv")
-    return {"status": "ok", "result": import_clients(tenant["org_id"], _user_id(tenant), rows)}
+    result = import_clients(tenant["org_id"], _user_id(tenant), rows)
+    _audit_client_bulk_operation(
+        tenant=tenant,
+        request=request,
+        action="clients.imported",
+        metadata={
+            "processed": result["processed"],
+            "created": result["created"],
+            "skipped": result["skipped"],
+            "error_count": len(result["errors"]),
+        },
+    )
+    return {"status": "ok", "result": result}
 
 
 @router.get("/clients/duplicates", dependencies=[Depends(require_permission("clients.read"))])

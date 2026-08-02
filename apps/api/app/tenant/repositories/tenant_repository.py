@@ -86,12 +86,17 @@ def get_active_tenant(
             text("""
                 select
                     s.*,
+                    m.role_code,
                     coalesce(o.organization_name, o.name, o.id) as organization_name,
                     coalesce(o.organization_code, o.id) as organization_code,
                     o.organization_type
                 from tenant_sessions s
                 join organizations o
                     on o.id = s.org_id
+                join organization_memberships m
+                    on m.org_id = s.org_id
+                   and m.clerk_user_id = s.clerk_user_id
+                   and m.status = 'ACTIVE'
                 where s.clerk_user_id = :clerk_user_id
                   and s.active = true
                 order by s.created_at desc

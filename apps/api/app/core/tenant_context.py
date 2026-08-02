@@ -25,4 +25,6 @@ def get_current_tenant(
         "organization_name": active.get("organization_name"),
         "clerk_org_id": active.get("clerk_org_id"),
         "user_id": user_id,
+        "actor_name": manager.get("full_name") or manager.get("name") or manager.get("email"),
+        "actor_role": active.get("role_code") or manager.get("role"),
     }

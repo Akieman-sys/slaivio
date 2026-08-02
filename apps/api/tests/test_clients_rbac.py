@@ -4,6 +4,7 @@ from app.api.clients import (
     MAX_CLIENT_EXPORT_ROWS,
     MAX_CLIENT_IMPORT_BYTES,
     MAX_CLIENT_IMPORT_ROWS,
+    _audit_client_bulk_operation,
     csv_safe_value,
     router,
 )
@@ -15,6 +16,7 @@ from app.organizations.services.provisioning_service import (
 from fastapi.routing import APIRoute
 from pathlib import Path
 import inspect
+from starlette.requests import Request
 
 
 EXPECTED_ROUTE_PERMISSIONS = {
@@ -87,6 +89,27 @@ def test_client_csv_export_neutralizes_spreadsheet_formulas():
     assert csv_safe_value("Client normal") == "Client normal"
 
 
+def test_client_bulk_audit_contains_counts_without_personal_data(monkeypatch):
+    captured = {}
+    monkeypatch.setattr("app.api.clients.audit_event", lambda **kwargs: captured.update(kwargs))
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 1234)})
+
+    _audit_client_bulk_operation(
+        tenant={"org_id": "org-a", "user_id": "user-a", "actor_role": "OWNER"},
+        request=request,
+        action="clients.imported",
+        metadata={"processed": 4, "created": 2, "skipped": 1, "error_count": 1},
+    )
+
+    assert captured["org_id"] == "org-a"
+    assert captured["action"] == "clients.imported"
+    assert captured["metadata"] == {
+        "processed": 4, "created": 2, "skipped": 1, "error_count": 1,
+    }
+    assert "email" not in captured["metadata"]
+    assert "phone" not in captured["metadata"]
+
+
 def test_client_contact_normalization_is_deterministic():
     assert normalize_phone("+243 999-123-456") == "+243999123456"
     assert normalize_phone("00243 999 123 456") == "+243999123456"
@@ -133,3 +156,11 @@ def test_clients_database_isolation_migration_guards_relationships():
     assert "source_client_id" in sql
     assert "target_client_id" in sql
     assert "tenant isolation violation" in sql
+
+
+def test_client_audit_is_tenant_indexed_and_not_public():
+    migration = Path(__file__).parents[3] / "infra/sql/032_clients_audit_hardening.sql"
+    sql = " ".join(migration.read_text(encoding="utf-8").lower().split())
+    assert "audit_logs(org_id, created_at desc)" in sql
+    assert "audit_logs(org_id, action, created_at desc)" in sql
+    assert "revoke all on audit_logs from public" in sql

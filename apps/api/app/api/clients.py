@@ -379,8 +379,19 @@ def clients_update(client_id: str, body: ClientPatchPayload, tenant=Depends(get_
     "/clients/{client_id}",
     dependencies=[Depends(require_permission("clients.archive"))],
 )
-def clients_delete(client_id: str, tenant=Depends(get_current_tenant)):
-    deleted = soft_delete_client(tenant["org_id"], client_id, _user_id(tenant))
+def clients_delete(
+    client_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        deleted = soft_delete_client(
+            tenant["org_id"], client_id, _user_id(tenant), expected_version=row_version
+        )
+    except ValueError as exc:
+        if str(exc) == "stale_client_version":
+            raise HTTPException(status_code=409, detail="stale_client_version") from exc
+        raise
     if not deleted:
         raise HTTPException(status_code=404, detail="client_not_found")
     return {"status": "ok"}
@@ -390,12 +401,20 @@ def clients_delete(client_id: str, tenant=Depends(get_current_tenant)):
     "/clients/{client_id}/restore",
     dependencies=[Depends(require_permission("clients.archive"))],
 )
-def clients_restore(client_id: str, tenant=Depends(get_current_tenant)):
+def clients_restore(
+    client_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
     try:
-        client = restore_client(tenant["org_id"], client_id, _user_id(tenant))
+        client = restore_client(
+            tenant["org_id"], client_id, _user_id(tenant), expected_version=row_version
+        )
     except ValueError as exc:
         if str(exc) == "restore_identity_conflict":
             raise HTTPException(status_code=409, detail="restore_identity_conflict") from exc
+        if str(exc) == "stale_client_version":
+            raise HTTPException(status_code=409, detail="stale_client_version") from exc
         raise
     if not client:
         raise HTTPException(status_code=404, detail="archived_client_not_found")

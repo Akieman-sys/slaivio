@@ -130,16 +130,16 @@ export async function updateClient(id: string, payload: ClientPayload) {
   return (await api.patch<{ status: "ok"; client: ClientRecord }>(`/clients/${id}`, payload)).data.client;
 }
 
-export async function deleteClient(id: string) {
-  return (await api.delete<{ status: "ok" }>(`/clients/${id}`)).data;
+export async function deleteClient(id: string, rowVersion: number) {
+  return (await api.delete<{ status: "ok" }>(`/clients/${id}`, { params: { row_version: rowVersion } })).data;
 }
 
 export async function listArchivedClients(params: { q?: string; page?: number; page_size?: number } = {}) {
   return (await api.get<ClientsResponse>("/clients/archived", { params })).data;
 }
 
-export async function restoreClient(id: string) {
-  return (await api.post<{ status: "ok"; client: ClientRecord }>(`/clients/${id}/restore`)).data.client;
+export async function restoreClient(id: string, rowVersion: number) {
+  return (await api.post<{ status: "ok"; client: ClientRecord }>(`/clients/${id}/restore`, null, { params: { row_version: rowVersion } })).data.client;
 }
 
 export async function mergeClients(payload: {

@@ -217,7 +217,7 @@ export function ClientsPage() {
   async function archiveSelectedClient() {
     if (!selected || !window.confirm(`Archiver ${selected.display_name || selected.name || "ce client"} ? Ses dossiers et opérations seront conservés.`)) return;
     try {
-      await deleteClient(selected.id);
+      await deleteClient(selected.id, selected.row_version);
       setSelected(null);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {
@@ -228,7 +228,7 @@ export function ClientsPage() {
   async function restoreSelectedClient() {
     if (!selected) return;
     try {
-      await restoreClient(selected.id);
+      await restoreClient(selected.id, selected.row_version);
       setSelected(null);
       await Promise.all([loadStats(), loadClients(1)]);
     } catch (err) {

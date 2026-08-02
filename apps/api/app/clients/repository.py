@@ -499,7 +499,9 @@ def update_client(org_id: str, client_id: str, user_id: str, payload: dict) -> d
     return get_client(org_id, client_id)
 
 
-def soft_delete_client(org_id: str, client_id: str, user_id: str) -> bool:
+def soft_delete_client(
+    org_id: str, client_id: str, user_id: str, *, expected_version: int
+) -> bool:
     with engine.begin() as conn:
         result = conn.execute(
             text("""
@@ -509,30 +511,43 @@ def soft_delete_client(org_id: str, client_id: str, user_id: str) -> bool:
                 where org_id = :org_id
                   and id = :client_id
                   and deleted_at is null
+                  and row_version = :expected_version
             """),
-            {"org_id": org_id, "client_id": client_id, "user_id": user_id},
+            {
+                "org_id": org_id,
+                "client_id": client_id,
+                "user_id": user_id,
+                "expected_version": expected_version,
+            },
         )
         if result.rowcount > 0:
             _audit_client(
                 conn, org_id=org_id, user_id=user_id, client_id=client_id,
                 action="client.archived",
             )
+    if result.rowcount == 0 and get_client(org_id, client_id):
+        raise ValueError("stale_client_version")
     return result.rowcount > 0
 
 
-def restore_client(org_id: str, client_id: str, user_id: str) -> dict | None:
+def restore_client(
+    org_id: str, client_id: str, user_id: str, *, expected_version: int
+) -> dict | None:
     try:
         with engine.begin() as conn:
             archived = conn.execute(
                 text("""
-                    select phone, whatsapp_phone, email
+                    select phone, whatsapp_phone, email, row_version
                     from clients
                     where org_id = :org_id and id = :client_id and deleted_at is not null
+                    for update
                 """),
                 {"org_id": org_id, "client_id": client_id},
             ).fetchone()
             if archived is None:
                 return None
+            if int(archived[3]) != expected_version:
+                raise ValueError("stale_client_version")
             result = conn.execute(
                 text("""
                     update clients
@@ -546,6 +561,7 @@ def restore_client(org_id: str, client_id: str, user_id: str) -> dict | None:
                     where org_id = :org_id
                       and id = :client_id
                       and deleted_at is not null
+                      and row_version = :expected_version
                 """),
                 {
                     "org_id": org_id,
@@ -553,6 +569,7 @@ def restore_client(org_id: str, client_id: str, user_id: str) -> dict | None:
                     "user_id": user_id,
                     "normalized_phone": normalize_phone(archived[0] or archived[1]),
                     "normalized_email": normalize_email(archived[2]),
+                    "expected_version": expected_version,
                 },
             )
             if result.rowcount == 0:
@@ -580,6 +597,10 @@ def merge_clients(
         raise ValueError("merge_same_client")
     try:
         with engine.begin() as conn:
+            conn.execute(
+                text("select pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": f"{org_id}:{idempotency_key}"},
+            )
             previous = conn.execute(
                 text("""
                     select target_client_id::text

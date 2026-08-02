@@ -14,6 +14,7 @@ from app.organizations.services.provisioning_service import (
 )
 from fastapi.routing import APIRoute
 from pathlib import Path
+import inspect
 
 
 EXPECTED_ROUTE_PERMISSIONS = {
@@ -110,6 +111,18 @@ def test_client_merge_contract_is_versioned_and_idempotent():
     assert "dossiers" in CLIENT_RELATION_TABLES
     assert "messages_raw" in CLIENT_RELATION_TABLES
     assert "cargo_packages" in CLIENT_RELATION_TABLES
+
+
+def test_client_destructive_operations_enforce_concurrency_tokens():
+    from app.clients.repository import merge_clients, restore_client, soft_delete_client
+
+    archive_source = inspect.getsource(soft_delete_client)
+    restore_source = inspect.getsource(restore_client)
+    merge_source = inspect.getsource(merge_clients)
+    assert "row_version = :expected_version" in archive_source
+    assert "row_version = :expected_version" in restore_source
+    assert "for update" in restore_source.lower()
+    assert "pg_advisory_xact_lock" in merge_source
 
 
 def test_clients_database_isolation_migration_guards_relationships():

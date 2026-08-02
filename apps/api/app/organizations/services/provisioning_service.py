@@ -21,6 +21,16 @@ CLIENT_ROLE_PERMISSIONS = {
     "WAREHOUSE": ("clients.read",),
 }
 
+CLIENT_ROLE_PERMISSION_INSERT_SQL = """
+    insert into role_permissions (role_id, permission_id)
+    select r.id, p.id
+    from organization_roles r
+    join permissions p on p.permission_code = any(:permission_codes)
+    where r.org_id = :org_id
+      and r.role_code = :role_code
+    on conflict do nothing
+"""
+
 
 def ensure_default_roles(org_id: str):
     with engine.connect() as conn:
@@ -55,16 +65,7 @@ def ensure_client_role_permissions(org_id: str):
     with engine.connect() as conn:
         for role_code, permission_codes in CLIENT_ROLE_PERMISSIONS.items():
             conn.execute(
-                text("""
-                    insert into role_permissions (role_id, permission_id)
-                    select r.id, p.id
-                    from organization_roles r
-                    join permissions p on p.permission_code = any(:permission_codes)
-                    where r.org_id = :org_id
-                      and r.role_code = :role_code
-                      and r.system_role is true
-                    on conflict do nothing
-                """),
+                text(CLIENT_ROLE_PERMISSION_INSERT_SQL),
                 {
                     "org_id": org_id,
                     "role_code": role_code,

@@ -7,7 +7,10 @@ from app.api.clients import (
     router,
 )
 from app.clients.repository import CLIENT_RELATION_TABLES, normalize_email, normalize_phone
-from app.organizations.services.provisioning_service import CLIENT_ROLE_PERMISSIONS
+from app.organizations.services.provisioning_service import (
+    CLIENT_ROLE_PERMISSION_INSERT_SQL,
+    CLIENT_ROLE_PERMISSIONS,
+)
 from fastapi.routing import APIRoute
 
 
@@ -61,6 +64,12 @@ def test_clients_default_roles_follow_least_privilege():
     assert "clients.archive" not in CLIENT_ROLE_PERMISSIONS["SUPPORT"]
     assert "clients.import" not in CLIENT_ROLE_PERMISSIONS["OPERATOR"]
     assert "FINANCE" not in CLIENT_ROLE_PERMISSIONS
+
+
+def test_client_permissions_are_granted_by_role_code_not_system_flag():
+    normalized_sql = " ".join(CLIENT_ROLE_PERMISSION_INSERT_SQL.lower().split())
+    assert "r.role_code = :role_code" in normalized_sql
+    assert "system_role" not in normalized_sql
 
 
 def test_clients_bulk_operations_have_explicit_safety_limits():

@@ -13,6 +13,14 @@ DEFAULT_ORGANIZATION_ROLES = (
     ("FINANCE", "Finance", "Finance et comptabilité"),
 )
 
+CLIENT_ROLE_PERMISSIONS = {
+    "OWNER": ("clients.read", "clients.create", "clients.update", "clients.archive", "clients.import", "clients.export", "clients.merge"),
+    "MANAGER": ("clients.read", "clients.create", "clients.update", "clients.archive", "clients.import", "clients.export", "clients.merge"),
+    "OPERATOR": ("clients.read", "clients.create", "clients.update"),
+    "SUPPORT": ("clients.read", "clients.create", "clients.update", "clients.export"),
+    "WAREHOUSE": ("clients.read",),
+}
+
 
 def ensure_default_roles(org_id: str):
     with engine.connect() as conn:
@@ -43,6 +51,29 @@ def ensure_default_roles(org_id: str):
         conn.commit()
 
 
+def ensure_client_role_permissions(org_id: str):
+    with engine.connect() as conn:
+        for role_code, permission_codes in CLIENT_ROLE_PERMISSIONS.items():
+            conn.execute(
+                text("""
+                    insert into role_permissions (role_id, permission_id)
+                    select r.id, p.id
+                    from organization_roles r
+                    join permissions p on p.permission_code = any(:permission_codes)
+                    where r.org_id = :org_id
+                      and r.role_code = :role_code
+                      and r.system_role is true
+                    on conflict do nothing
+                """),
+                {
+                    "org_id": org_id,
+                    "role_code": role_code,
+                    "permission_codes": list(permission_codes),
+                },
+            )
+        conn.commit()
+
+
 def provision_organization(
     clerk_org_id: str,
     organization_name: str,
@@ -52,5 +83,7 @@ def provision_organization(
         organization_name=organization_name,
     )
     if org:
-        ensure_default_roles(str(org["id"]))
+        org_id = str(org["id"])
+        ensure_default_roles(org_id)
+        ensure_client_role_permissions(org_id)
     return org

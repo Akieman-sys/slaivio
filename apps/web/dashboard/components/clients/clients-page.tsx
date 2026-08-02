@@ -29,6 +29,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   createClient,
   exportClients,
@@ -344,18 +345,18 @@ export function ClientsPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Clients" description="Répertoire opérationnel des leads, clients et partenaires. Les lignes affichées proviennent uniquement de l’organisation active."
           actions={<>
-              <button onClick={() => setImportOpen(true)} className={buttonClass}>
+              <PermissionGuard permission="clients.import"><button onClick={() => setImportOpen(true)} className={buttonClass}>
                 <Upload size={16} />
                 Importer
-              </button>
-              <button onClick={handleExport} className={buttonClass}>
+              </button></PermissionGuard>
+              <PermissionGuard permission="clients.export"><button onClick={handleExport} className={buttonClass}>
                 <Download size={16} />
                 Exporter
-              </button>
-              <button onClick={openCreate} className={primaryButtonClass}>
+              </button></PermissionGuard>
+              <PermissionGuard permission="clients.create"><button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau client
-              </button>
+              </button></PermissionGuard>
             </>}
           tabs={<>
             {views.map((view) => (
@@ -621,7 +622,7 @@ function ClientDetails({
                 <p className="mt-1 text-[13px] text-[#687584]">{typeLabels[client.customer_type]} · {sourceLabels[client.source]}</p>
               </div>
               <div className="flex gap-1">
-                <button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button>
+                <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>
                 <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>

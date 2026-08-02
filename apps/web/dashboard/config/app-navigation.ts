@@ -28,7 +28,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     label: "Opérations",
     icon: BriefcaseBusiness,
     routes: [
-      { label: "Clients", href: "/app/clients", icon: Users, keywords: ["client", "contact", "destinataire"] },
+      { label: "Clients", href: "/app/clients", icon: Users, permission: "clients.read", keywords: ["client", "contact", "destinataire"] },
       { label: "Dossiers", href: "/app/dossiers", icon: Folder, permission: "dossiers.read", keywords: ["dossier", "case"] },
       { label: "Colis", href: "/app/packages", icon: Package, keywords: ["colis", "package", "tracking"] },
       { label: "Expéditions", href: "/app/shipments", icon: Truck, permission: "shipments.read", keywords: ["expédition", "shipment", "transport"] },

@@ -21,9 +21,13 @@ from app.clients.repository import (
     update_client,
 )
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 
 
 router = APIRouter()
+MAX_CLIENT_IMPORT_BYTES = 5 * 1024 * 1024
+MAX_CLIENT_IMPORT_ROWS = 10_000
+MAX_CLIENT_EXPORT_ROWS = 50_000
 
 
 class ClientPayload(BaseModel):
@@ -98,7 +102,7 @@ def _user_id(tenant: dict) -> str:
     return str(tenant.get("user_id") or "")
 
 
-@router.get("/clients")
+@router.get("/clients", dependencies=[Depends(require_permission("clients.read"))])
 def clients_index(
     q: str | None = Query(default=None, max_length=120),
     status_filter: str | None = Query(default=None, alias="status"),
@@ -134,12 +138,16 @@ def clients_index(
     }
 
 
-@router.get("/clients/stats")
+@router.get("/clients/stats", dependencies=[Depends(require_permission("clients.read"))])
 def clients_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": client_stats(tenant["org_id"])}
 
 
-@router.post("/clients", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/clients",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("clients.create"))],
+)
 def clients_create(body: ClientPayload, tenant=Depends(get_current_tenant)):
     try:
         client = create_client(tenant["org_id"], _user_id(tenant), body.model_dump())
@@ -150,7 +158,7 @@ def clients_create(body: ClientPayload, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "client": client}
 
 
-@router.get("/clients/export")
+@router.get("/clients/export", dependencies=[Depends(require_permission("clients.export"))])
 def clients_export(
     q: str | None = Query(default=None, max_length=120),
     status_filter: str | None = Query(default=None, alias="status"),
@@ -170,7 +178,10 @@ def clients_export(
         country=country,
         city=city,
         sort=sort,
+        limit=MAX_CLIENT_EXPORT_ROWS + 1,
     )
+    if len(rows) > MAX_CLIENT_EXPORT_ROWS:
+        raise HTTPException(status_code=413, detail="client_export_too_large")
     output = io.StringIO()
     fieldnames = [
         "display_name",
@@ -204,11 +215,13 @@ def clients_export(
     )
 
 
-@router.post("/clients/import")
+@router.post("/clients/import", dependencies=[Depends(require_permission("clients.import"))])
 async def clients_import(file: UploadFile = File(...), tenant=Depends(get_current_tenant)):
-    if not file.filename.lower().endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=422, detail="csv_required")
-    content = await file.read()
+    content = await file.read(MAX_CLIENT_IMPORT_BYTES + 1)
+    if len(content) > MAX_CLIENT_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail="client_import_too_large")
     try:
         decoded = content.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -216,11 +229,15 @@ async def clients_import(file: UploadFile = File(...), tenant=Depends(get_curren
     reader = csv.DictReader(io.StringIO(decoded))
     if not reader.fieldnames:
         raise HTTPException(status_code=422, detail="empty_csv")
-    rows = [{str(key).strip(): (value or "").strip() for key, value in row.items()} for row in reader]
+    rows = []
+    for row_number, row in enumerate(reader, start=1):
+        if row_number > MAX_CLIENT_IMPORT_ROWS:
+            raise HTTPException(status_code=413, detail="client_import_too_many_rows")
+        rows.append({str(key).strip(): (value or "").strip() for key, value in row.items()})
     return {"status": "ok", "result": import_clients(tenant["org_id"], _user_id(tenant), rows)}
 
 
-@router.get("/clients/duplicates")
+@router.get("/clients/duplicates", dependencies=[Depends(require_permission("clients.read"))])
 def clients_duplicates(
     client_id: str | None = None,
     phone: str | None = None,
@@ -240,7 +257,7 @@ def clients_duplicates(
     }
 
 
-@router.get("/clients/{client_id}")
+@router.get("/clients/{client_id}", dependencies=[Depends(require_permission("clients.read"))])
 def clients_show(client_id: str, tenant=Depends(get_current_tenant)):
     client = get_client(tenant["org_id"], client_id)
     if not client:
@@ -248,7 +265,10 @@ def clients_show(client_id: str, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "client": client}
 
 
-@router.get("/clients/{client_id}/timeline")
+@router.get(
+    "/clients/{client_id}/timeline",
+    dependencies=[Depends(require_permission("clients.read"))],
+)
 def clients_timeline(client_id: str, tenant=Depends(get_current_tenant)):
     client = get_client(tenant["org_id"], client_id)
     if not client:
@@ -256,7 +276,10 @@ def clients_timeline(client_id: str, tenant=Depends(get_current_tenant)):
     return {"status": "ok", "items": client_timeline(tenant["org_id"], client_id)}
 
 
-@router.patch("/clients/{client_id}")
+@router.patch(
+    "/clients/{client_id}",
+    dependencies=[Depends(require_permission("clients.update"))],
+)
 def clients_update(client_id: str, body: ClientPatchPayload, tenant=Depends(get_current_tenant)):
     payload = body.model_dump(exclude_unset=True)
     try:
@@ -270,7 +293,10 @@ def clients_update(client_id: str, body: ClientPatchPayload, tenant=Depends(get_
     return {"status": "ok", "client": client}
 
 
-@router.delete("/clients/{client_id}")
+@router.delete(
+    "/clients/{client_id}",
+    dependencies=[Depends(require_permission("clients.archive"))],
+)
 def clients_delete(client_id: str, tenant=Depends(get_current_tenant)):
     deleted = soft_delete_client(tenant["org_id"], client_id, _user_id(tenant))
     if not deleted:

@@ -344,6 +344,8 @@ def create_client(org_id: str, user_id: str, payload: dict) -> dict:
             },
         ).fetchone()
 
+    if row is None:
+        raise RuntimeError("client_insert_failed")
     created = get_client(org_id, row[0])
     return created or {}
 
@@ -669,7 +671,7 @@ def client_timeline(org_id: str, client_id: str, *, limit: int = 50) -> list[dic
     return events[: min(max(limit, 1), 100)]
 
 
-def export_clients(org_id: str, **filters) -> list[dict]:
+def export_clients(org_id: str, *, limit: int = 50_001, **filters) -> list[dict]:
     where_clause, params = _build_filters(
         org_id,
         filters.get("q"),
@@ -695,8 +697,9 @@ def export_clients(org_id: str, **filters) -> list[dict]:
                 from clients
                 where {where_clause}
                 order by {order_by}
+                limit :limit
             """),
-            params,
+            dict(params, limit=min(max(limit, 1), 50_001)),
         ).fetchall()
     return [_safe(dict(row._mapping)) for row in rows]
 

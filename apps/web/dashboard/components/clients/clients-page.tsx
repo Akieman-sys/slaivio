@@ -698,7 +698,7 @@ function ClientDetails({
               </div>
               <div className="flex gap-1">
                 {!archived && <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>}
-                <PermissionGuard permission="clients.archive">{archived ? <button onClick={onRestore} className={iconButtonClass} aria-label="Restaurer le client" title="Restaurer"><RotateCcw size={16} /></button> : <button onClick={onArchive} className={`${iconButtonClass} hover:text-red-600`} aria-label="Archiver le client" title="Archiver"><Archive size={16} /></button>}</PermissionGuard>
+                <PermissionGuard permission="clients.archive">{archived ? <button onClick={onRestore} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100" aria-label="Restaurer le client"><RotateCcw size={15} /> Restaurer</button> : <button onClick={onArchive} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50" aria-label="Archiver le client"><Archive size={15} /> Archiver</button>}</PermissionGuard>
                 <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>

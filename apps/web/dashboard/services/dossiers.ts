@@ -61,6 +61,8 @@ export type DossierRecord = {
   created_at: string;
   updated_at: string | null;
   row_version: number;
+  archived_at: string | null;
+  archived_by: string | null;
   messages?: DossierMessage[];
   events?: DossierEvent[];
   notifications?: DossierNotification[];
@@ -161,6 +163,20 @@ export async function listDossiers(params: {
   sort?: string;
 } = {}) {
   return (await api.get<DossiersResponse>("/dossiers", { params })).data;
+}
+
+export async function listArchivedDossiers(params: { q?: string; page?: number; page_size?: number } = {}) {
+  return (await api.get<DossiersResponse>("/dossiers/archived", { params })).data;
+}
+
+export async function archiveDossier(id: string, rowVersion: number) {
+  await api.delete(`/dossiers/${id}`, { params: { row_version: rowVersion } });
+}
+
+export async function restoreDossier(id: string, rowVersion: number) {
+  return (await api.post<{ status: "ok"; dossier: DossierRecord }>(
+    `/dossiers/${id}/restore`, null, { params: { row_version: rowVersion } },
+  )).data.dossier;
 }
 
 export async function getDossier(id: string) {

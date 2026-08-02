@@ -13,12 +13,14 @@ from app.db.dossier_repository import (
     DOSSIER_PAYMENT_STATUSES,
     DOSSIER_STATUSES,
     DOSSIER_VALIDATION_STATUSES,
+    archive_dossier,
     create_dossier,
     dossier_stats,
     dossier_timeline,
     export_dossiers,
     get_dossier,
     list_dossiers,
+    restore_dossier,
     update_dossier,
 )
 
@@ -166,6 +168,19 @@ def dossiers_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": dossier_stats(tenant["org_id"])}
 
 
+@router.get("/dossiers/archived", dependencies=[Depends(require_permission("dossiers.archive"))])
+def dossiers_archived(
+    q: str | None = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=100),
+    tenant=Depends(get_current_tenant),
+):
+    response = list_dossiers(
+        tenant["org_id"], q=q, page=page, page_size=page_size, archived=True
+    )
+    return {"status": "ok", "items": response["items"], "dossiers": response["items"], **response}
+
+
 @router.get("/dossiers/export", dependencies=[Depends(require_permission("dossiers.export"))])
 def dossiers_export(
     q: str | None = Query(default=None, max_length=120),
@@ -294,4 +309,42 @@ def dossiers_update(dossier_id: str, body: DossierPatchPayload, tenant=Depends(g
         raise
     if not dossier:
         raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "dossier": dossier}
+
+
+@router.delete("/dossiers/{dossier_id}", dependencies=[Depends(require_permission("dossiers.archive"))])
+def dossiers_archive(
+    dossier_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        archived = archive_dossier(
+            tenant["org_id"], dossier_id, _user_id(tenant), expected_version=row_version
+        )
+    except ValueError as exc:
+        if str(exc) == "stale_dossier_version":
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
+    if not archived:
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok"}
+
+
+@router.post("/dossiers/{dossier_id}/restore", dependencies=[Depends(require_permission("dossiers.archive"))])
+def dossiers_restore(
+    dossier_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        dossier = restore_dossier(
+            tenant["org_id"], dossier_id, _user_id(tenant), expected_version=row_version
+        )
+    except ValueError as exc:
+        if str(exc) == "stale_dossier_version":
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
+    if not dossier:
+        raise HTTPException(status_code=404, detail="archived_dossier_not_found")
     return {"status": "ok", "dossier": dossier}

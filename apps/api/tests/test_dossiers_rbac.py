@@ -10,8 +10,11 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers", "POST"): "dossiers.create",
     ("/dossiers/stats", "GET"): "dossiers.read",
     ("/dossiers/export", "GET"): "dossiers.export",
+    ("/dossiers/archived", "GET"): "dossiers.archive",
     ("/dossiers/{dossier_id}", "GET"): "dossiers.read",
     ("/dossiers/{dossier_id}", "PATCH"): "dossiers.update",
+    ("/dossiers/{dossier_id}", "DELETE"): "dossiers.archive",
+    ("/dossiers/{dossier_id}/restore", "POST"): "dossiers.archive",
     ("/dossiers/{dossier_id}/timeline", "GET"): "dossiers.read",
 }
 
@@ -44,6 +47,9 @@ def test_every_dossier_route_declares_the_expected_permission():
 
 def test_dossier_default_roles_follow_least_privilege():
     assert "dossiers.export" in DOSSIER_ROLE_PERMISSIONS["OWNER"]
+    assert "dossiers.archive" in DOSSIER_ROLE_PERMISSIONS["OWNER"]
+    assert "dossiers.archive" in DOSSIER_ROLE_PERMISSIONS["MANAGER"]
+    assert "dossiers.archive" not in DOSSIER_ROLE_PERMISSIONS["OPERATOR"]
     assert "dossiers.export" in DOSSIER_ROLE_PERMISSIONS["MANAGER"]
     assert "dossiers.export" not in DOSSIER_ROLE_PERMISSIONS["OPERATOR"]
     assert DOSSIER_ROLE_PERMISSIONS["WAREHOUSE"] == ("dossiers.read",)

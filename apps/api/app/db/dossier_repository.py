@@ -120,8 +120,9 @@ def _build_dossier_filters(
     validation_status: str | None,
     payment_status: str | None,
     client_id: str | None,
+    archived: bool = False,
 ) -> tuple[str, dict]:
-    filters = ["d.org_id = :org_id"]
+    filters = ["d.org_id = :org_id", "d.archived_at is not null" if archived else "d.archived_at is null"]
     params: dict[str, Any] = {"org_id": org_id}
 
     if q:
@@ -174,6 +175,7 @@ def list_dossiers(
     page: int = 1,
     page_size: int = 30,
     sort: str = "updated_desc",
+    archived: bool = False,
 ) -> dict:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
@@ -187,6 +189,7 @@ def list_dossiers(
         validation_status=validation_status,
         payment_status=payment_status,
         client_id=client_id,
+        archived=archived,
     )
     order_by = {
         "created_asc": "d.created_at asc",
@@ -245,6 +248,8 @@ def list_dossiers(
                     d.created_at,
                     d.updated_at,
                     d.row_version,
+                    d.archived_at,
+                    d.archived_by,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
@@ -301,7 +306,7 @@ def dossier_stats(org_id: str) -> dict:
                     count(*) filter (where payment_status in ('PENDING', 'WAITING', 'PARTIAL', 'OVERDUE'))::int payment_pending,
                     coalesce(sum(coalesce(final_total, quoted_total, 0)), 0) total_value
                 from dossiers
-                where org_id = :org_id
+                where org_id = :org_id and archived_at is null
             """),
             {"org_id": org_id},
         ).fetchone()
@@ -318,7 +323,7 @@ def dossier_stats(org_id: str) -> dict:
     }
 
 
-def get_dossier(org_id: str, dossier_id: str) -> dict | None:
+def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False) -> dict | None:
     with engine.connect() as conn:
         row = conn.execute(
             text(f"""
@@ -359,6 +364,8 @@ def get_dossier(org_id: str, dossier_id: str) -> dict | None:
                     d.created_at,
                     d.updated_at,
                     d.row_version,
+                    d.archived_at,
+                    d.archived_by,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
@@ -383,9 +390,10 @@ def get_dossier(org_id: str, dossier_id: str) -> dict | None:
                     group by dossier_id
                 ) s on s.dossier_id = d.id
                 where d.org_id = :org_id and d.id = :dossier_id
+                  and (:include_archived or d.archived_at is null)
                 limit 1
             """),
-            {"org_id": org_id, "dossier_id": dossier_id},
+            {"org_id": org_id, "dossier_id": dossier_id, "include_archived": include_archived},
         ).fetchone()
 
         dossier = _one(row)
@@ -609,6 +617,57 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
                 "payload": _json_payload({"user_id": user_id, "changes": payload}),
             },
         )
+    return get_dossier(org_id, dossier_id)
+
+
+def _audit_dossier(conn, org_id: str, dossier_id: str, user_id: str, action: str) -> None:
+    payload = _json_payload({"user_id": user_id, "action": action})
+    conn.execute(text("""
+        insert into dossier_events (org_id, dossier_id, event_type, payload)
+        values (:org_id, :dossier_id, :event_type, cast(:payload as jsonb))
+    """), {"org_id": org_id, "dossier_id": dossier_id,
+             "event_type": action.upper().replace(".", "_"), "payload": payload})
+    conn.execute(text("""
+        insert into audit_logs (org_id, actor_id, entity_type, entity_id, action, metadata, severity)
+        values (:org_id, :user_id, 'dossier', :dossier_id, :action,
+                cast(:payload as jsonb), 'INFO')
+    """), {"org_id": org_id, "user_id": user_id, "dossier_id": dossier_id,
+             "action": action, "payload": payload})
+
+
+def archive_dossier(org_id: str, dossier_id: str, user_id: str, *, expected_version: int) -> bool:
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            update dossiers
+            set archived_at = now(), archived_by = :user_id, updated_at = now(),
+                row_version = row_version + 1
+            where org_id = :org_id and id = :dossier_id
+              and archived_at is null and row_version = :expected_version
+        """), {"org_id": org_id, "dossier_id": dossier_id, "user_id": user_id,
+                 "expected_version": expected_version})
+        if result.rowcount:
+            _audit_dossier(conn, org_id, dossier_id, user_id, "dossier.archived")
+    if result.rowcount == 0 and get_dossier(org_id, dossier_id):
+        raise ValueError("stale_dossier_version")
+    return result.rowcount > 0
+
+
+def restore_dossier(org_id: str, dossier_id: str, user_id: str, *, expected_version: int) -> dict | None:
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            update dossiers
+            set archived_at = null, archived_by = null, updated_at = now(),
+                row_version = row_version + 1
+            where org_id = :org_id and id = :dossier_id
+              and archived_at is not null and row_version = :expected_version
+        """), {"org_id": org_id, "dossier_id": dossier_id, "user_id": user_id,
+                 "expected_version": expected_version})
+        if result.rowcount:
+            _audit_dossier(conn, org_id, dossier_id, user_id, "dossier.restored")
+    if result.rowcount == 0:
+        if get_dossier(org_id, dossier_id, include_archived=True):
+            raise ValueError("stale_dossier_version")
+        return None
     return get_dossier(org_id, dossier_id)
 
 

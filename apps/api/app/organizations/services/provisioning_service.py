@@ -22,8 +22,8 @@ CLIENT_ROLE_PERMISSIONS = {
 }
 
 DOSSIER_ROLE_PERMISSIONS = {
-    "OWNER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.export"),
-    "MANAGER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.export"),
+    "OWNER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export"),
+    "MANAGER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export"),
     "OPERATOR": ("dossiers.read", "dossiers.create", "dossiers.update"),
     "SUPPORT": ("dossiers.read", "dossiers.export"),
     "WAREHOUSE": ("dossiers.read",),

@@ -3,6 +3,7 @@
 import axios from "axios";
 import {
   AlertCircle,
+  Archive,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -11,6 +12,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Package,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -21,12 +23,15 @@ import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
+  archiveDossier,
   createDossier,
   exportDossiers,
   getDossier,
   getDossierStats,
   getDossierTimeline,
   listDossiers,
+  listArchivedDossiers,
+  restoreDossier,
   updateDossier,
   type DossierCaseType,
   type DossierIntakeStatus,
@@ -123,7 +128,7 @@ const emptyStats: DossierStats = {
   total_value: 0,
 };
 
-const views: Array<{ key: string; label: string; status?: DossierStatus }> = [
+const views: Array<{ key: string; label: string; status?: DossierStatus; archived?: boolean }> = [
   { key: "all", label: "Tous" },
   { key: "active", label: "Actifs" },
   { key: "lead", label: "Leads", status: "LEAD" },
@@ -131,6 +136,7 @@ const views: Array<{ key: string; label: string; status?: DossierStatus }> = [
   { key: "waiting", label: "Attente colis", status: "WAITING_PACKAGES" },
   { key: "transit", label: "En transit", status: "IN_TRANSIT" },
   { key: "delivered", label: "Livrés", status: "DELIVERED" },
+  { key: "archived", label: "Archivés", archived: true },
 ];
 
 const buttonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
@@ -164,6 +170,7 @@ export function DossiersPage() {
   const [formDossier, setFormDossier] = useState<DossierRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [dossierAction, setDossierAction] = useState<"archive" | "restore" | null>(null);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
   const page = pagination.page || 1;
@@ -196,7 +203,11 @@ export function DossiersPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await listDossiers({
+      const response = currentView.archived ? await listArchivedDossiers({
+        q: query || undefined,
+        page: nextPage,
+        page_size: 30,
+      }) : await listDossiers({
         q: query || undefined,
         status_global: currentView.key === "active" ? undefined : currentView.status || status || undefined,
         case_type: caseType || undefined,
@@ -333,6 +344,34 @@ export function DossiersPage() {
     }
   }
 
+  async function handleArchive() {
+    if (!selected || dossierAction || !window.confirm(`Archiver ${selected.dossier_reference} ?`)) return;
+    setDossierAction("archive");
+    try {
+      await archiveDossier(selected.id, selected.row_version);
+      setSelected(null);
+      await Promise.all([loadStats(), loadDossiers(page)]);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setDossierAction(null);
+    }
+  }
+
+  async function handleRestore() {
+    if (!selected || dossierAction) return;
+    setDossierAction("restore");
+    try {
+      await restoreDossier(selected.id, selected.row_version);
+      setSelected(null);
+      await Promise.all([loadStats(), loadDossiers(page)]);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setDossierAction(null);
+    }
+  }
+
   const statCards = useMemo(() => [
     { label: "Dossiers total", value: stats.total, tone: "blue" },
     { label: "Actifs", value: stats.active, tone: "blue" },
@@ -453,6 +492,10 @@ export function DossiersPage() {
           timelineLoading={timelineLoading}
           onClose={() => setSelected(null)}
           onEdit={() => openEdit(selected)}
+          archived={Boolean(currentView.archived)}
+          action={dossierAction}
+          onArchive={handleArchive}
+          onRestore={handleRestore}
         />
       )}
 
@@ -556,6 +599,10 @@ function DossierDetails({
   timelineLoading,
   onClose,
   onEdit,
+  archived,
+  action,
+  onArchive,
+  onRestore,
 }: {
   dossier: DossierRecord;
   loading: boolean;
@@ -565,6 +612,10 @@ function DossierDetails({
   timelineLoading: boolean;
   onClose: () => void;
   onEdit: () => void;
+  archived: boolean;
+  action: "archive" | "restore" | null;
+  onArchive: () => void;
+  onRestore: () => void;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -605,7 +656,14 @@ function DossierDetails({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <PermissionGuard permission="dossiers.update"><button onClick={onEdit} className={buttonClass}><Edit3 size={15} />Modifier</button></PermissionGuard>
+              {!archived && <PermissionGuard permission="dossiers.update"><button onClick={onEdit} className={buttonClass}><Edit3 size={15} />Modifier</button></PermissionGuard>}
+              <PermissionGuard permission="dossiers.archive">
+                {archived ? (
+                  <button onClick={onRestore} disabled={action !== null} className={buttonClass}><RotateCcw size={15} />{action === "restore" ? "Restauration…" : "Restaurer"}</button>
+                ) : (
+                  <button onClick={onArchive} disabled={action !== null} className={buttonClass}><Archive size={15} />{action === "archive" ? "Archivage…" : "Archiver"}</button>
+                )}
+              </PermissionGuard>
               <button onClick={close} className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd5dd] bg-white hover:bg-[#f7f8fa]" aria-label="Fermer">
                 <X size={17} />
               </button>

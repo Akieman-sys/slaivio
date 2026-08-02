@@ -15,7 +15,6 @@ import {
   Import,
   Mail,
   MessageCircle,
-  MoreHorizontal,
   Package,
   Phone,
   Search,
@@ -158,7 +157,7 @@ export function ClientsPage() {
   const [importing, setImporting] = useState(false);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
-  const visibleViews = views.filter((view) => !view.archived || (permissionsAvailable && permissions.includes("clients.archive")));
+  const archivedAllowed = permissionsAvailable && permissions.includes("clients.archive");
   const page = pagination.page || 1;
 
   useEffect(() => {
@@ -265,7 +264,12 @@ export function ClientsPage() {
     setTimeline([]);
     setDuplicates([]);
     try {
-      setSelected(await getClient(client.id));
+      const [detail, detectedDuplicates] = await Promise.all([
+        getClient(client.id),
+        findClientDuplicates({ client_id: client.id }),
+      ]);
+      setSelected(detail);
+      setDuplicates(detectedDuplicates);
     } catch {
       setSelected(client);
     } finally {
@@ -419,15 +423,17 @@ export function ClientsPage() {
               </button></PermissionGuard>
             </>}
           tabs={<>
-            {visibleViews.map((view) => (
+            {views.map((view) => (
               <button
                 key={view.key}
+                disabled={Boolean(view.archived && !archivedAllowed)}
+                title={view.archived && !archivedAllowed ? "Permission clients.archive requise" : undefined}
                 onClick={() => setActiveView(view.key)}
                 className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition ${
                   activeView === view.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"
-                }`}
+                } disabled:cursor-not-allowed disabled:opacity-45`}
               >
-                {view.label}
+                {view.label}{view.archived && !archivedAllowed ? " · verrouillé" : ""}
               </button>
             ))}
           </>}
@@ -583,7 +589,6 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
       <table className="min-w-[1120px] w-full border-collapse text-left text-[13px]">
         <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
-            <th className="w-10 px-4 py-2"><input type="checkbox" className="rounded border-[#c9d0d8]" aria-label="Sélectionner tous les clients" /></th>
             <th className="px-3 py-2">Client</th>
             <th className="px-3 py-2">Téléphone</th>
             <th className="px-3 py-2">Email</th>
@@ -603,9 +608,6 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
               onClick={() => onSelect(client)}
               className={`cursor-pointer transition hover:bg-[#f6f8fb] ${selectedId === client.id ? "bg-[#edf2f8]" : ""}`}
             >
-              <td className="px-4 py-2" onClick={(event) => event.stopPropagation()}>
-                <input type="checkbox" className="rounded border-[#c9d0d8]" aria-label={`Sélectionner ${client.display_name || client.name || "client"}`} />
-              </td>
               <td className="px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-[#1f2328]">{client.display_name || client.name || client.company_name || "Sans nom"}</p>
@@ -620,7 +622,7 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
               <td className="px-3 py-2 text-right font-medium">{client.dossiers_count}</td>
               <td className="px-3 py-2 text-right font-medium">{client.shipments_count}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(client.last_activity_at || client.updated_at)}</td>
-              <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
+              <td className="px-3 py-2"><ChevronRight size={16} className="text-[#687584]" aria-hidden="true" /></td>
             </tr>
           ))}
         </tbody>
@@ -698,7 +700,7 @@ function ClientDetails({
               </div>
               <div className="flex gap-1">
                 {!archived && <PermissionGuard permission="clients.update"><button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le client"><Edit3 size={16} /></button></PermissionGuard>}
-                <PermissionGuard permission="clients.archive">{archived ? <button onClick={onRestore} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100" aria-label="Restaurer le client"><RotateCcw size={15} /> Restaurer</button> : <button onClick={onArchive} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50" aria-label="Archiver le client"><Archive size={15} /> Archiver</button>}</PermissionGuard>
+                <PermissionGuard permission="clients.archive" fallback={<span title="Permission clients.archive requise" className="inline-flex h-8 items-center rounded-md border border-[#ddd] bg-[#f5f5f3] px-2 text-[11px] text-[#777]">Archivage non autorisé</span>}>{archived ? <button onClick={onRestore} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100" aria-label="Restaurer le client"><RotateCcw size={15} /> Restaurer</button> : <button onClick={onArchive} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50" aria-label="Archiver le client"><Archive size={15} /> Archiver</button>}</PermissionGuard>
                 <button onClick={close} className={iconButtonClass} aria-label="Fermer"><X size={17} /></button>
               </div>
             </div>
@@ -717,7 +719,7 @@ function ClientDetails({
                   activeTab === tab.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#5f6b76] hover:bg-[#f4f6f8]"
                 }`}
               >
-                {tab.label}
+                {tab.label}{tab.key === "duplicates" && duplicates.length > 0 ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{duplicates.length}</span> : null}
               </button>
             ))}
           </div>
@@ -728,7 +730,7 @@ function ClientDetails({
             {activeTab === "messages" && <ModulePlaceholder icon={MessageCircle} title="Messages client" text="Cette vue affichera les conversations WhatsApp, emails et messages liés à ce client lorsque le module Communication les aura synchronisés." />}
             {activeTab === "payments" && <ModulePlaceholder icon={ShieldAlert} title="Paiements client" text="Cette vue affichera les factures, paiements reçus, soldes et relances provenant du module Finance. Aucun montant n’est inventé ici." />}
             {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
-            {activeTab === "duplicates" && <DuplicatesTab duplicates={duplicates} loading={duplicatesLoading} mergingId={mergingDuplicateId} onMerge={onMergeDuplicate} />}
+            {activeTab === "duplicates" && <DuplicatesTab targetId={client.id} duplicates={duplicates} loading={duplicatesLoading} mergingId={mergingDuplicateId} onMerge={onMergeDuplicate} />}
             {activeTab === "notes" && <NotesTab client={client} />}
           </div>
         </div>
@@ -798,12 +800,41 @@ function HistoryTab({ events, loading }: { events: ClientTimelineEvent[]; loadin
   );
 }
 
-function DuplicatesTab({ duplicates, loading, mergingId, onMerge }: { duplicates: ClientDuplicate[]; loading: boolean; mergingId: string | null; onMerge: (source: ClientDuplicate) => void }) {
+function DuplicatesTab({ targetId, duplicates, loading, mergingId, onMerge }: { targetId: string; duplicates: ClientDuplicate[]; loading: boolean; mergingId: string | null; onMerge: (source: ClientDuplicate) => void }) {
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualResults, setManualResults] = useState<ClientDuplicate[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+
+  useEffect(() => {
+    const normalized = manualQuery.trim();
+    if (normalized.length < 2) { setManualResults([]); return; }
+    let active = true;
+    const timeout = window.setTimeout(async () => {
+      setManualLoading(true);
+      try {
+        const response = await listClients({ q: normalized, page: 1, page_size: 10 });
+        if (active) setManualResults(response.items.filter((item) => item.id !== targetId).map((item) => ({ ...item, match_reason: "manual" })));
+      } catch {
+        if (active) setManualResults([]);
+      } finally {
+        if (active) setManualLoading(false);
+      }
+    }, 250);
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [manualQuery, targetId]);
+
   if (loading) return <LoadingLines />;
-  if (duplicates.length === 0) return <EmptyState title="Aucun doublon détecté" text="Aucun autre client ne partage actuellement le même téléphone, email ou nom proche dans cette organisation." />;
+  const candidates = [...duplicates, ...manualResults.filter((manual) => !duplicates.some((duplicate) => duplicate.id === manual.id))];
   return (
     <div className="space-y-3">
-      {duplicates.map((item) => (
+      <div className="rounded-md border border-[#d8dce2] bg-[#fbfcfd] p-4">
+        <h3 className="text-[14px] font-semibold">Fusionner une autre fiche dans celle-ci</h3>
+        <p className="mt-1 text-[12px] leading-5 text-[#687584]">Les dossiers, colis, messages et opérations de la fiche choisie seront déplacés vers la fiche actuellement ouverte.</p>
+        <label className="mt-3 flex h-9 items-center rounded-md border border-[#cfd5dd] bg-white px-3 focus-within:border-[#615cf2]"><Search size={15} className="text-[#687584]" /><input value={manualQuery} onChange={(event) => setManualQuery(event.target.value)} placeholder="Rechercher par nom, téléphone ou email…" className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none" /></label>
+        {manualLoading && <p className="mt-2 text-[12px] text-[#687584]">Recherche…</p>}
+      </div>
+      {candidates.length === 0 && <EmptyState title={manualQuery.trim().length >= 2 ? "Aucune autre fiche trouvée" : "Aucun doublon détecté"} text="Utilisez la recherche ci-dessus pour sélectionner manuellement une autre fiche client." />}
+      {candidates.map((item) => (
         <div key={item.id} className="rounded-md border border-[#d8dce2] p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -812,7 +843,7 @@ function DuplicatesTab({ duplicates, loading, mergingId, onMerge }: { duplicates
             </div>
             <span className="rounded-full bg-amber-50 px-2 py-1 text-[12px] font-medium text-amber-700 ring-1 ring-amber-100">{duplicateLabel(item.match_reason)}</span>
           </div>
-          <PermissionGuard permission="clients.merge"><button onClick={() => onMerge(item)} disabled={mergingId !== null} className="mt-3 inline-flex h-8 items-center rounded-md border border-[#cfd5dd] bg-white px-3 text-[12px] font-medium hover:bg-[#f7f8fa] disabled:opacity-50">{mergingId === item.id ? "Fusion en cours…" : "Fusionner dans cette fiche"}</button></PermissionGuard>
+          <PermissionGuard permission="clients.merge" fallback={<p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[12px] text-amber-800">La permission <code>clients.merge</code> est nécessaire pour fusionner ces fiches.</p>}><button onClick={() => onMerge(item)} disabled={mergingId !== null} className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-md bg-[#615cf2] px-3 text-[12px] font-semibold text-white hover:bg-[#504ad8] disabled:opacity-50">{mergingId === item.id ? "Fusion en cours…" : "Fusionner cette fiche dans la fiche ouverte"}</button></PermissionGuard>
         </div>
       ))}
     </div>

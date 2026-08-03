@@ -6,6 +6,7 @@ import {
   Truck,
   Users,
   Warehouse,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
       { label: "Tracking", href: "/app/tracking", icon: Radar, permission: "tracking.read", keywords: ["tracking", "suivi", "control tower", "retard"] },
       { label: "Expéditions", href: "/app/shipments", icon: Truck, permission: "shipments.read", keywords: ["expédition", "shipment", "transport"] },
       { label: "Entrepôts", href: "/app/warehouses", icon: Warehouse, permission: "warehouses.read", keywords: ["entrepôt", "warehouse", "stock", "inventaire", "emplacement"] },
+      { label: "Retraits", href: "/app/pickups", icon: HandCoins, permission: "pickups.read", keywords: ["retrait", "guichet", "remise", "pickup", "otp"] },
     ],
   },
 ];

@@ -1,0 +1,18 @@
+import {api} from "./api";
+export type Pickup={id:string;pickup_reference:string;client_id:string;status:string;recipient_type:string;recipient_name:string|null;recipient_phone:string|null;authorized_person_name:string|null;identity_type:string|null;identity_reference_masked:string|null;payment_status:string;required_amount:number;paid_amount:number;storage_fee:number;currency:string;release_blocked_reason:string|null;ready_at:string;notified_at:string|null;checked_in_at:string|null;verified_at:string|null;released_at:string|null;row_version:number;client_name:string;package_count:number;package_references:string};
+export type PickupDetail=Pickup&{packages:Array<{id:string;package_reference:string;tracking_id:string|null;description:string|null;weight_kg:number|null;payment_status:string;fees_total:number;fees_paid:number}>;verifications:Array<{id:string;verification_type:string;verification_status:string;reason:string|null;created_at:string}>;proofs:Array<{id:string;signed_by:string;signature_text:string|null;created_at:string}>;events:Array<{id:number;event_type:string;actor_name:string;created_at:string}>};
+export type EligiblePackage={id:string;package_reference:string;tracking_id:string|null;client_id:string;client_name:string;client_phone:string;payment_status:string;fees_total:number;fees_paid:number;currency:string};
+export type PickupStats={waiting:number;at_counter:number;verified:number;released_today:number;overdue:number;storage_fees_due:number;average_counter_minutes:number};
+export const listPickups=async(params?:Record<string,unknown>)=>(await api.get<{items:Pickup[];pagination:{page:number;page_size:number;total:number;total_pages:number}}>("/pickups",{params})).data;
+export const getPickup=async(id:string)=>(await api.get<PickupDetail>(`/pickups/${id}`)).data;
+export const getPickupStats=async()=>(await api.get<PickupStats>("/pickups/stats")).data;
+export const eligiblePickupPackages=async(q?:string)=>(await api.get<{items:EligiblePackage[]}>("/pickups/eligible-packages",{params:{q}})).data.items;
+export const createPickup=async(payload:Record<string,unknown>)=>(await api.post<Pickup>("/pickups",payload)).data;
+export const notifyPickup=async(id:string)=>(await api.post(`/pickups/${id}/notify`)).data;
+export const checkInPickup=async(id:string,expected_version:number)=>(await api.post<Pickup>(`/pickups/${id}/check-in`,{expected_version})).data;
+export const verifyPickupOtp=async(id:string,code:string)=>(await api.post(`/pickups/${id}/verify-otp`,{code})).data;
+export const verifyPickupIdentity=async(id:string,payload:Record<string,unknown>)=>(await api.post<Pickup>(`/pickups/${id}/verify-identity`,payload)).data;
+export const verifyPickupPayment=async(id:string,payload:Record<string,unknown>)=>(await api.post<Pickup>(`/pickups/${id}/verify-payment`,payload)).data;
+export const markPickupVerified=async(id:string,expected_version:number)=>(await api.post<Pickup>(`/pickups/${id}/verify`,{expected_version})).data;
+export const releasePickup=async(id:string,payload:Record<string,unknown>,override=false)=>(await api.post<Pickup>(`/pickups/${id}/${override?'override-release':'release'}`,payload)).data;
+export const exportPickups=async()=>(await api.get("/pickups/export",{responseType:"blob"})).data as Blob;

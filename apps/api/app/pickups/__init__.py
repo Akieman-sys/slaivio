@@ -1,0 +1,1 @@
+"""Agency pickup counter domain."""

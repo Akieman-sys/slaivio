@@ -9,6 +9,8 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers", "GET"): "dossiers.read",
     ("/dossiers", "POST"): "dossiers.create",
     ("/dossiers/stats", "GET"): "dossiers.read",
+    ("/dossiers/alerts", "GET"): "dossiers.read",
+    ("/dossiers/alerts/{alert_id}/acknowledge", "PATCH"): "dossiers.update",
     ("/dossiers/export", "GET"): "dossiers.export",
     ("/dossiers/archived", "GET"): "dossiers.archive",
     ("/dossiers/{dossier_id}", "GET"): "dossiers.read",

@@ -43,6 +43,11 @@ from app.db.dossier_collaboration_repository import (
     update_collaboration,
     update_note,
 )
+from app.db.dossier_alert_repository import (
+    acknowledge_dossier_alert,
+    list_dossier_alerts,
+    refresh_dossier_alerts,
+)
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
 
 
@@ -219,6 +224,26 @@ def dossiers_index(
 @router.get("/dossiers/stats", dependencies=[Depends(require_permission("dossiers.read"))])
 def dossiers_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": dossier_stats(tenant["org_id"])}
+
+
+@router.get("/dossiers/alerts", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossiers_alerts(
+    dossier_id: str | None = None,
+    include_resolved: bool = False,
+    tenant=Depends(get_current_tenant),
+):
+    summary = refresh_dossier_alerts(tenant["org_id"])
+    return {"status": "ok", "items": list_dossier_alerts(
+        tenant["org_id"], dossier_id=dossier_id, include_resolved=include_resolved
+    ), "refresh": summary}
+
+
+@router.patch("/dossiers/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_permission("dossiers.update"))])
+def dossiers_alert_acknowledge(alert_id: str, tenant=Depends(get_current_tenant)):
+    alert = acknowledge_dossier_alert(tenant["org_id"], alert_id, _user_id(tenant))
+    if not alert:
+        raise HTTPException(status_code=409, detail="alert_not_open_or_not_found")
+    return {"status": "ok", "alert": alert}
 
 
 @router.get("/dossiers/archived", dependencies=[Depends(require_permission("dossiers.archive"))])

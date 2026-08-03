@@ -26,6 +26,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
   archiveDossier,
+  acknowledgeDossierAlert,
   createDossier,
   exportDossiers,
   getDossier,
@@ -35,6 +36,7 @@ import {
   listDossierChecklist,
   listDossierDocuments,
   listDossiers,
+  listDossierAlerts,
   listArchivedDossiers,
   restoreDossier,
   updateDossierChecklistItem,
@@ -50,6 +52,7 @@ import {
   type DossierChecklistItem,
   type DossierDocument,
   type DossierInternalNote,
+  type DossierOperationalAlert,
   type DossierMember,
   type DossierPriority,
   type DossierIntakeStatus,
@@ -175,6 +178,7 @@ export function DossiersPage() {
   const [checklist, setChecklist] = useState<DossierChecklistItem[]>([]);
   const [members, setMembers] = useState<DossierMember[]>([]);
   const [notes, setNotes] = useState<DossierInternalNote[]>([]);
+  const [alerts, setAlerts] = useState<DossierOperationalAlert[]>([]);
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
   const [query, setQuery] = useState("");
@@ -205,8 +209,12 @@ export function DossiersPage() {
   }, [query, caseType, status, validation, payment, sort, activeView]);
 
   useEffect(() => {
-    loadStats();
+    Promise.all([loadStats(), loadAlerts()]);
   }, []);
+
+  async function loadAlerts() {
+    try { setAlerts(await listDossierAlerts()); } catch { setAlerts([]); }
+  }
 
   useEffect(() => {
     if (!selected || activeTab !== "history") return;
@@ -347,6 +355,7 @@ export function DossiersPage() {
       setFormOpen(false);
       setFormDossier(null);
       await Promise.all([loadStats(), loadDossiers(formMode === "edit" ? page : 1)]);
+      await loadAlerts();
     } catch (err) {
       setFormError(apiErrorMessage(err));
     } finally {
@@ -453,6 +462,7 @@ export function DossiersPage() {
         </section>
 
         <section>
+          {alerts.length > 0 && <div className="border-b border-[#d8dce2] bg-[#fffaf0] px-5 py-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[13px] font-semibold text-[#7a4300]">{alerts.length} alerte(s) opérationnelle(s)</p><p className="text-[12px] text-[#8a5a18]">Échéances, urgences, checklist et dossiers sans activité.</p></div></div><div className="mt-3 grid gap-2 lg:grid-cols-2">{alerts.slice(0, 4).map((alert) => <button key={alert.id} onClick={async () => { const dossier = dossiers.find((item) => item.id === alert.dossier_id); if (dossier) await selectDossier(dossier); }} className="flex items-center gap-3 rounded-md border border-amber-200 bg-white p-3 text-left"><AlertCircle size={16} className={alert.severity === "CRITICAL" ? "text-red-600" : "text-amber-600"} /><span className="min-w-0 flex-1"><strong className="block truncate text-[13px]">{alert.dossier_reference} · {alert.title}</strong><small className="block truncate text-[#687584]">{alert.message}</small></span>{alert.status === "OPEN" && <PermissionGuard permission="dossiers.update"><span onClick={async (event) => { event.stopPropagation(); await acknowledgeDossierAlert(alert.id); await loadAlerts(); }} className="rounded border px-2 py-1 text-[11px]">Prendre en charge</span></PermissionGuard>}</button>)}</div></div>}
           <div className="flex flex-col gap-2 border-b border-[#d8dce2] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={caseType} onChange={(value) => setCaseType(value as DossierCaseType | "")} label="Type">
               <option value="">Type</option>
@@ -541,11 +551,13 @@ export function DossiersPage() {
           onChecklist={async (item, nextStatus) => {
             const updated = await updateDossierChecklistItem(selected.id, item, nextStatus);
             setChecklist((items) => items.map((current) => current.id === updated.id ? updated : current));
+            await loadAlerts();
           }}
           onCollaboration={async (priority, assignedTo, dueAt) => {
             const updated = await updateDossierCollaboration(selected.id, { row_version: selected.row_version, priority, assigned_to: assignedTo, due_at: dueAt });
             setSelected(updated);
             setDossiers((items) => items.map((item) => item.id === updated.id ? updated : item));
+            await loadAlerts();
           }}
           onCreateNote={async (body) => { await createDossierNote(selected.id, body); setNotes(await listDossierNotes(selected.id)); }}
           onUpdateNote={async (note, body) => { await updateDossierNote(selected.id, note, body); setNotes(await listDossierNotes(selected.id)); }}

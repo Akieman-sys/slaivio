@@ -1,5 +1,10 @@
 from pathlib import Path
 
+import pytest
+
+from app.core.config import settings
+from app.services.dossier_document_storage import _configuration
+
 from app.api.dossiers import ChecklistPatchPayload
 
 
@@ -15,3 +20,20 @@ def test_private_document_migration_contract():
     assert "seed_dossier_checklist" in sql
     assert "enforce_dossier_child_tenant" in sql
     assert "revoke all on dossier_documents" in sql
+
+
+def test_document_storage_rejects_database_urls(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_url", "postgresql://db.example.test/postgres")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "test-service-key")
+
+    with pytest.raises(RuntimeError, match="document_storage_url_invalid"):
+        _configuration()
+
+
+def test_document_storage_accepts_supabase_http_url(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_url", "https://project-ref.supabase.co/")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "test-service-key")
+
+    base_url, _, bucket = _configuration()
+    assert base_url == "https://project-ref.supabase.co"
+    assert bucket == "dossier-documents"

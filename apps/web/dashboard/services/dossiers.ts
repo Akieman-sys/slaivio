@@ -118,6 +118,14 @@ export type DossierInternalNote = {
   id: string; body: string; author_id: string; edited_at: string | null;
   row_version: number; created_at: string; updated_at: string;
 };
+export type DossierOperationalAlert = {
+  id: string; dossier_id: string; dossier_reference: string;
+  alert_type: "OVERDUE" | "URGENT" | "CHECKLIST_INCOMPLETE" | "STALE";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+  severity: "NORMAL" | "HIGH" | "CRITICAL";
+  title: string; message: string; detected_at: string;
+  acknowledged_at: string | null; acknowledged_by: string | null;
+};
 
 export type DossierMessage = {
   id: string;
@@ -269,6 +277,14 @@ export async function updateDossierNote(id: string, note: DossierInternalNote, b
 
 export async function deleteDossierNote(id: string, note: DossierInternalNote) {
   await api.delete(`/dossiers/${id}/notes/${note.id}`, { params: { row_version: note.row_version } });
+}
+
+export async function listDossierAlerts(params: { dossier_id?: string; include_resolved?: boolean } = {}) {
+  return (await api.get<{ items: DossierOperationalAlert[] }>("/dossiers/alerts", { params })).data.items;
+}
+
+export async function acknowledgeDossierAlert(alertId: string) {
+  return (await api.patch<{ alert: DossierOperationalAlert }>(`/dossiers/alerts/${alertId}/acknowledge`)).data.alert;
 }
 
 export async function exportDossiers(params: {

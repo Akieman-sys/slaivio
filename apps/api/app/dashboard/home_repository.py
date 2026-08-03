@@ -152,6 +152,17 @@ def _module_counts(conn, org_id: str, tables: set[str]) -> dict[str, dict]:
 
 def _attention_items(conn, org_id: str, tables: set[str]) -> list[dict]:
     items: list[dict] = []
+    if "dossier_operational_alerts" in tables:
+        rows = _optional_rows(conn, "attention_dossier_alerts", """
+            select a.id::text, d.dossier_reference title, a.status,
+                   a.detected_at created_at, a.message, a.severity priority
+            from dossier_operational_alerts a
+            join dossiers d on d.id = a.dossier_id and d.org_id = a.org_id
+            where a.org_id = :org_id and a.status in ('OPEN', 'ACKNOWLEDGED')
+            order by case a.severity when 'CRITICAL' then 1 when 'HIGH' then 2 else 3 end,
+                     a.detected_at asc limit 5
+        """, {"org_id": org_id})
+        items.extend(dict(item, kind="dossier", href="/app/dossiers") for item in rows)
     if "shipments" in tables:
         rows = _optional_rows(conn, "attention_shipments", """
             select id::text, coalesce(tracking_id, id::text) title,

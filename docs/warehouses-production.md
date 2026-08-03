@@ -21,3 +21,19 @@ Le workspace Entrepôts consolide le stock physique porté par `cargo_packages`.
 4. Créer deux entrepôts, un emplacement, déplacer un colis, effectuer un transfert puis un inventaire.
 
 Aucun bucket Supabase supplémentaire ni variable Railway n’est nécessaire pour ce bloc.
+
+## Complément Warehouse Operating System
+
+La migration `045_warehouse_operating_system.sql` ajoute les parcours quotidiens manquants :
+
+- réception avec file d’attente des colis non identifiés et clé d’idempotence ;
+- association à la fiche Colis canonique et détection de tracking en double ;
+- scan individuel ou en lot par caméra, douchette USB ou PDA ;
+- pesage manuel ou depuis une balance identifiée, dimensions, CBM et poids volumétrique ;
+- contrôle qualité avec blocage automatique et création d’anomalie ;
+- groupage multi-colis et workflow de chargement jusqu’au départ ;
+- packing list exportable ;
+- détection idempotente des colis oubliés, poids manquants, paiements bloquants et dimensions incohérentes ;
+- rôles Réceptionnaire, Peseur, Contrôleur qualité et Superviseur entrepôt.
+
+Les photos privées, l’OCR d’étiquette, les QR/codes-barres et les notifications WhatsApp restent fournis par la fiche Colis afin de conserver une seule source de vérité.

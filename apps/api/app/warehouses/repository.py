@@ -39,9 +39,10 @@ def list_warehouses(org_id, q=None, active=None):
 
 def create_warehouse(org_id, actor, payload):
     warehouse_id=str(uuid4())
+    payload={**payload,"opening_hours":json.dumps(payload.get("opening_hours") or {})}
     with engine.begin() as conn:
-        row=conn.execute(text("""insert into warehouses(id,org_id,warehouse_code,warehouse_name,warehouse_type,country_code,city,address,contact_phone,contact_name,manager_id,manager_name,timezone,capacity_packages,capacity_weight_kg,capacity_volume_cbm)
-          values(:id,:o,:warehouse_code,:warehouse_name,:warehouse_type,:country_code,:city,:address,:contact_phone,:contact_name,:manager_id,:manager_name,:timezone,:capacity_packages,:capacity_weight_kg,:capacity_volume_cbm)
+        row=conn.execute(text("""insert into warehouses(id,org_id,warehouse_code,warehouse_name,warehouse_type,country_code,city,address,contact_phone,contact_name,contact_email,latitude,longitude,opening_hours,manager_id,manager_name,timezone,capacity_packages,capacity_weight_kg,capacity_volume_cbm)
+          values(:id,:o,:warehouse_code,:warehouse_name,:warehouse_type,:country_code,:city,:address,:contact_phone,:contact_name,:contact_email,:latitude,:longitude,cast(:opening_hours as jsonb),:manager_id,:manager_name,:timezone,:capacity_packages,:capacity_weight_kg,:capacity_volume_cbm)
           returning *"""),{"id":warehouse_id,"o":org_id,**payload}).mappings().one()
         _audit(conn,org_id,warehouse_id,"warehouse",warehouse_id,"CREATED",actor,payload)
         return dict(row)
@@ -63,9 +64,11 @@ def get_warehouse(org_id, warehouse_id):
 
 
 def update_warehouse(org_id, warehouse_id, actor, payload, expected_version):
-    allowed={"warehouse_name","warehouse_type","country_code","city","address","contact_phone","contact_name","manager_id","manager_name","timezone","capacity_packages","capacity_weight_kg","capacity_volume_cbm","active"}
+    allowed={"warehouse_name","warehouse_type","country_code","city","address","contact_phone","contact_name","contact_email","latitude","longitude","opening_hours","manager_id","manager_name","timezone","capacity_packages","capacity_weight_kg","capacity_volume_cbm","active"}
     values={k:v for k,v in payload.items() if k in allowed}; sets=[f"{k}=:{k}" for k in values]
     if not sets:return get_warehouse(org_id,warehouse_id)
+    if "opening_hours" in values: values["opening_hours"]=json.dumps(values["opening_hours"])
+    sets=["opening_hours=cast(:opening_hours as jsonb)" if item=="opening_hours=:opening_hours" else item for item in sets]
     params={"o":org_id,"id":warehouse_id,"v":expected_version,**values}
     with engine.begin() as conn:
         row=conn.execute(text(f"update warehouses set {','.join(sets)},row_version=row_version+1,updated_at=now() where org_id=:o and id=:id and row_version=:v returning *"),params).mappings().first()
@@ -76,8 +79,8 @@ def update_warehouse(org_id, warehouse_id, actor, payload, expected_version):
 
 def create_slot(org_id, warehouse_id, actor, payload):
     with engine.begin() as conn:
-        row=conn.execute(text("""insert into warehouse_slots(org_id,warehouse_id,code,zone,aisle,rack,shelf,position,capacity_packages,capacity_weight_kg,capacity_volume_cbm,status)
-          select :o,:w,:code,:zone,:aisle,:rack,:shelf,:position,:capacity_packages,:capacity_weight_kg,:capacity_volume_cbm,:status where exists(select 1 from warehouses where id=:w and org_id=:o) returning *"""),{"o":org_id,"w":warehouse_id,**payload}).mappings().first()
+        row=conn.execute(text("""insert into warehouse_slots(org_id,warehouse_id,code,zone,zone_type,aisle,rack,shelf,position,responsible_id,responsible_name,capacity_packages,capacity_weight_kg,capacity_volume_cbm,status)
+          select :o,:w,:code,:zone,:zone_type,:aisle,:rack,:shelf,:position,:responsible_id,:responsible_name,:capacity_packages,:capacity_weight_kg,:capacity_volume_cbm,:status where exists(select 1 from warehouses where id=:w and org_id=:o) returning *"""),{"o":org_id,"w":warehouse_id,**payload}).mappings().first()
         if not row:raise HTTPException(404,"warehouse_not_found")
         _audit(conn,org_id,warehouse_id,"slot",row["id"],"CREATED",actor,payload);return dict(row)
 

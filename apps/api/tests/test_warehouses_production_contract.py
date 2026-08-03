@@ -25,3 +25,24 @@ def test_migration_is_rerunnable_and_does_not_publish_stock():
     assert "on conflict" in source.lower()
     assert "revoke all" in source.lower()
     assert "uq_warehouses_org_code" in source
+
+def test_wms_completion_covers_daily_warehouse_workflows():
+    api=(ROOT/"app/api/warehouses.py").read_text(encoding="utf-8")
+    operations=(ROOT/"app/warehouses/operations.py").read_text(encoding="utf-8")
+    migration=(ROOT.parent.parent/"infra/sql/045_warehouse_operating_system.sql").read_text(encoding="utf-8")
+    for permission in ("warehouses.receive","warehouses.weigh","warehouses.quality","warehouses.group","warehouses.print"):
+        assert f'require_permission("{permission}")' in api
+        assert permission in migration
+    for workflow in ("warehouse_intakes","warehouse_quality_checks","warehouse_scan_sessions","warehouse_groups"):
+        assert workflow in migration
+        assert workflow in operations
+    assert "idempotency_key" in operations
+    assert "for update" in operations.lower()
+    assert '"dispatch":("LOADED","DISPATCHED")' in operations
+
+def test_detected_alerts_are_idempotent_and_tenant_scoped():
+    source=(ROOT/"app/warehouses/operations.py").read_text(encoding="utf-8")
+    assert "on conflict do nothing" in source.lower()
+    assert "STALE_PACKAGE" in source
+    assert "PAYMENT_MISSING" in source
+    assert "DIMENSION_INCONSISTENCY" in source

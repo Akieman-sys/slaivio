@@ -1,7 +1,7 @@
 "use client";
 
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 import { EntitlementProvider } from "@/components/entitlements/entitlement-provider";
 import { FeatureProvider } from "@/components/features/feature-provider";
@@ -34,14 +34,30 @@ export function AppProviders({
 }
 
 function ClerkApiAuthBridge({ children }: { children: ReactNode }) {
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    setAccessTokenProvider(() => getToken());
-    return () => setAccessTokenProvider(null);
-  }, [getToken, isLoaded]);
+    if (!isLoaded) {
+      setReady(false);
+      return;
+    }
+    if (!isSignedIn) {
+      setAccessTokenProvider(null);
+      setReady(true);
+      return;
+    }
+    setAccessTokenProvider((options) => getToken(options));
+    setReady(true);
+    return () => {
+      setReady(false);
+      setAccessTokenProvider(null);
+    };
+  }, [getToken, isLoaded, isSignedIn]);
 
+  if (!ready) {
+    return <div className="min-h-screen bg-[#f7f7f6]" aria-label="Initialisation de la session" />;
+  }
   return children;
 }
 

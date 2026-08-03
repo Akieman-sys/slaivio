@@ -1,6 +1,8 @@
 import axios from "axios";
 
-type AccessTokenProvider = () => Promise<string | null>;
+type TokenOptions = { skipCache?: boolean };
+type AccessTokenProvider = (options?: TokenOptions) => Promise<string | null>;
+type RetriableRequest = { _slaivioAuthRetried?: boolean };
 let accessTokenProvider: AccessTokenProvider | null = null;
 export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
 
@@ -30,7 +32,8 @@ export const api = axios.create({
 
 api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
-    let token = accessTokenProvider ? await accessTokenProvider() : null;
+    const retried = (config as typeof config & RetriableRequest)._slaivioAuthRetried;
+    let token = accessTokenProvider ? await accessTokenProvider({ skipCache: Boolean(retried) }) : null;
     const clerk = (window as Window & { Clerk?: { session?: { getToken?: () => Promise<string | null> } } }).Clerk;
 
     if (!token && clerk?.session?.getToken) {
@@ -47,13 +50,23 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error: unknown) => {
+  async (error: unknown) => {
     if (
       typeof window !== "undefined" &&
       axios.isAxiosError(error) &&
       error.response?.status === 401
     ) {
-      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+      const config = error.config as (typeof error.config & RetriableRequest) | undefined;
+      const hadAuthorization = Boolean(config?.headers?.Authorization);
+      if (config && hadAuthorization && !config._slaivioAuthRetried && accessTokenProvider) {
+        config._slaivioAuthRetried = true;
+        const refreshedToken = await accessTokenProvider({ skipCache: true });
+        if (refreshedToken) {
+          config.headers.Authorization = `Bearer ${refreshedToken}`;
+          return api.request(config);
+        }
+      }
+      if (hadAuthorization) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
     return Promise.reject(error);
   },

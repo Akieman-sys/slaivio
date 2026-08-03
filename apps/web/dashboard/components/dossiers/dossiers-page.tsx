@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
@@ -796,18 +796,41 @@ function ShipmentsTab({ dossier }: { dossier: DossierRecord }) {
 
 function DocumentsTab({ documents, onUpload, onDownload }: { documents: DossierDocument[]; onUpload: (file: File, type: string, notes?: string) => Promise<void>; onDownload: (id: string) => Promise<void> }) {
   const [saving, setSaving] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = new FormData(event.currentTarget);
-    const file = form.get("file"); if (!(file instanceof File) || !file.size) return;
+    event.preventDefault();
+    if (!selectedFile) {
+      setUploadError("Choisissez d’abord un fichier PDF ou une image.");
+      return;
+    }
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setSaving(true);
-    try { await onUpload(file, String(form.get("type") || "OTHER"), String(form.get("notes") || "") || undefined); event.currentTarget.reset(); }
+    setUploadError("");
+    try {
+      await onUpload(selectedFile, String(form.get("type") || "OTHER"), String(form.get("notes") || "") || undefined);
+      formElement.reset();
+      setSelectedFile(null);
+    } catch (error) {
+      setUploadError(apiErrorMessage(error));
+    }
     finally { setSaving(false); }
   }
   return <div className="space-y-4">
-    <PermissionGuard permission="dossiers.update"><form onSubmit={submit} className="rounded-md border border-[#d8dce2] p-4">
-      <div className="grid gap-3 sm:grid-cols-2"><input name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" className="text-[13px]" /><select name="type" className="h-9 rounded-md border px-2 text-[13px]"><option value="IDENTITY">Identité</option><option value="INVOICE">Facture</option><option value="CUSTOMS">Douane</option><option value="OTHER">Autre</option></select></div>
+    <PermissionGuard permission="dossiers.update"><form onSubmit={submit} noValidate className="rounded-md border border-[#d8dce2] p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <input ref={fileInputRef} name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { setSelectedFile(event.target.files?.[0] || null); setUploadError(""); }} />
+          <button type="button" onClick={() => fileInputRef.current?.click()} className={`${buttonClass} w-full`}><Upload size={15} />Choisir un fichier</button>
+          <p className="mt-2 truncate text-[12px] text-[#4f5b67]">{selectedFile ? selectedFile.name : "Aucun fichier sélectionné"}</p>
+        </div>
+        <select name="type" className="h-9 rounded-md border px-2 text-[13px]"><option value="IDENTITY">Identité</option><option value="INVOICE">Facture</option><option value="CUSTOMS">Douane</option><option value="OTHER">Autre</option></select>
+      </div>
       <input name="notes" maxLength={500} placeholder="Note interne facultative" className="mt-3 h-9 w-full rounded-md border px-3 text-[13px]" />
-      <button disabled={saving} className={`${buttonClass} mt-3`}><Upload size={15} />{saving ? "Envoi…" : "Téléverser"}</button>
+      {uploadError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">{uploadError}</p>}
+      <button type="submit" disabled={saving || !selectedFile} className={`${buttonClass} mt-3 disabled:cursor-not-allowed disabled:opacity-50`}><Upload size={15} />{saving ? "Envoi…" : "Téléverser"}</button>
       <p className="mt-2 text-[11px] text-[#687584]">PDF ou image, 10 Mo maximum. Stockage privé.</p>
     </form></PermissionGuard>
     {documents.length === 0 ? <EmptyState title="Aucun document" text="Ajoutez les pièces nécessaires au traitement réel du dossier." /> : documents.map((doc) => <button key={doc.id} onClick={() => onDownload(doc.id)} className="flex w-full items-center justify-between rounded-md border p-3 text-left text-[13px]"><span><strong>{doc.file_name}</strong><br /><small>{doc.document_type} · {(doc.size_bytes / 1024).toFixed(0)} Ko</small></span><Download size={16} /></button>)}
@@ -1097,6 +1120,10 @@ function apiErrorMessage(error: unknown) {
   if (detail === "quoted_currency_required") return "La devise du devis est obligatoire lorsqu’un montant est renseigné.";
   if (detail === "final_currency_required") return "La devise finale est obligatoire lorsqu’un montant final est renseigné.";
   if (detail === "supplier_payment_currency_required") return "La devise fournisseur est obligatoire lorsqu’un paiement fournisseur est renseigné.";
+  if (detail === "unsupported_document_type") return "Format non accepté. Utilisez un PDF, JPEG, PNG ou WebP.";
+  if (detail === "document_too_large") return "Le fichier dépasse la limite autorisée de 10 Mo.";
+  if (detail === "document_storage_not_configured") return "Le stockage documentaire n’est pas encore configuré sur le backend.";
+  if (detail === "document_storage_upload_failed") return "Supabase Storage a refusé le téléversement. Réessayez ou vérifiez la configuration du bucket.";
   if (error.response.status === 409) return "Conflit détecté. Rechargez le dossier avant de réessayer.";
   return `Erreur API (${error.response.status}).`;
 }

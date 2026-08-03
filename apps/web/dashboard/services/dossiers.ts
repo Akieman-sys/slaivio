@@ -219,7 +219,7 @@ export async function uploadDossierDocument(id: string, file: File, documentType
   const form = new FormData();
   form.append("file", file); form.append("document_type", documentType);
   if (notes) form.append("notes", notes);
-  return (await api.post(`/dossiers/${id}/documents`, form, { headers: { "Content-Type": "multipart/form-data" } })).data.document as DossierDocument;
+  return (await api.post(`/dossiers/${id}/documents`, form)).data.document as DossierDocument;
 }
 
 export async function downloadDossierDocument(id: string, documentId: string) {

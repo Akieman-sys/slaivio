@@ -13,6 +13,12 @@ def test_repository_scopes_operational_queries_to_tenant():
     assert "for update" in source.lower()
     assert "row_version" in source
 
+def test_warehouse_inventory_derives_client_and_dossier_display_fields():
+    source=(ROOT/"app/warehouses/repository.py").read_text(encoding="utf-8")
+    assert "left join clients c on c.id=p.client_id and c.org_id=p.org_id" in source
+    assert "left join dossiers d on d.id=p.dossier_id and d.org_id=p.org_id" in source
+    assert "p.client_name" not in source
+
 def test_transfer_workflow_is_strict_and_audited():
     source=(ROOT/"app/warehouses/repository.py").read_text(encoding="utf-8")
     assert '"dispatch":("DRAFT","IN_TRANSIT")' in source

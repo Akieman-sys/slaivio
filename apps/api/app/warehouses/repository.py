@@ -52,8 +52,14 @@ def get_warehouse(org_id, warehouse_id):
     with engine.connect() as conn:
         warehouse=conn.execute(text("select * from warehouses where id=:id and org_id=:o and archived_at is null"),{"id":warehouse_id,"o":org_id}).mappings().first()
         if not warehouse: raise HTTPException(404,"warehouse_not_found")
-        inventory=_rows(conn.execute(text("""select id::text,package_reference,tracking_id,description,status,inventory_status,warehouse_zone,warehouse_aisle,warehouse_shelf,warehouse_position,weight_kg,volume_cbm,client_name,dossier_reference,updated_at
-          from cargo_packages where org_id=:o and warehouse_id=:id and deleted_at is null order by updated_at desc limit 500"""),{"o":org_id,"id":warehouse_id}))
+        inventory=_rows(conn.execute(text("""select p.id::text,p.package_reference,p.tracking_id,p.description,p.status,p.inventory_status,
+          p.warehouse_zone,p.warehouse_aisle,p.warehouse_shelf,p.warehouse_position,p.weight_kg,p.volume_cbm,
+          coalesce(to_jsonb(c)->>'display_name',c.name,to_jsonb(c)->>'company_name',c.phone,c.email,'Client sans nom') client_name,
+          coalesce(d.tracking_id,'DOS-'||upper(left(d.id::text,8))) dossier_reference,p.updated_at
+          from cargo_packages p
+          left join clients c on c.id=p.client_id and c.org_id=p.org_id
+          left join dossiers d on d.id=p.dossier_id and d.org_id=p.org_id
+          where p.org_id=:o and p.warehouse_id=:id and p.deleted_at is null order by p.updated_at desc limit 500"""),{"o":org_id,"id":warehouse_id}))
         slots=_rows(conn.execute(text("select * from warehouse_slots where org_id=:o and warehouse_id=:id order by zone,code"),{"o":org_id,"id":warehouse_id}))
         transfers=_rows(conn.execute(text("""select t.*,s.warehouse_name source_name,d.warehouse_name destination_name,(select count(*) from warehouse_transfer_items i where i.transfer_id=t.id)::int package_count from warehouse_transfers t join warehouses s on s.id=t.source_warehouse_id join warehouses d on d.id=t.destination_warehouse_id where t.org_id=:o and (t.source_warehouse_id=:id or t.destination_warehouse_id=:id) order by t.created_at desc"""),{"o":org_id,"id":warehouse_id}))
         counts=_rows(conn.execute(text("select * from warehouse_stock_counts where org_id=:o and warehouse_id=:id order by created_at desc"),{"o":org_id,"id":warehouse_id}))
@@ -161,5 +167,12 @@ def stats(org_id):
 
 
 def export_inventory(org_id):
-    with engine.connect() as conn: rows=_rows(conn.execute(text("""select w.warehouse_code,w.warehouse_name,p.package_reference,p.tracking_id,p.client_name,p.dossier_reference,p.status,p.inventory_status,p.warehouse_zone,p.warehouse_aisle,p.warehouse_shelf,p.warehouse_position,p.weight_kg,p.volume_cbm,p.updated_at from cargo_packages p join warehouses w on w.id=p.warehouse_id and w.org_id=p.org_id where p.org_id=:o and p.deleted_at is null order by w.warehouse_name,p.package_reference"""),{"o":org_id}))
+    with engine.connect() as conn: rows=_rows(conn.execute(text("""select w.warehouse_code,w.warehouse_name,p.package_reference,p.tracking_id,
+      coalesce(to_jsonb(c)->>'display_name',c.name,to_jsonb(c)->>'company_name',c.phone,c.email,'Client sans nom') client_name,
+      coalesce(d.tracking_id,'DOS-'||upper(left(d.id::text,8))) dossier_reference,
+      p.status,p.inventory_status,p.warehouse_zone,p.warehouse_aisle,p.warehouse_shelf,p.warehouse_position,p.weight_kg,p.volume_cbm,p.updated_at
+      from cargo_packages p join warehouses w on w.id=p.warehouse_id and w.org_id=p.org_id
+      left join clients c on c.id=p.client_id and c.org_id=p.org_id
+      left join dossiers d on d.id=p.dossier_id and d.org_id=p.org_id
+      where p.org_id=:o and p.deleted_at is null order by w.warehouse_name,p.package_reference"""),{"o":org_id}))
     output=io.StringIO();writer=csv.DictWriter(output,fieldnames=list(rows[0]) if rows else ["warehouse_code","package_reference"]);writer.writeheader();writer.writerows(rows);return output.getvalue()

@@ -15,7 +15,6 @@ import {
   FileText,
   History,
   Image as ImageIcon,
-  Link as LinkIcon,
   MapPin,
   MoreHorizontal,
   PackageCheck,
@@ -33,8 +32,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { listDossiers, type DossierRecord } from "@/services/dossiers";
+import { addShipmentPackage,listShipments,removeShipmentPackage,type ExpeditionRecord } from "@/services/shipments";
 import {
-  addPackageMedia,
   createPackage,
   createPackageAnomaly,
   createPackageNotification,
@@ -48,6 +47,8 @@ import {
   updatePackage,
   movePackage, weighPackage, addPackageNote, updatePackageChecklist,
   uploadPackageDocument, getPackageDocumentDownload, archivePackage,
+  restorePackage,listArchivedPackages,scanPackageLabel,uploadPackageMedia,getPackageMediaUrl,getPackageAnalytics,
+  type PackageAnalytics,
   type AnomalySeverity,
   type InventoryStatus,
   type PackageCondition,
@@ -171,6 +172,7 @@ const views: Array<{ key: string; label: string; status?: PackageStatus; invento
   { key: "arrived", label: "Arrivés", status: "ARRIVED_DESTINATION" },
   { key: "issues", label: "Anomalies" },
   { key: "delivered", label: "Livrés", status: "DELIVERED" },
+  { key: "archived", label: "Archivés" },
 ];
 
 const buttonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
@@ -191,6 +193,8 @@ export function PackagesPage() {
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
   const [layoutMode,setLayoutMode]=useState<"table"|"kanban"|"analytics">("table");
+  const [scanOpen,setScanOpen]=useState(false);
+  const [analytics,setAnalytics]=useState<PackageAnalytics|null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PackageStatus | "">("");
   const [condition, setCondition] = useState<PackageCondition | "">("");
@@ -200,6 +204,7 @@ export function PackagesPage() {
   const [packageType, setPackageType] = useState<PackageType | "">("");
   const [source, setSource] = useState<PackageSource | "">("");
   const [sort, setSort] = useState("updated_desc");
+  const [warehouseFilter,setWarehouseFilter]=useState("");const [zoneFilter,setZoneFilter]=useState("");const [countryFilter,setCountryFilter]=useState("");const [cityFilter,setCityFilter]=useState("");const [categoryFilter,setCategoryFilter]=useState("");const [priorityFilter,setPriorityFilter]=useState("");const [fragileOnly,setFragileOnly]=useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -222,7 +227,7 @@ export function PackagesPage() {
     return () => window.clearTimeout(timeout);
     // The listed filters intentionally define when the debounced request runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, status, condition, inventory, payment, validation, packageType, source, sort, activeView]);
+  }, [query, status, condition, inventory, payment, validation, packageType, source, sort, activeView,warehouseFilter,zoneFilter,countryFilter,cityFilter,categoryFilter,priorityFilter,fragileOnly]);
 
   useEffect(() => {
     loadStats();
@@ -240,12 +245,13 @@ export function PackagesPage() {
       setStats(emptyStats);
     }
   }
+  async function showAnalytics(){setLayoutMode("analytics");try{setAnalytics(await getPackageAnalytics())}catch(err){setError(apiErrorMessage(err))}}
 
   async function loadPackages(nextPage = page) {
     setLoading(true);
     setError("");
     try {
-      const response = await listPackages({
+      const response = activeView==="archived" ? await listArchivedPackages({q:query,page:nextPage,page_size:30}) : await listPackages({
         q: query || undefined,
         status: currentView.key === "issues" || currentView.key === "review" ? undefined : currentView.status || status || undefined,
         condition: condition || undefined,
@@ -257,6 +263,7 @@ export function PackagesPage() {
         page: nextPage,
         page_size: 30,
         sort,
+        warehouse:warehouseFilter||undefined,zone:zoneFilter||undefined,country:countryFilter||undefined,city:cityFilter||undefined,category:categoryFilter||undefined,priority:priorityFilter||undefined,fragile:fragileOnly||undefined,
       });
       const items = currentView.key === "issues"
         ? response.items.filter((item) => ["BLOCKED", "ISSUE"].includes(item.status) || item.open_anomaly_count > 0)
@@ -286,6 +293,8 @@ export function PackagesPage() {
       setDetailLoading(false);
     }
   }
+  async function selectOrRestore(item:PackageRecord){if(activeView!=="archived"){await selectPackage(item);return}if(!window.confirm(`Restaurer ${item.package_reference||"ce colis"} ?`))return;try{await restorePackage(item.id);await Promise.all([loadStats(),loadPackages(page)])}catch(err){setError(apiErrorMessage(err))}}
+  async function transitionPackage(id:string,status:PackageStatus){try{await updatePackage(id,{status});await Promise.all([loadStats(),loadPackages(page)])}catch(err){setError(apiErrorMessage(err))}}
 
   async function loadTimeline(packageId: string) {
     setTimelineLoading(true);
@@ -360,6 +369,8 @@ export function PackagesPage() {
       eta_at: clean(form.get("eta_at")),
       last_scan_location: clean(form.get("last_scan_location")),
       notes: clean(form.get("notes")),
+      priority:String(form.get("priority")||"NORMAL") as "LOW"|"NORMAL"|"HIGH"|"URGENT",
+      assigned_to:clean(form.get("assigned_to")),supplier_name:clean(form.get("supplier_name")),
     };
     if (!payload.dossier_id) {
       setSaving(false);
@@ -440,9 +451,9 @@ export function PackagesPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Colis" description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
           actions={<>
-              <button onClick={()=>{const code=window.prompt("Scannez le code-barres ou saisissez le tracking fournisseur");if(code?.trim()){setQuery(code.trim());setLayoutMode("table")}}} className={buttonClass}><Barcode size={16}/>Scanner</button>
+              <button onClick={()=>setScanOpen(true)} className={buttonClass}><Barcode size={16}/>Scanner</button>
               <button onClick={()=>setLayoutMode(layoutMode==="kanban"?"table":"kanban")} className={buttonClass}>{layoutMode==="kanban"?"Tableau":"Kanban"}</button>
-              <button onClick={()=>setLayoutMode(layoutMode==="analytics"?"table":"analytics")} className={buttonClass}>Analytics</button>
+              <button onClick={()=>layoutMode==="analytics"?setLayoutMode("table"):showAnalytics()} className={buttonClass}>Analytics</button>
               <button onClick={() => setImportOpen(true)} className={buttonClass}>
                 <Upload size={16} />
                 Importer
@@ -531,6 +542,7 @@ export function PackagesPage() {
               />
             </label>
           </div>
+          <div className="grid gap-2 border-b border-[#d8dce2] bg-[#fafafa] px-5 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"><input value={warehouseFilter} onChange={e=>setWarehouseFilter(e.target.value)} className={inputClass} placeholder="Entrepôt"/><input value={zoneFilter} onChange={e=>setZoneFilter(e.target.value)} className={inputClass} placeholder="Zone"/><input value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className={inputClass} placeholder="Pays"/><input value={cityFilter} onChange={e=>setCityFilter(e.target.value)} className={inputClass} placeholder="Ville"/><input value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className={inputClass} placeholder="Catégorie"/><select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} className={inputClass}><option value="">Priorité</option><option value="LOW">Basse</option><option value="NORMAL">Normale</option><option value="HIGH">Haute</option><option value="URGENT">Urgente</option></select><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={fragileOnly} onChange={e=>setFragileOnly(e.target.checked)}/>Fragiles uniquement</label></div>
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -539,9 +551,9 @@ export function PackagesPage() {
             </div>
           )}
 
-          {layoutMode==="table"&&<PackagesTable packages={packages} loading={loading} selectedId={selected?.id} onSelect={selectPackage} />}
-          {layoutMode==="kanban"&&<PackagesKanban packages={packages} loading={loading} onSelect={selectPackage}/>}
-          {layoutMode==="analytics"&&<PackagesAnalytics stats={stats}/>}
+          {layoutMode==="table"&&<PackagesTable packages={packages} loading={loading} selectedId={selected?.id} onSelect={selectOrRestore} />}
+          {layoutMode==="kanban"&&<PackagesKanban packages={packages} loading={loading} onSelect={selectPackage} onMove={transitionPackage}/>}
+          {layoutMode==="analytics"&&<PackagesAnalytics stats={stats} analytics={analytics}/>}
 
           <div className="flex flex-col gap-3 border-t border-[#d8dce2] px-5 py-3 text-[13px] text-[#5f6b76] sm:flex-row sm:items-center sm:justify-between">
             <span>{pagination.total === 0 ? "0 colis" : `${(page - 1) * pagination.page_size + 1} - ${Math.min(page * pagination.page_size, pagination.total)} sur ${pagination.total} colis`}</span>
@@ -600,17 +612,20 @@ export function PackagesPage() {
           onSubmit={handleImport}
         />
       )}
+      {scanOpen&&<PackageScannerModal onClose={()=>setScanOpen(false)} onCreated={async item=>{setScanOpen(false);await Promise.all([loadStats(),loadPackages(1)]);await selectPackage(item)}}/>}
     </div>
   );
 }
 
-function PackagesKanban({packages,loading,onSelect}:{packages:PackageRecord[];loading:boolean;onSelect:(item:PackageRecord)=>void}){
+function PackagesKanban({packages,loading,onSelect,onMove}:{packages:PackageRecord[];loading:boolean;onSelect:(item:PackageRecord)=>void;onMove:(id:string,status:PackageStatus)=>void}){
  const columns:PackageStatus[]=["RECEIVED_AT_ORIGIN","WAREHOUSE_PROCESSING","READY_FOR_DISPATCH","IN_TRANSIT","DELIVERED"];
  if(loading)return <LoadingLines/>;
- return <div className="grid min-h-[420px] grid-cols-1 gap-3 overflow-x-auto bg-[#f7f7f6] p-4 md:grid-cols-5">{columns.map(status=><section key={status} className="min-w-[220px] rounded-lg border bg-white p-3"><header className="mb-3 flex justify-between text-[13px] font-semibold"><span>{statusLabels[status]}</span><span>{packages.filter(p=>p.status===status).length}</span></header><div className="space-y-2">{packages.filter(p=>p.status===status).map(p=><button key={p.id} onClick={()=>onSelect(p)} className="w-full rounded-md border bg-white p-3 text-left text-[12px] shadow-sm hover:border-blue-300"><b className="block text-[13px]">{p.package_reference}</b><span>{p.client_name||"Client non renseigné"}</span><small className="mt-2 block text-slate-500">{p.weight_kg?`${p.weight_kg} kg · `:""}{p.warehouse_zone||"Sans zone"}</small></button>)}</div></section>)}</div>
+ return <div className="grid min-h-[420px] grid-cols-1 gap-3 overflow-x-auto bg-[#f7f7f6] p-4 md:grid-cols-5">{columns.map(status=><section key={status} onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData("text/package-id");if(id)onMove(id,status)}} className="min-w-[220px] rounded-lg border bg-white p-3"><header className="mb-3 flex justify-between text-[13px] font-semibold"><span>{statusLabels[status]}</span><span>{packages.filter(p=>p.status===status).length}</span></header><div className="space-y-2">{packages.filter(p=>p.status===status).map(p=><button draggable key={p.id} onDragStart={e=>e.dataTransfer.setData("text/package-id",p.id)} onClick={()=>onSelect(p)} className="w-full cursor-grab rounded-md border bg-white p-3 text-left text-[12px] shadow-sm hover:border-blue-300"><b className="block text-[13px]">{p.package_reference}</b><span>{p.client_name||"Client non renseigné"}</span><small className="mt-2 block text-slate-500">{p.weight_kg?`${p.weight_kg} kg · `:""}{p.warehouse_zone||"Sans zone"}</small></button>)}</div></section>)}</div>
 }
 
-function PackagesAnalytics({stats}:{stats:PackageStats}){const max=Math.max(stats.total,1);const rows=[['En attente',stats.waiting],['Prêts à expédier',stats.ready_for_dispatch],['En transit',stats.in_transit],['Livrés',stats.delivered],['Anomalies',stats.issues],['Prioritaires',stats.priority_count||0],['Fragiles',stats.fragile_count||0]] as const;return <div className="grid gap-4 bg-[#f7f7f6] p-5 lg:grid-cols-2"><Section title="Flux des colis"><div className="space-y-4">{rows.map(([label,value])=><div key={label}><div className="mb-1 flex justify-between text-[13px]"><span>{label}</span><b>{value}</b></div><div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-[#12c76f]" style={{width:`${Math.max(value?3:0,value/max*100)}%`}}/></div></div>)}</div></Section><Section title="Stock physique"><div className="grid grid-cols-2 gap-3"><SmallMetric label="Poids total" value={`${Number(stats.total_weight_kg||0).toLocaleString('fr-FR')} kg`}/><SmallMetric label="Volume total" value={`${Number(stats.total_volume_cbm||0).toLocaleString('fr-FR')} m³`}/><SmallMetric label="Pièces" value={stats.total_pieces||0}/><SmallMetric label="Reçus aujourd’hui" value={stats.received_today}/></div></Section></div>}
+function PackagesAnalytics({stats,analytics}:{stats:PackageStats;analytics:PackageAnalytics|null}){const max=Math.max(stats.total,1);const rows=[['En attente',stats.waiting],['Prêts à expédier',stats.ready_for_dispatch],['En transit',stats.in_transit],['Livrés',stats.delivered],['Anomalies',stats.issues],['Prioritaires',stats.priority_count||0],['Fragiles',stats.fragile_count||0]] as const;return <div className="grid gap-4 bg-[#f7f7f6] p-5 lg:grid-cols-2"><Section title="Flux des colis"><div className="space-y-4">{rows.map(([label,value])=><div key={label}><div className="mb-1 flex justify-between text-[13px]"><span>{label}</span><b>{value}</b></div><div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-[#12c76f]" style={{width:`${Math.max(value?3:0,value/max*100)}%`}}/></div></div>)}</div></Section><Section title="Performance"><div className="grid grid-cols-2 gap-3"><SmallMetric label="Stockage moyen" value={`${analytics?.summary.average_storage_days??0} jours`}/><SmallMetric label="Avant expédition" value={`${analytics?.summary.average_before_dispatch_days??0} jours`}/><SmallMetric label="Taux anomalies" value={`${analytics?.summary.anomaly_rate??0} %`}/><SmallMetric label="Reçus aujourd’hui" value={stats.received_today}/></div></Section><Section title="Par entrepôt"><AnalyticsRows rows={analytics?.warehouses||[]}/></Section><Section title="Capacité"><div className="space-y-3">{(analytics?.capacity||[]).map(row=><div key={row.label} className="text-[13px]"><div className="flex justify-between"><span>{row.label}</span><b>{row.occupied}/{row.capacity||'—'}</b></div><div className="mt-1 h-2 rounded bg-slate-100"><div className="h-2 rounded bg-blue-500" style={{width:`${row.capacity?Math.min(100,row.occupied/row.capacity*100):0}%`}}/></div></div>)}</div></Section><Section title="Fournisseurs"><AnalyticsRows rows={analytics?.suppliers||[]}/></Section><Section title="Destinations"><AnalyticsRows rows={analytics?.destinations||[]}/></Section></div>}
+
+function AnalyticsRows({rows}:{rows:Array<{label:string;count:number}>}){return rows.length?<div className="space-y-2">{rows.map(row=><div key={row.label} className="flex justify-between border-b py-2 text-[13px]"><span>{row.label||"Non renseigné"}</span><b>{row.count}</b></div>)}</div>:<p className="text-[13px] text-slate-500">Aucune donnée.</p>}
 
 function PackagesTable({ packages, loading, selectedId, onSelect }: {
   packages: PackageRecord[];
@@ -796,11 +811,11 @@ function PackageDetails({
             {activeTab === "dossier" && <DossierTab item={item} />}
             {activeTab === "measures" && <MeasuresTab item={item} />}
             {activeTab === "warehouse" && <WarehouseTab item={item} onUpdated={refreshPackage} />}
-            {activeTab === "shipment" && <ShipmentTab item={item} />}
+            {activeTab === "shipment" && <ShipmentTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "payment" && <PaymentTab item={item} />}
             {activeTab === "anomalies" && <AnomaliesTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "documents" && <DocumentsTab item={item} onUpdated={refreshPackage} />}
-            {activeTab === "media" && <MediaTab item={item} />}
+            {activeTab === "media" && <MediaTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "notes" && <NotesTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "notifications" && <NotificationsTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
@@ -915,7 +930,11 @@ function WarehouseTab({ item, onUpdated }: { item: PackageRecord; onUpdated:(ite
   );
 }
 
-function ShipmentTab({ item }: { item: PackageRecord }) {
+function ShipmentTab({ item,onUpdated }: { item: PackageRecord;onUpdated:(item:PackageRecord)=>void }) {
+  const [shipments,setShipments]=useState<ExpeditionRecord[]>([]);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+  useEffect(()=>{listShipments({page_size:100,sort:"updated_desc"}).then(r=>setShipments(r.items)).catch(e=>setError(apiErrorMessage(e)))},[]);
+  async function attach(e:FormEvent<HTMLFormElement>){e.preventDefault();const id=String(new FormData(e.currentTarget).get("shipment_id")||"");if(!id)return;setBusy(true);try{await addShipmentPackage(id,item.id);onUpdated(await getPackage(item.id))}catch(x){setError(apiErrorMessage(x))}finally{setBusy(false)}}
+  async function detach(){if(!item.shipment_id||!window.confirm("Dissocier ce colis de l’expédition ?"))return;setBusy(true);try{await removeShipmentPackage(item.shipment_id,item.id,"Dissociation depuis la fiche colis");onUpdated(await getPackage(item.id))}catch(x){setError(apiErrorMessage(x))}finally{setBusy(false)}}
   return (
     <div className="space-y-5">
       <Section title="Expédition liée">
@@ -929,6 +948,7 @@ function ShipmentTab({ item }: { item: PackageRecord }) {
         <Field label="Arrivée / livraison" value={formatDate(item.delivered_at)} />
         <Field label="Tracking public" value={item.public_tracking_enabled ? "Activé" : "Désactivé"} />
       </Section>
+      <Section title="Affectation"><form onSubmit={attach} className="space-y-2"><select required name="shipment_id" className={inputClass} defaultValue={item.shipment_id||""}><option value="">Sélectionner une expédition</option>{shipments.map(s=><option key={s.id} value={s.id}>{s.expedition_reference} · {s.origin_city||"?"} → {s.destination_city||"?"} · {s.status}</option>)}</select><div className="flex gap-2"><button disabled={busy} className={primaryButtonClass}>Associer</button>{item.shipment_id&&<button type="button" disabled={busy} onClick={detach} className={buttonClass}>Dissocier</button>}</div></form>{error&&<p className="mt-2 text-[13px] text-red-600">{error}</p>}</Section>
     </div>
   );
 }
@@ -1047,31 +1067,34 @@ function AnomaliesTab({ item, onUpdated }: { item: PackageRecord; onUpdated: (it
   );
 }
 
-function MediaTab({ item }: { item: PackageRecord }) {
+function MediaTab({ item, onUpdated }: { item: PackageRecord; onUpdated:(item:PackageRecord)=>void }) {
   const media = item.media || [];
+  const [error,setError]=useState("");
+  async function view(id:string,url:string){if(url!=="PRIVATE"){window.open(url,"_blank","noopener,noreferrer");return}try{window.open(await getPackageMediaUrl(item.id,id),"_blank","noopener,noreferrer")}catch(e){setError(apiErrorMessage(e))}}
   return (
     <div className="space-y-5">
-      <AddMediaForm item={item} />
+      <AddMediaForm item={item} onUpdated={onUpdated} />
       {media.length === 0 ? (
         <EmptyState title="Aucune photo" text="Les photos de réception, étiquettes et preuves liées à ce colis seront visibles ici." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {media.map((file) => (
-            <a key={file.id} href={file.media_url || "#"} target="_blank" rel="noreferrer" className="rounded-md border border-[#d8dce2] p-3 transition hover:bg-[#f7f8fa]">
+            <button key={file.id} onClick={()=>view(file.id,file.media_url)} className="rounded-md border border-[#d8dce2] p-3 text-left transition hover:bg-[#f7f8fa]">
               <div className="flex h-28 items-center justify-center rounded-md bg-[#f1f3f5] text-[#64748b]">
                 <ImageIcon size={28} />
               </div>
-              <p className="mt-3 truncate text-[13px] font-medium">{file.caption || file.media_type || "Média colis"}</p>
+              <p className="mt-3 truncate text-[13px] font-medium">{file.caption || file.file_name || file.media_type || "Média colis"}</p>
+              <p className="text-[11px] uppercase text-slate-500">{file.category||"Réception"}</p>
               <p className="mt-1 text-[12px] text-[#687584]">{formatDate(file.created_at)}</p>
-            </a>
+            </button>
           ))}
         </div>
-      )}
+      )}{error&&<p className="text-[13px] text-red-600">{error}</p>}
     </div>
   );
 }
 
-function AddMediaForm({ item }: { item: PackageRecord }) {
+function AddMediaForm({ item,onUpdated }: { item: PackageRecord;onUpdated:(item:PackageRecord)=>void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1080,11 +1103,8 @@ function AddMediaForm({ item }: { item: PackageRecord }) {
     setSaving(true);
     setError("");
     try {
-      await addPackageMedia(item.id, {
-        media_url: String(form.get("media_url") || ""),
-        media_type: String(form.get("media_type") || "IMAGE"),
-        caption: clean(form.get("caption")),
-      });
+      const file=form.get("file");if(!(file instanceof File)||!file.size)throw new Error("Sélectionnez un fichier.");
+      onUpdated(await uploadPackageMedia(item.id,file,String(form.get("category")||"RECEPTION"),clean(form.get("caption"))||undefined));
       event.currentTarget.reset();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -1095,14 +1115,14 @@ function AddMediaForm({ item }: { item: PackageRecord }) {
   return (
     <Section title="Ajouter un média">
       <form onSubmit={submit} className="space-y-3">
-        <TextInput name="media_url" label="URL du média" placeholder="https://..." />
+        <input required type="file" name="file" accept="image/jpeg,image/png,image/webp,video/mp4,audio/mpeg,audio/mp4,audio/ogg" capture="environment" className={inputClass}/>
         <div className="grid grid-cols-2 gap-3">
-          <TextInput name="media_type" label="Type" defaultValue="IMAGE" />
+          <label><FormLabel>Catégorie</FormLabel><select name="category" className={inputClass}><option value="BEFORE_RECEPTION">Avant réception</option><option value="RECEPTION">Réception</option><option value="QUALITY_CONTROL">Contrôle qualité</option><option value="LOADING">Chargement</option><option value="UNLOADING">Déchargement</option></select></label>
           <TextInput name="caption" label="Légende" />
         </div>
         {error && <p className="text-[13px] text-red-600">{error}</p>}
         <button disabled={saving} className={buttonClass}>
-          <LinkIcon size={15} />
+          <Upload size={15} />
           {saving ? "Ajout..." : "Ajouter le média"}
         </button>
       </form>
@@ -1329,6 +1349,9 @@ function PackageFormModal({
             </FormSection>
 
             <FormSection title="Entrepôt">
+              <label><FormLabel>Priorité</FormLabel><select name="priority" defaultValue={item?.priority||"NORMAL"} className={inputClass}><option value="LOW">Basse</option><option value="NORMAL">Normale</option><option value="HIGH">Haute</option><option value="URGENT">Urgente</option></select></label>
+              <TextInput name="assigned_to" label="Responsable" defaultValue={item?.assigned_to||""}/>
+              <TextInput name="supplier_name" label="Fournisseur" defaultValue={item?.supplier_name||""}/>
               <TextInput name="warehouse_name" label="Entrepôt" defaultValue={item?.warehouse_name || ""} />
               <TextInput name="warehouse_zone" label="Zone" defaultValue={item?.warehouse_zone || ""} />
               <TextInput name="warehouse_rack" label="Rack" defaultValue={item?.warehouse_rack || ""} />
@@ -1366,6 +1389,14 @@ function PackageFormModal({
   );
 }
 
+function PackageScannerModal({onClose,onCreated}:{onClose:()=>void;onCreated:(item:PackageRecord)=>void}){
+ const [dossiers,setDossiers]=useState<DossierRecord[]>([]);const [file,setFile]=useState<File|null>(null);const [result,setResult]=useState<Awaited<ReturnType<typeof scanPackageLabel>>|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+ useEffect(()=>{listDossiers({page_size:100,sort:"updated_desc"}).then(r=>setDossiers(r.items)).catch(()=>setDossiers([]))},[]);
+ async function analyse(){if(!file){setError("Prenez ou sélectionnez une photo.");return}setBusy(true);setError("");try{setResult(await scanPackageLabel(file))}catch(e){setError(apiErrorMessage(e))}finally{setBusy(false)}}
+ async function create(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);setBusy(true);setError("");try{const item=await createPackage({dossier_id:String(f.get("dossier_id")),source:"warehouse",tracking_id:clean(f.get("tracking_id")),description:clean(f.get("description")),weight_kg:numberOrNull(f.get("weight_kg")),length_cm:numberOrNull(f.get("length_cm")),width_cm:numberOrNull(f.get("width_cm")),height_cm:numberOrNull(f.get("height_cm")),status:"RECEIVED_AT_ORIGIN",inventory_status:"IN_STOCK"});onCreated(item)}catch(x){setError(apiErrorMessage(x))}finally{setBusy(false)}}
+ return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl"><div className="mb-4 flex justify-between"><div><h2 className="text-xl font-semibold">Scanner une étiquette</h2><p className="text-[13px] text-slate-500">La photo est analysée puis validée par un opérateur avant création.</p></div><button onClick={onClose} className={iconButtonClass}><X size={17}/></button></div>{!result?<div className="space-y-3"><input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e=>setFile(e.target.files?.[0]||null)} className={inputClass}/>{file&&<p className="text-[13px]">{file.name} · {Math.ceil(file.size/1024)} Ko</p>}<button onClick={analyse} disabled={busy} className={primaryButtonClass}>{busy?"Analyse OCR…":"Analyser l’étiquette"}</button></div>:<form onSubmit={create} className="grid gap-3 md:grid-cols-2"><label className="md:col-span-2"><FormLabel>Dossier</FormLabel><select required name="dossier_id" className={inputClass}><option value="">Sélectionner le dossier</option>{dossiers.map(d=><option key={d.id} value={d.id}>{d.dossier_reference} · {d.client_name||d.client_full_name}</option>)}</select></label><TextInput name="tracking_id" label="Tracking fournisseur" defaultValue={result.fields.tracking_id||""}/><TextInput name="weight_kg" label="Poids kg" type="number" step="0.001" defaultValue={valueOrEmpty(result.fields.weight_kg)}/><TextInput name="length_cm" label="Longueur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.length_cm)}/><TextInput name="width_cm" label="Largeur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.width_cm)}/><TextInput name="height_cm" label="Hauteur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.height_cm)}/><TextInput name="description" label="Description"/><div className="md:col-span-2 rounded bg-amber-50 p-3 text-[12px] text-amber-800">Confiance OCR : {result.confidence==null?"non fournie":`${Math.round(result.confidence*100)} %`}. Vérifiez chaque valeur avant de créer.</div><details className="md:col-span-2 text-[12px]"><summary>Texte OCR brut</summary><pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2">{result.raw_text}</pre></details><div className="md:col-span-2 flex justify-end gap-2"><button type="button" onClick={()=>setResult(null)} className={buttonClass}>Reprendre</button><button disabled={busy} className={primaryButtonClass}>Valider et créer</button></div></form>}{error&&<p className="mt-3 text-[13px] text-red-600">{error}</p>}</div></div>
+}
+
 function ImportPackagesModal({
   importing,
   error,
@@ -1394,7 +1425,7 @@ function ImportPackagesModal({
         <form onSubmit={onSubmit} className="space-y-4 p-5">
           <label className="block rounded-md border border-dashed border-[#cfd5dd] bg-[#fbfcfd] p-5">
             <FormLabel>Fichier CSV</FormLabel>
-            <input name="file" type="file" accept=".csv,text/csv" className="mt-2 w-full text-[13px]" />
+            <input name="file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="mt-2 w-full text-[13px]" />
           </label>
           {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
           {result && (
@@ -1607,6 +1638,7 @@ function clean(value: FormDataEntryValue | null) {
   const text = String(value || "").trim();
   return text.length ? text : null;
 }
+
 
 function numberOrNull(value: FormDataEntryValue | null) {
   const text = String(value || "").trim();

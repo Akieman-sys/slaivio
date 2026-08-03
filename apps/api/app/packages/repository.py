@@ -280,8 +280,14 @@ def _build_filters(
     source: str | None,
     dossier_id: str | None,
     client_id: str | None,
+    archived: bool = False,
+    warehouse: str | None = None, country: str | None = None, city: str | None = None,
+    shipment_id: str | None = None, batch_id: str | None = None, zone: str | None = None,
+    responsible: str | None = None, category: str | None = None, priority: str | None = None,
+    fragile: bool | None = None, received_from: str | None = None, received_to: str | None = None,
+    min_declared_value: float | None = None, max_declared_value: float | None = None,
 ) -> tuple[str, dict]:
-    filters = ["p.org_id = :org_id", "p.deleted_at is null"]
+    filters = ["p.org_id = :org_id", "p.deleted_at is not null" if archived else "p.deleted_at is null"]
     params: dict[str, Any] = {"org_id": org_id}
     if q:
         filters.append(
@@ -307,10 +313,20 @@ def _build_filters(
         ("source", source, "p.source"),
         ("dossier_id", dossier_id, "p.dossier_id"),
         ("client_id", client_id, "p.client_id"),
+        ("warehouse", warehouse, "p.warehouse_name"), ("shipment_id",shipment_id,"p.shipment_id"),
+        ("batch_id",batch_id,"p.shipment_batch_id"),("zone",zone,"p.warehouse_zone"),
+        ("responsible",responsible,"p.assigned_to"),("category",category,"p.category"),("priority",priority,"p.priority"),
     ]:
         if value:
             filters.append(f"{column} = :{key}")
             params[key] = value
+    if country: filters.append("(p.origin_country=:country or p.destination_country=:country)");params["country"]=country
+    if city: filters.append("(p.origin_city=:city or p.destination_city=:city)");params["city"]=city
+    if fragile is not None: filters.append("p.is_fragile=:fragile");params["fragile"]=fragile
+    if received_from: filters.append("p.received_at>=cast(:received_from as date)");params["received_from"]=received_from
+    if received_to: filters.append("p.received_at<cast(:received_to as date)+interval '1 day'");params["received_to"]=received_to
+    if min_declared_value is not None: filters.append("p.declared_value>=:min_declared_value");params["min_declared_value"]=min_declared_value
+    if max_declared_value is not None: filters.append("p.declared_value<=:max_declared_value");params["max_declared_value"]=max_declared_value
     return " and ".join(filters), params
 
 
@@ -441,6 +457,12 @@ def list_packages(
     page: int = 1,
     page_size: int = 30,
     sort: str = "updated_desc",
+    archived: bool = False,
+    warehouse: str | None = None, country: str | None = None, city: str | None = None,
+    shipment_id: str | None = None, batch_id: str | None = None, zone: str | None = None,
+    responsible: str | None = None, category: str | None = None, priority: str | None = None,
+    fragile: bool | None = None, received_from: str | None = None, received_to: str | None = None,
+    min_declared_value: float | None = None, max_declared_value: float | None = None,
 ) -> dict:
     _ensure_schema()
     page = max(page, 1)
@@ -458,6 +480,10 @@ def list_packages(
         source=source,
         dossier_id=dossier_id,
         client_id=client_id,
+        archived=archived,
+        warehouse=warehouse,country=country,city=city,shipment_id=shipment_id,batch_id=batch_id,zone=zone,
+        responsible=responsible,category=category,priority=priority,fragile=fragile,received_from=received_from,
+        received_to=received_to,min_declared_value=min_declared_value,max_declared_value=max_declared_value,
     )
     order_by = {
         "created_asc": "p.created_at asc",
@@ -538,6 +564,23 @@ def package_stats(org_id: str) -> dict:
     }
 
 
+def package_analytics(org_id: str) -> dict:
+    with engine.connect() as conn:
+        def rows(sql: str):
+            return [_safe(dict(row._mapping)) for row in conn.execute(text(sql),{"org_id":org_id}).fetchall()]
+        summary=_one(conn.execute(text("""select
+          round(avg(extract(epoch from (coalesce(dispatched_at,now())-received_at))/86400)::numeric,2) average_storage_days,
+          round(avg(extract(epoch from (dispatched_at-received_at))/86400) filter(where dispatched_at is not null and received_at is not null)::numeric,2) average_before_dispatch_days,
+          round((count(*) filter(where status in ('ISSUE','BLOCKED') or validation_status in ('BLOCKED','REJECTED'))::numeric/nullif(count(*),0))*100,2) anomaly_rate
+          from cargo_packages where org_id=:org_id and deleted_at is null"""),{"org_id":org_id}).fetchone()) or {}
+        return {"summary":summary,
+          "daily":rows("""select received_at::date day,count(*)::int count,coalesce(sum(weight_kg),0) weight_kg from cargo_packages where org_id=:org_id and deleted_at is null and received_at>=current_date-30 group by 1 order by 1"""),
+          "warehouses":rows("""select coalesce(warehouse_name,'Non renseigne') label,count(*)::int count,coalesce(sum(weight_kg),0) weight_kg,coalesce(sum(volume_cbm),0) volume_cbm from cargo_packages where org_id=:org_id and deleted_at is null and inventory_status='IN_STOCK' group by 1 order by count desc"""),
+          "suppliers":rows("""select coalesce(supplier_name,'Non renseigne') label,count(*)::int count from cargo_packages where org_id=:org_id and deleted_at is null group by 1 order by count desc limit 15"""),
+          "destinations":rows("""select concat_ws(', ',destination_city,destination_country) label,count(*)::int count from cargo_packages where org_id=:org_id and deleted_at is null group by 1 order by count desc limit 15"""),
+          "capacity":rows("""select w.warehouse_name label,coalesce(sum(l.occupied_units),0)::int occupied,coalesce(sum(l.capacity_units),0)::int capacity from warehouses w left join warehouse_storage_locations l on l.warehouse_id=w.id and l.active where w.org_id=:org_id and w.active group by w.id,w.warehouse_name order by w.warehouse_name""")}
+
+
 def get_package(org_id: str, package_id: str) -> dict | None:
     _ensure_schema()
     with engine.connect() as conn:
@@ -554,7 +597,8 @@ def get_package(org_id: str, package_id: str) -> dict | None:
             return None
         package["media"] = [_safe(dict(row._mapping)) for row in conn.execute(
             text("""
-                select id::text, media_url, media_type, caption, uploaded_by_name, created_at
+                select id::text, media_url, media_type, caption, uploaded_by_name, created_at,
+                       object_path,file_name,mime_type,size_bytes,category
                 from package_media
                 where org_id = :org_id and package_id = :package_id
                 order by created_at desc
@@ -766,7 +810,7 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     dispatched_at, delivered_at, weight_kg, volumetric_weight_kg, length_cm, width_cm,
                     height_cm, volume_cbm, pieces_count, declared_value, declared_currency, is_fragile,
                     notes, fees_total, fees_paid, currency, barcode, qr_code_value, last_scan_location,
-                    last_scan_at, created_by, updated_by
+                    last_scan_at, created_by, updated_by, priority, assigned_to, supplier_name
                 )
                 values (
                     :org_id, :client_id, :dossier_id, :shipment_id, :package_reference, :tracking_id, :source,
@@ -777,7 +821,8 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     :dispatched_at, :delivered_at, :weight_kg, :volumetric_weight_kg, :length_cm, :width_cm,
                     :height_cm, :volume_cbm, :pieces_count, :declared_value, :declared_currency, :is_fragile,
                     :notes, :fees_total, :fees_paid, :currency, :barcode, :qr_code_value, :last_scan_location,
-                    case when :last_scan_location is not null then now() else null end, :created_by, :updated_by
+                    case when :last_scan_location is not null then now() else null end, :created_by, :updated_by,
+                    :priority, :assigned_to, :supplier_name
                 )
                 returning id::text
             """),
@@ -831,6 +876,7 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 "last_scan_location": payload.get("last_scan_location"),
                 "created_by": user_id,
                 "updated_by": user_id,
+                "priority":payload.get("priority") or "NORMAL","assigned_to":payload.get("assigned_to"),"supplier_name":payload.get("supplier_name"),
             },
         ).fetchone()
         package_id = row[0]
@@ -861,6 +907,7 @@ def update_package(org_id: str, package_id: str, user_id: str, payload: dict) ->
         "dispatched_at", "delivered_at", "weight_kg", "volumetric_weight_kg", "length_cm", "width_cm",
         "height_cm", "volume_cbm", "pieces_count", "declared_value", "declared_currency", "is_fragile",
         "notes", "fees_total", "fees_paid", "currency", "barcode", "qr_code_value", "last_scan_location",
+        "priority","assigned_to","supplier_name",
     }
     data = {key: payload.get(key, existing.get(key)) for key in allowed}
     data["payment_status"] = payload.get("payment_status") or payload.get("payment_clearance_status") or existing.get("payment_status")
@@ -916,9 +963,10 @@ def update_package(org_id: str, package_id: str, user_id: str, payload: dict) ->
                     barcode = :barcode,
                     qr_code_value = :qr_code_value,
                     last_scan_location = :last_scan_location,
+                    priority=:priority, assigned_to=:assigned_to, supplier_name=:supplier_name,
                     last_scan_at = case when :last_scan_location is not null then now() else last_scan_at end,
                     updated_by = :updated_by,
-                    updated_at = now()
+                    updated_at = now(), row_version=row_version+1
                 where org_id = :org_id and id = :package_id
             """),
             dict(data, updated_by=user_id, org_id=org_id, package_id=package_id),
@@ -1061,6 +1109,24 @@ def add_package_media(org_id: str, package_id: str, user_id: str, payload: dict)
             actor_id=user_id,
         )
     return get_package(org_id, package_id)
+
+
+def add_private_package_media(org_id: str, package_id: str, user_id: str, payload: dict) -> dict | None:
+    if not get_package(org_id,package_id): return None
+    with engine.begin() as conn:
+        conn.execute(text("""insert into package_media(org_id,package_id,media_url,media_type,caption,uploaded_by_id,
+          object_path,file_name,mime_type,size_bytes,checksum_sha256,category)
+          values(:org_id,:package_id,'PRIVATE',:media_type,:caption,:user_id,:object_path,:file_name,:mime_type,:size_bytes,:checksum_sha256,:category)"""),
+          {"org_id":org_id,"package_id":package_id,"user_id":user_id,**payload})
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_MEDIA_ADDED",title="Média ajouté",description=payload["file_name"],actor_id=user_id,metadata={"category":payload["category"]})
+    return get_package(org_id,package_id)
+
+
+def get_package_media(org_id: str, package_id: str, media_id: str) -> dict | None:
+    with engine.connect() as conn:
+        return _one(conn.execute(text("""select id::text,object_path,file_name,mime_type from package_media
+          where org_id=:org_id and package_id=:package_id and id=:media_id and object_path is not null"""),
+          {"org_id":org_id,"package_id":package_id,"media_id":media_id}).fetchone())
 
 
 def create_package_anomaly(org_id: str, package_id: str, user_id: str, payload: dict) -> dict | None:

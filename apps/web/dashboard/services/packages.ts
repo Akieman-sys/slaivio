@@ -121,6 +121,7 @@ export type PackageMedia = {
   caption: string | null;
   uploaded_by_name: string | null;
   created_at: string;
+  object_path?:string|null; file_name?:string|null; mime_type?:string|null; size_bytes?:number|null; category?:string;
 };
 
 export type PackageAnomaly = {
@@ -239,6 +240,7 @@ export type PackagePayload = {
   barcode?: string | null;
   qr_code_value?: string | null;
   last_scan_location?: string | null;
+  priority?:"LOW"|"NORMAL"|"HIGH"|"URGENT";assigned_to?:string|null;supplier_name?:string|null;
 };
 
 export type PackagesResponse = {
@@ -265,6 +267,7 @@ export async function listPackages(params: {
   source?: PackageSource | "";
   dossier_id?: string;
   client_id?: string;
+  warehouse?:string;country?:string;city?:string;shipment_id?:string;batch_id?:string;zone?:string;responsible?:string;category?:string;priority?:string;fragile?:boolean;received_from?:string;received_to?:string;min_declared_value?:number;max_declared_value?:number;
   page?: number;
   page_size?: number;
   sort?: string;
@@ -354,3 +357,11 @@ export async function getPackageDocumentDownload(id:string,documentId:string) {
   return (await api.get<{url:string}>(`/packages/${id}/documents/${documentId}/download`)).data.url;
 }
 export async function archivePackage(id:string) { await api.delete(`/packages/${id}`); }
+export async function restorePackage(id:string){await api.post(`/packages/${id}/restore`)}
+export async function listArchivedPackages(params:{q?:string;page?:number;page_size?:number}={}){return (await api.get<PackagesResponse>("/packages/archived",{params})).data}
+export async function scanPackageLabel(file:File){const form=new FormData();form.append("file",file);return (await api.post<{result:{raw_text:string;confidence:number|null;fields:{phone:string|null;tracking_id:string|null;weight_kg:number|null;length_cm:number|null;width_cm:number|null;height_cm:number|null}};requires_human_review:boolean}>("/packages/scan/ocr",form)).data.result}
+export async function uploadPackageMedia(id:string,file:File,category:string,caption?:string){const form=new FormData();form.append("file",file);form.append("category",category);if(caption)form.append("caption",caption);return (await api.post<{package:PackageRecord}>(`/packages/${id}/media/upload`,form)).data.package}
+export async function getPackageMediaUrl(id:string,mediaId:string){return (await api.get<{url:string}>(`/packages/${id}/media/${mediaId}/view`)).data.url}
+export async function getPackageLabel(id:string,kind:"barcode"|"qr"){return (await api.get<Blob>(`/packages/${id}/label/${kind}`,{responseType:"blob"})).data}
+export type PackageAnalytics={summary:{average_storage_days:number|null;average_before_dispatch_days:number|null;anomaly_rate:number|null};daily:Array<{day:string;count:number;weight_kg:number}>;warehouses:Array<{label:string;count:number;weight_kg:number;volume_cbm:number}>;suppliers:Array<{label:string;count:number}>;destinations:Array<{label:string;count:number}>;capacity:Array<{label:string;occupied:number;capacity:number}>};
+export async function getPackageAnalytics(){return (await api.get<{analytics:PackageAnalytics}>("/packages/analytics")).data.analytics}

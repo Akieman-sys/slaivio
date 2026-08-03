@@ -6,12 +6,13 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from app.core.tenant_context import get_current_tenant
 from app.core.permissions import require_permission
 from app.core.config import settings
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
+from app.services.package_label_ocr import read_package_label
 from app.packages.repository import (
     ANOMALY_SEVERITIES,
     INVENTORY_STATUSES,
@@ -36,6 +37,8 @@ from app.packages.repository import (
     update_package,
     move_package, weigh_package, add_package_note, set_package_checklist,
     create_package_document, get_package_document, archive_package,
+    add_private_package_media, get_package_media,
+    package_analytics,
 )
 
 
@@ -89,6 +92,9 @@ class PackagePayload(BaseModel):
     barcode: str | None = Field(default=None, max_length=160)
     qr_code_value: str | None = Field(default=None, max_length=220)
     last_scan_location: str | None = Field(default=None, max_length=180)
+    priority: str = Field(default="NORMAL",pattern="^(LOW|NORMAL|HIGH|URGENT)$")
+    assigned_to: str|None=Field(default=None,max_length=200)
+    supplier_name: str|None=Field(default=None,max_length=180)
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -147,6 +153,9 @@ class PackagePatchPayload(BaseModel):
     barcode: str | None = Field(default=None, max_length=160)
     qr_code_value: str | None = Field(default=None, max_length=220)
     last_scan_location: str | None = Field(default=None, max_length=180)
+    priority: str|None=Field(default=None,pattern="^(LOW|NORMAL|HIGH|URGENT)$")
+    assigned_to: str|None=Field(default=None,max_length=200)
+    supplier_name: str|None=Field(default=None,max_length=180)
 
     @model_validator(mode="after")
     def validate_patch(self):
@@ -249,6 +258,10 @@ def packages_index(
     source: str | None = None,
     dossier_id: str | None = None,
     client_id: str | None = None,
+    warehouse: str|None=None, country:str|None=None, city:str|None=None, shipment_id:str|None=None,
+    batch_id:str|None=None, zone:str|None=None, responsible:str|None=None, category:str|None=None,
+    priority:str|None=None, fragile:bool|None=None, received_from:str|None=None, received_to:str|None=None,
+    min_declared_value:float|None=Query(default=None,ge=0), max_declared_value:float|None=Query(default=None,ge=0),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=30, ge=1, le=100),
     sort: str = "updated_desc",
@@ -275,6 +288,9 @@ def packages_index(
         source=source,
         dossier_id=dossier_id,
         client_id=client_id,
+        warehouse=warehouse,country=country,city=city,shipment_id=shipment_id,batch_id=batch_id,zone=zone,
+        responsible=responsible,category=category,priority=priority,fragile=fragile,received_from=received_from,
+        received_to=received_to,min_declared_value=min_declared_value,max_declared_value=max_declared_value,
         page=page,
         page_size=page_size,
         sort=sort,
@@ -285,6 +301,15 @@ def packages_index(
 @router.get("/packages/stats", dependencies=[Depends(require_permission("packages.read"))])
 def packages_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": package_stats(tenant["org_id"])}
+
+@router.get("/packages/analytics", dependencies=[Depends(require_permission("packages.read"))])
+def packages_analytics(tenant=Depends(get_current_tenant)):
+    return {"status":"ok","analytics":package_analytics(tenant["org_id"])}
+
+@router.get("/packages/archived", dependencies=[Depends(require_permission("packages.archive"))])
+def packages_archived(q:str|None=Query(default=None,max_length=120),page:int=Query(default=1,ge=1),page_size:int=Query(default=30,ge=1,le=100),tenant=Depends(get_current_tenant)):
+    response=list_packages(tenant["org_id"],q=q,page=page,page_size=page_size,archived=True)
+    return {"status":"ok","count":len(response["items"]),"packages":response["items"],**response}
 
 
 @router.get("/packages/export", dependencies=[Depends(require_permission("packages.export"))])
@@ -365,11 +390,21 @@ def packages_export(
 
 @router.post("/packages/import", dependencies=[Depends(require_permission("packages.import"))])
 async def packages_import(file: UploadFile = File(...), tenant=Depends(get_current_tenant)):
-    content = await file.read()
-    try:
-        text = content.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=422, detail="invalid_csv_encoding") from exc
+    content = await file.read(10_485_761)
+    if not content or len(content)>10_485_760: raise HTTPException(status_code=413,detail="import_file_too_large")
+    suffix=Path(file.filename or "").suffix.lower()
+    if suffix==".xlsx":
+        try:
+            from openpyxl import load_workbook
+            workbook=load_workbook(io.BytesIO(content),read_only=True,data_only=True)
+            sheet=workbook.active
+            output=io.StringIO(); writer=csv.writer(output)
+            for row in sheet.iter_rows(values_only=True): writer.writerow(["" if value is None else value for value in row])
+            text=output.getvalue()
+        except Exception as exc: raise HTTPException(status_code=422,detail="invalid_xlsx_file") from exc
+    else:
+        try: text = content.decode("utf-8-sig")
+        except UnicodeDecodeError as exc: raise HTTPException(status_code=422, detail="invalid_csv_encoding") from exc
     return {"status": "ok", "result": import_packages(tenant["org_id"], _user_id(tenant), text)}
 
 
@@ -500,3 +535,51 @@ def packages_archive(package_id: str,tenant=Depends(get_current_tenant)):
 def packages_restore(package_id: str,tenant=Depends(get_current_tenant)):
     if not archive_package(tenant["org_id"],package_id,_user_id(tenant),True): raise HTTPException(status_code=404,detail="package_not_found")
     return {"status":"ok"}
+
+@router.post("/packages/scan/ocr", dependencies=[Depends(require_permission("packages.create"))])
+async def packages_scan_ocr(file:UploadFile=File(...),tenant=Depends(get_current_tenant)):
+    if file.content_type not in {"image/jpeg","image/png","image/webp"}: raise HTTPException(status_code=415,detail="unsupported_ocr_image")
+    content=await file.read(8_388_609)
+    if not content or len(content)>8_388_608: raise HTTPException(status_code=413,detail="ocr_image_too_large")
+    try: result=read_package_label(content,file.content_type)
+    except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
+    except Exception as exc: raise HTTPException(status_code=502,detail="ocr_provider_failed") from exc
+    return {"status":"ok","result":result,"requires_human_review":True}
+
+@router.post("/packages/{package_id}/media/upload", dependencies=[Depends(require_permission("packages.update"))])
+async def packages_media_upload(package_id:str,file:UploadFile=File(...),category:str=Form(default="RECEPTION"),caption:str|None=Form(default=None),tenant=Depends(get_current_tenant)):
+    allowed={"image/jpeg","image/png","image/webp","video/mp4","audio/mpeg","audio/mp4","audio/ogg"}
+    if file.content_type not in allowed: raise HTTPException(status_code=415,detail="unsupported_media_type")
+    content=await file.read(26_214_401)
+    if not content or len(content)>26_214_400: raise HTTPException(status_code=413,detail="media_too_large")
+    safe_name=Path(file.filename or "media").name; object_path=f"{tenant['org_id']}/{package_id}/{uuid4().hex}-{safe_name}"
+    try: upload_private_document(object_path,content,file.content_type,"package-media")
+    except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
+    media_type="IMAGE" if file.content_type.startswith("image/") else "VIDEO" if file.content_type.startswith("video/") else "AUDIO"
+    package=add_private_package_media(tenant["org_id"],package_id,_user_id(tenant),{"object_path":object_path,"file_name":safe_name,"mime_type":file.content_type,"size_bytes":len(content),"checksum_sha256":hashlib.sha256(content).hexdigest(),"category":category[:40].upper(),"caption":caption[:220] if caption else None,"media_type":media_type})
+    if not package: raise HTTPException(status_code=404,detail="package_not_found")
+    return {"status":"ok","package":package}
+
+@router.get("/packages/{package_id}/media/{media_id}/view", dependencies=[Depends(require_permission("packages.read"))])
+def packages_media_view(package_id:str,media_id:str,tenant=Depends(get_current_tenant)):
+    media=get_package_media(tenant["org_id"],package_id,media_id)
+    if not media: raise HTTPException(status_code=404,detail="media_not_found")
+    try: url=create_document_download_url(media["object_path"],bucket_name="package-media")
+    except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
+    return {"status":"ok","url":url,"expires_in":300}
+
+@router.get("/packages/{package_id}/label/{kind}", dependencies=[Depends(require_permission("packages.read"))])
+def packages_label(package_id:str,kind:str,tenant=Depends(get_current_tenant)):
+    package=get_package(tenant["org_id"],package_id)
+    if not package: raise HTTPException(status_code=404,detail="package_not_found")
+    value=package.get("barcode") or package.get("tracking_id") or package.get("package_reference")
+    if kind=="barcode":
+        import barcode
+        from barcode.writer import SVGWriter
+        stream=io.BytesIO(); barcode.get("code128",value,writer=SVGWriter()).write(stream,{"write_text":True})
+        return Response(stream.getvalue(),media_type="image/svg+xml",headers={"Content-Disposition":f'inline; filename="{package_id}-barcode.svg"'})
+    if kind=="qr":
+        import qrcode
+        stream=io.BytesIO(); image=qrcode.make(package.get("qr_code_value") or value); image.save(stream,format="PNG")
+        return Response(stream.getvalue(),media_type="image/png",headers={"Content-Disposition":f'inline; filename="{package_id}-qr.png"'})
+    raise HTTPException(status_code=422,detail="invalid_label_kind")

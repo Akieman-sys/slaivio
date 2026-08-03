@@ -84,3 +84,17 @@ values('package-documents','package-documents',false,10485760,array['application
 on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
 
 revoke all on package_movements,package_weight_measurements,package_notes,package_documents,package_checklist_items from public;
+
+alter table package_media add column if not exists object_path text;
+alter table package_media add column if not exists file_name text;
+alter table package_media add column if not exists mime_type text;
+alter table package_media add column if not exists size_bytes bigint;
+alter table package_media add column if not exists checksum_sha256 text;
+alter table package_media add column if not exists category text not null default 'RECEPTION';
+
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values('package-media','package-media',false,26214400,array['image/jpeg','image/png','image/webp','video/mp4','audio/mpeg','audio/mp4','audio/ogg'])
+on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
+create index if not exists idx_packages_warehouse_filters on cargo_packages(org_id,warehouse_name,warehouse_zone,status) where deleted_at is null;
+create index if not exists idx_packages_operational_flags on cargo_packages(org_id,priority,is_fragile,received_at) where deleted_at is null;

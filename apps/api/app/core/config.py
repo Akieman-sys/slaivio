@@ -6,8 +6,10 @@ from cryptography.fernet import Fernet
 
 
 Environment = Literal["development", "test", "staging", "production"]
+RuntimeRole = Literal["api", "cron", "worker"]
 class Settings(BaseSettings):
     app_env: Environment = "development"
+    app_runtime: RuntimeRole = "api"
     public_base_url: str | None = None
     platform_quarantine_encryption_key: str | None = None
     quarantine_replay_max_attempts: int = Field(default=5, ge=1, le=20)
@@ -73,6 +75,12 @@ class Settings(BaseSettings):
                 )
 
         if not self.is_deployed:
+            return self
+
+        # Background jobs deliberately have a smaller attack surface and do not
+        # expose Clerk, Meta or public HTTP endpoints. Database validation above
+        # remains mandatory for every runtime.
+        if self.app_runtime in {"cron", "worker"}:
             return self
 
         errors: list[str] = []

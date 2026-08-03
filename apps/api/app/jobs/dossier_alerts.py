@@ -1,5 +1,11 @@
 """Railway cron entrypoint for dossier operational alerts."""
 
+import os
+
+# This entrypoint owns its runtime identity. It must be set before importing
+# repositories because they instantiate application settings through the DB.
+os.environ.setdefault("APP_RUNTIME", "cron")
+
 from app.core.logger import logger
 from app.db.dossier_alert_repository import refresh_all_dossier_alerts
 

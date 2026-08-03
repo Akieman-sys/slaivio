@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     clerk_issuer_url: str | None = None
     clerk_jwks_url: str | None = None
+    clerk_webhook_secret: str | None = None
 
     mistral_api_key: str | None = None
     voice_transcription_provider: str = "mistral"
@@ -88,6 +89,8 @@ class Settings(BaseSettings):
             errors.append("META_WA_VERIFY_TOKEN must be a generated secret")
         if not (self.clerk_issuer_url or self.clerk_jwks_url):
             errors.append("CLERK_ISSUER_URL or CLERK_JWKS_URL is required")
+        if not self.clerk_webhook_secret:
+            errors.append("CLERK_WEBHOOK_SECRET is required")
         if not self.public_base_url or not self.public_base_url.startswith("https://"):
             errors.append("PUBLIC_BASE_URL must be an HTTPS URL")
         if not self.meta_app_secret:

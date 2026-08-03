@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
-from app.core.auth import get_current_manager
+from app.core.tenant_context import get_current_tenant
 from app.onboarding.schemas.onboarding_schemas import AgencyProfileIn
 from app.onboarding.services.onboarding_service import (
     get_onboarding_status,
@@ -15,34 +15,22 @@ router = APIRouter(
 )
 
 
-def _require_org(manager: dict):
-    org_id = manager.get("org_id") or manager.get("tenant_org_id")
-
-    if not org_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Missing organization context",
-        )
-
-    return org_id
-
-
 @router.get("/onboarding/status")
-def onboarding_status(manager=Depends(get_current_manager)):
+def onboarding_status(tenant=Depends(get_current_tenant)):
     return {
         "status": "ok",
-        "onboarding": get_onboarding_status(_require_org(manager)),
+        "onboarding": get_onboarding_status(tenant["org_id"]),
     }
 
 
 @router.post("/onboarding/agency-profile")
 def save_profile(
     body: AgencyProfileIn,
-    manager=Depends(get_current_manager),
+    tenant=Depends(get_current_tenant),
 ):
     result = save_agency_profile(
-        org_id=_require_org(manager),
-        user_id=manager["user_id"],
+        org_id=tenant["org_id"],
+        user_id=tenant["user_id"],
         payload=body.model_dump(),
     )
 
@@ -53,11 +41,11 @@ def save_profile(
 
 
 @router.post("/onboarding/refresh")
-def refresh(manager=Depends(get_current_manager)):
+def refresh(tenant=Depends(get_current_tenant)):
     return {
         "status": "ok",
         "onboarding": refresh_onboarding(
-            org_id=_require_org(manager),
-            user_id=manager["user_id"],
+            org_id=tenant["org_id"],
+            user_id=tenant["user_id"],
         ),
     }

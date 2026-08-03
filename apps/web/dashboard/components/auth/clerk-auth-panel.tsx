@@ -52,8 +52,8 @@ function ClerkAuthPanelContent({ mode }: { mode: "sign-in" | "sign-up" }) {
         routing="path"
         path="/sign-up"
         signInUrl="/sign-in"
-        fallbackRedirectUrl="/app"
-        forceRedirectUrl="/app"
+        fallbackRedirectUrl="/onboarding"
+        forceRedirectUrl="/onboarding"
       />
     );
   }

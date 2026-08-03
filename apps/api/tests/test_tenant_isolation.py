@@ -17,6 +17,11 @@ def test_tenant_context_fails_closed_without_verified_membership(monkeypatch):
         "get_tenant_context",
         lambda _user_id: {"active_tenant": None},
     )
+    monkeypatch.setattr(
+        tenant_context,
+        "ensure_personal_tenant",
+        lambda _manager: {"active_tenant": None},
+    )
 
     with pytest.raises(HTTPException) as error:
         tenant_context.get_current_tenant(
@@ -24,6 +29,28 @@ def test_tenant_context_fails_closed_without_verified_membership(monkeypatch):
         )
 
     assert error.value.status_code == 403
+
+
+def test_tenant_context_bootstraps_a_verified_personal_tenant(monkeypatch):
+    monkeypatch.setattr(
+        tenant_context, "get_tenant_context", lambda _user_id: {"active_tenant": None}
+    )
+    monkeypatch.setattr(
+        tenant_context,
+        "ensure_personal_tenant",
+        lambda _manager: {
+            "active_tenant": {
+                "org_id": "personal_user_123",
+                "organization_name": "Espace test",
+                "clerk_org_id": "personal_user_123",
+                "role_code": "OWNER",
+            }
+        },
+    )
+
+    tenant = tenant_context.get_current_tenant({"user_id": "user_123"})
+    assert tenant["org_id"] == "personal_user_123"
+    assert tenant["actor_role"] == "OWNER"
 
 
 def test_meta_signature_is_verified(monkeypatch):

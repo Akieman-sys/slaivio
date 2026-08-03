@@ -38,6 +38,10 @@ def set_active_tenant(
 ):
     with engine.connect() as conn:
         conn.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:clerk_user_id, 0))"),
+            {"clerk_user_id": clerk_user_id},
+        )
+        conn.execute(
             text("""
                 update tenant_sessions
                 set active = false

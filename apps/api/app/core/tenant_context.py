@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
 
 from app.core.auth import get_current_manager
-from app.tenant.services.tenant_service import get_tenant_context
+from app.tenant.services.tenant_service import ensure_personal_tenant, get_tenant_context
 
 
 def get_current_tenant(
@@ -13,6 +13,10 @@ def get_current_tenant(
     )
     context = get_tenant_context(user_id)
     active = context.get("active_tenant")
+
+    if not active:
+        context = ensure_personal_tenant(manager)
+        active = context.get("active_tenant")
 
     if not active:
         raise HTTPException(

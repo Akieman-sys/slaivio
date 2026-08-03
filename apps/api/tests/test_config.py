@@ -48,6 +48,7 @@ def test_production_accepts_a_complete_secure_contract() -> None:
         app_env="production",
         database_url="postgresql+psycopg2://user:pass@db:5432/slaivio",
         clerk_issuer_url="https://clerk.example.com",
+        clerk_webhook_secret="whsec_test_secure",
         manager_api_key="m" * 32,
         meta_wa_verify_token="v" * 32,
         public_base_url="https://api.slaivio.example",

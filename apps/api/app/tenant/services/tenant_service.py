@@ -3,6 +3,8 @@ from app.tenant.repositories.tenant_repository import (
     list_user_tenants,
     set_active_tenant,
 )
+from app.organizations.services.membership_role_service import sync_membership_with_role
+from app.organizations.services.provisioning_service import provision_organization
 
 
 def get_tenant_context(
@@ -24,6 +26,36 @@ def get_tenant_context(
         "active_tenant": active,
         "tenants": tenants,
     }
+
+
+def ensure_personal_tenant(manager: dict):
+    user_id = str(manager.get("user_id") or manager.get("id") or "")
+    if not user_id:
+        raise ValueError("authenticated_user_id_required")
+    existing = get_tenant_context(user_id)
+    if existing.get("active_tenant"):
+        return existing
+
+    email = manager.get("email")
+    display_name = (
+        manager.get("full_name") or manager.get("name") or email or "Nouvelle agence"
+    )
+    clerk_org_id = f"personal_{user_id}"
+    org = provision_organization(
+        clerk_org_id=clerk_org_id,
+        organization_name=f"Espace de {display_name}",
+    )
+    if not org:
+        raise RuntimeError("personal_organization_provisioning_failed")
+    sync_membership_with_role(
+        clerk_membership_id=f"personal_membership_{user_id}",
+        clerk_user_id=user_id,
+        clerk_org_id=clerk_org_id,
+        org_id=str(org["id"]),
+        user_email=email,
+        default_role_code="OWNER",
+    )
+    return get_tenant_context(user_id)
 
 
 def switch_tenant(

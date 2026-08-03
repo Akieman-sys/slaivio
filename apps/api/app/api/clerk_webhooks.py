@@ -1,5 +1,3 @@
-import os
-
 from fastapi import APIRouter, HTTPException, Request
 from svix.webhooks import Webhook
 
@@ -8,10 +6,11 @@ from app.organizations.repositories.organization_repository import (
 )
 from app.organizations.services.membership_role_service import sync_membership_with_role
 from app.organizations.services.provisioning_service import provision_organization
+from app.core.config import settings
 
 
 router = APIRouter()
-SECRET = os.getenv("CLERK_WEBHOOK_SECRET")
+SECRET = settings.clerk_webhook_secret
 
 
 @router.post("/webhooks/clerk")
@@ -20,19 +19,12 @@ async def clerk_webhook(
 ):
     payload = await request.body()
 
-    if SECRET:
-        try:
-            event = Webhook(SECRET).verify(
-                payload,
-                dict(request.headers),
-            )
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid signature",
-            ) from exc
-    else:
-        event = await request.json()
+    if not SECRET:
+        raise HTTPException(status_code=503, detail="clerk_webhook_not_configured")
+    try:
+        event = Webhook(SECRET).verify(payload, dict(request.headers))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="invalid signature") from exc
 
     event_type = event["type"]
     data = event["data"]

@@ -229,7 +229,8 @@ export async function listDossierDocuments(id: string) {
 
 export async function uploadDossierDocument(id: string, file: File, documentType: string, notes?: string) {
   const form = new FormData();
-  form.append("file", file); form.append("document_type", documentType);
+  form.append("file", file, file.name);
+  form.append("document_type", documentType);
   if (notes) form.append("notes", notes);
   return (await api.post(`/dossiers/${id}/documents`, form)).data.document as DossierDocument;
 }

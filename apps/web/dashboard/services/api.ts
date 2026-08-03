@@ -25,12 +25,14 @@ export function setAccessTokenProvider(provider: AccessTokenProvider | null) {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 api.interceptors.request.use(async (config) => {
+  // Let Axios/browser generate the multipart boundary for FormData. Forcing the
+  // global JSON content type makes FastAPI treat uploads as missing (`422`).
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    config.headers.delete("Content-Type");
+  }
   if (typeof window !== "undefined") {
     const retried = (config as typeof config & RetriableRequest)._slaivioAuthRetried;
     let token = accessTokenProvider ? await accessTokenProvider({ skipCache: Boolean(retried) }) : null;

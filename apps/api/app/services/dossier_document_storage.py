@@ -6,7 +6,7 @@ import httpx
 from app.core.config import settings
 
 
-def _configuration() -> tuple[str, str, str]:
+def _configuration(bucket_name: str | None = None) -> tuple[str, str, str]:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("document_storage_not_configured")
     parsed = urlparse(settings.supabase_url)
@@ -15,12 +15,12 @@ def _configuration() -> tuple[str, str, str]:
     return (
         settings.supabase_url.rstrip("/"),
         settings.supabase_service_role_key,
-        settings.dossier_documents_bucket,
+        bucket_name or settings.dossier_documents_bucket,
     )
 
 
-def upload_private_document(object_path: str, content: bytes, content_type: str) -> None:
-    base_url, key, bucket = _configuration()
+def upload_private_document(object_path: str, content: bytes, content_type: str, bucket_name: str | None = None) -> None:
+    base_url, key, bucket = _configuration(bucket_name)
     try:
         response = httpx.post(
             f"{base_url}/storage/v1/object/{quote(bucket)}/{quote(object_path, safe='/')}",
@@ -34,8 +34,8 @@ def upload_private_document(object_path: str, content: bytes, content_type: str)
         raise RuntimeError("document_storage_upload_failed")
 
 
-def create_document_download_url(object_path: str, expires_in: int = 300) -> str:
-    base_url, key, bucket = _configuration()
+def create_document_download_url(object_path: str, expires_in: int = 300, bucket_name: str | None = None) -> str:
+    base_url, key, bucket = _configuration(bucket_name)
     try:
         response = httpx.post(
             f"{base_url}/storage/v1/object/sign/{quote(bucket)}/{quote(object_path, safe='/')}",

@@ -339,6 +339,13 @@ def _select_package_sql() -> str:
             p.warehouse_zone,
             p.warehouse_rack,
             p.warehouse_location,
+            p.warehouse_aisle,
+            p.warehouse_shelf,
+            p.warehouse_position,
+            p.priority,
+            p.assigned_to,
+            p.supplier_name,
+            p.row_version,
             p.origin_country,
             p.origin_city,
             p.destination_country,
@@ -500,11 +507,16 @@ def package_stats(org_id: str) -> dict:
             text("""
                 select
                     count(*)::int total,
+                    count(*) filter (where received_at::date = current_date)::int received_today,
                     count(*) filter (where status = 'RECEIVED_AT_ORIGIN')::int received,
+                    count(*) filter (where status in ('CREATED','RECEIVED_AT_ORIGIN','WAREHOUSE_PROCESSING'))::int waiting,
+                    count(*) filter (where status = 'READY_FOR_DISPATCH')::int ready_for_dispatch,
                     count(*) filter (where inventory_status = 'IN_STOCK')::int in_stock,
                     count(*) filter (where status = 'IN_TRANSIT')::int in_transit,
                     count(*) filter (where status in ('BLOCKED', 'ISSUE') or validation_status in ('BLOCKED', 'REJECTED'))::int issues,
                     count(*) filter (where status = 'DELIVERED')::int delivered,
+                    count(*) filter (where priority in ('HIGH','URGENT'))::int priority_count,
+                    count(*) filter (where is_fragile)::int fragile_count,
                     coalesce(sum(coalesce(weight_kg, 0)), 0) total_weight_kg,
                     coalesce(sum(coalesce(volume_cbm, 0)), 0) total_volume_cbm,
                     coalesce(sum(coalesce(pieces_count, 0)), 0)::int total_pieces
@@ -583,6 +595,28 @@ def get_package(org_id: str, package_id: str) -> dict | None:
             """),
             {"org_id": org_id, "package_id": package_id},
         ).fetchall()]
+        package["movements"] = [_safe(dict(row._mapping)) for row in conn.execute(text("""
+            select id::text, from_warehouse, from_zone, from_aisle, from_shelf, from_position,
+                   to_warehouse, to_zone, to_aisle, to_shelf, to_position, reason, moved_by, created_at
+            from package_movements where org_id=:org_id and package_id=:package_id order by created_at desc limit 100
+        """), {"org_id": org_id, "package_id": package_id}).fetchall()]
+        package["weight_measurements"] = [_safe(dict(row._mapping)) for row in conn.execute(text("""
+            select id::text, weight_kg, source, device_reference, notes, measured_by, created_at
+            from package_weight_measurements where org_id=:org_id and package_id=:package_id order by created_at desc limit 100
+        """), {"org_id": org_id, "package_id": package_id}).fetchall()]
+        package["notes_items"] = [_safe(dict(row._mapping)) for row in conn.execute(text("""
+            select id::text, body, author_id, created_at, updated_at from package_notes
+            where org_id=:org_id and package_id=:package_id order by created_at desc limit 100
+        """), {"org_id": org_id, "package_id": package_id}).fetchall()]
+        package["documents"] = [_safe(dict(row._mapping)) for row in conn.execute(text("""
+            select id::text, document_type, file_name, mime_type, size_bytes, notes, uploaded_by, created_at
+            from package_documents where org_id=:org_id and package_id=:package_id and deleted_at is null
+            order by created_at desc limit 100
+        """), {"org_id": org_id, "package_id": package_id}).fetchall()]
+        package["checklist"] = [_safe(dict(row._mapping)) for row in conn.execute(text("""
+            select id::text, code, label, status, sort_order, completed_at, completed_by
+            from package_checklist_items where org_id=:org_id and package_id=:package_id order by sort_order
+        """), {"org_id": org_id, "package_id": package_id}).fetchall()]
     package["receipt_count"] = 0
     return package
 
@@ -1160,6 +1194,91 @@ def create_package_notification(org_id: str, package_id: str, user_id: str, payl
             actor_id=user_id,
         )
     return get_package(org_id, package_id)
+
+
+def move_package(org_id: str, package_id: str, user_id: str, payload: dict) -> dict | None:
+    package = get_package(org_id, package_id)
+    if not package:
+        return None
+    with engine.begin() as conn:
+        conn.execute(text("""
+            insert into package_movements(org_id,package_id,from_warehouse,from_zone,from_aisle,from_shelf,from_position,
+              to_warehouse,to_zone,to_aisle,to_shelf,to_position,reason,moved_by)
+            values(:org_id,:package_id,:from_warehouse,:from_zone,:from_aisle,:from_shelf,:from_position,
+              :to_warehouse,:to_zone,:to_aisle,:to_shelf,:to_position,:reason,:user_id)
+        """), {"org_id":org_id,"package_id":package_id,"user_id":user_id,
+            "from_warehouse":package.get("warehouse_name"),"from_zone":package.get("warehouse_zone"),
+            "from_aisle":package.get("warehouse_aisle"),"from_shelf":package.get("warehouse_shelf"),
+            "from_position":package.get("warehouse_position") or package.get("warehouse_location"), **payload})
+        conn.execute(text("""update cargo_packages set warehouse_name=:to_warehouse,warehouse_zone=:to_zone,
+          warehouse_aisle=:to_aisle,warehouse_shelf=:to_shelf,warehouse_position=:to_position,
+          warehouse_location=concat_ws(' / ',:to_aisle,:to_shelf,:to_position),inventory_status='IN_STOCK',
+          last_scan_location=concat_ws(' / ',:to_warehouse,:to_zone,:to_aisle,:to_shelf,:to_position),last_scan_at=now(),
+          updated_by=:user_id,updated_at=now(),row_version=row_version+1 where org_id=:org_id and id=:package_id"""),
+          {"org_id":org_id,"package_id":package_id,"user_id":user_id,**payload})
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_MOVED",
+          title="Colis déplacé",description=payload.get("reason"),actor_id=user_id,metadata=payload)
+    return get_package(org_id,package_id)
+
+
+def weigh_package(org_id: str, package_id: str, user_id: str, payload: dict) -> dict | None:
+    if not get_package(org_id,package_id): return None
+    with engine.begin() as conn:
+        conn.execute(text("""insert into package_weight_measurements(org_id,package_id,weight_kg,source,device_reference,notes,measured_by)
+          values(:org_id,:package_id,:weight_kg,:source,:device_reference,:notes,:user_id)"""),
+          {"org_id":org_id,"package_id":package_id,"user_id":user_id,**payload})
+        conn.execute(text("""update cargo_packages set weight_kg=:weight_kg,updated_by=:user_id,updated_at=now(),row_version=row_version+1
+          where org_id=:org_id and id=:package_id"""),{"org_id":org_id,"package_id":package_id,"user_id":user_id,"weight_kg":payload["weight_kg"]})
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_WEIGHED",title="Poids vérifié",
+          description=f'{payload["weight_kg"]} kg',actor_id=user_id,metadata=payload)
+    return get_package(org_id,package_id)
+
+
+def add_package_note(org_id: str, package_id: str, user_id: str, body: str) -> dict | None:
+    if not get_package(org_id,package_id): return None
+    with engine.begin() as conn:
+        conn.execute(text("insert into package_notes(org_id,package_id,body,author_id) values(:org_id,:package_id,:body,:user_id)"),
+          {"org_id":org_id,"package_id":package_id,"body":body,"user_id":user_id})
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_NOTE_ADDED",title="Note ajoutée",actor_id=user_id)
+    return get_package(org_id,package_id)
+
+
+def set_package_checklist(org_id: str, package_id: str, item_id: str, user_id: str, status: str) -> dict | None:
+    with engine.begin() as conn:
+        changed=conn.execute(text("""update package_checklist_items set status=:status,
+          completed_at=case when :status='COMPLETED' then now() else null end,
+          completed_by=case when :status='COMPLETED' then :user_id else null end
+          where org_id=:org_id and package_id=:package_id and id=:item_id"""),
+          {"org_id":org_id,"package_id":package_id,"item_id":item_id,"status":status,"user_id":user_id}).rowcount
+        if not changed: return None
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_CHECKLIST_UPDATED",title="Checklist mise à jour",actor_id=user_id)
+    return get_package(org_id,package_id)
+
+
+def create_package_document(org_id: str, package_id: str, user_id: str, payload: dict) -> dict | None:
+    if not get_package(org_id,package_id): return None
+    with engine.begin() as conn:
+        row=conn.execute(text("""insert into package_documents(org_id,package_id,document_type,file_name,object_path,mime_type,size_bytes,checksum_sha256,notes,uploaded_by)
+          values(:org_id,:package_id,:document_type,:file_name,:object_path,:mime_type,:size_bytes,:checksum_sha256,:notes,:user_id)
+          returning id::text,document_type,file_name,mime_type,size_bytes,notes,uploaded_by,created_at"""),
+          {"org_id":org_id,"package_id":package_id,"user_id":user_id,**payload}).fetchone()
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PACKAGE_DOCUMENT_ADDED",title="Document ajouté",description=payload["file_name"],actor_id=user_id)
+    return _one(row)
+
+
+def get_package_document(org_id: str, package_id: str, document_id: str) -> dict | None:
+    with engine.connect() as conn:
+        return _one(conn.execute(text("""select id::text,package_id::text,object_path,file_name,mime_type from package_documents
+          where org_id=:org_id and package_id=:package_id and id=:document_id and deleted_at is null"""),
+          {"org_id":org_id,"package_id":package_id,"document_id":document_id}).fetchone())
+
+
+def archive_package(org_id: str, package_id: str, user_id: str, restore: bool=False) -> dict | None:
+    with engine.begin() as conn:
+        row=conn.execute(text("""update cargo_packages set deleted_at=case when :restore then null else now() end,
+          updated_by=:user_id,updated_at=now(),row_version=row_version+1 where org_id=:org_id and id=:package_id returning id::text"""),
+          {"org_id":org_id,"package_id":package_id,"user_id":user_id,"restore":restore}).fetchone()
+    return {"id":row[0]} if row else None
 
 
 def package_timeline(org_id: str, package_id: str, *, limit: int = 80) -> list[dict]:

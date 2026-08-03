@@ -46,6 +46,8 @@ import {
   listPackages,
   resolvePackageAnomaly,
   updatePackage,
+  movePackage, weighPackage, addPackageNote, updatePackageChecklist,
+  uploadPackageDocument, getPackageDocumentDownload, archivePackage,
   type AnomalySeverity,
   type InventoryStatus,
   type PackageCondition,
@@ -147,7 +149,10 @@ const sourceLabels: Record<PackageSource, string> = {
 
 const emptyStats: PackageStats = {
   total: 0,
+  received_today: 0,
   received: 0,
+  waiting: 0,
+  ready_for_dispatch: 0,
   in_stock: 0,
   in_transit: 0,
   issues: 0,
@@ -175,7 +180,7 @@ const pagerButtonClass = "flex h-8 w-8 items-center justify-center rounded-md bo
 
 type Pagination = { page: number; page_size: number; total: number; total_pages: number };
 type PackageFormMode = "create" | "edit";
-type DetailTab = "summary" | "dossier" | "measures" | "warehouse" | "shipment" | "payment" | "anomalies" | "media" | "notifications" | "history";
+type DetailTab = "summary" | "dossier" | "measures" | "warehouse" | "shipment" | "payment" | "anomalies" | "documents" | "media" | "notes" | "notifications" | "history" | "settings";
 
 export function PackagesPage() {
   const [packages, setPackages] = useState<PackageRecord[]>([]);
@@ -185,6 +190,7 @@ export function PackagesPage() {
   const [timeline, setTimeline] = useState<PackageTimelineEvent[]>([]);
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
+  const [layoutMode,setLayoutMode]=useState<"table"|"kanban"|"analytics">("table");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PackageStatus | "">("");
   const [condition, setCondition] = useState<PackageCondition | "">("");
@@ -421,11 +427,11 @@ export function PackagesPage() {
   }
 
   const statCards = useMemo(() => [
-    { label: "Colis total", value: stats.total, tone: "blue" },
-    { label: "Reçus", value: stats.received, tone: "blue" },
-    { label: "En stock", value: stats.in_stock, tone: "blue" },
+    { label: "Reçus aujourd’hui", value: stats.received_today, tone: "blue" },
+    { label: "En attente", value: stats.waiting, tone: "amber" },
+    { label: "Prêts à expédier", value: stats.ready_for_dispatch, tone: "blue" },
     { label: "En transit", value: stats.in_transit, tone: "blue" },
-    { label: "Anomalies", value: stats.issues, tone: "amber" },
+    { label: "Livrés", value: stats.delivered, tone: "blue" },
     { label: "Poids total", value: `${Number(stats.total_weight_kg || 0).toLocaleString("fr-FR")} kg`, tone: "neutral" },
   ], [stats]);
 
@@ -434,6 +440,9 @@ export function PackagesPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Colis" description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
           actions={<>
+              <button onClick={()=>{const code=window.prompt("Scannez le code-barres ou saisissez le tracking fournisseur");if(code?.trim()){setQuery(code.trim());setLayoutMode("table")}}} className={buttonClass}><Barcode size={16}/>Scanner</button>
+              <button onClick={()=>setLayoutMode(layoutMode==="kanban"?"table":"kanban")} className={buttonClass}>{layoutMode==="kanban"?"Tableau":"Kanban"}</button>
+              <button onClick={()=>setLayoutMode(layoutMode==="analytics"?"table":"analytics")} className={buttonClass}>Analytics</button>
               <button onClick={() => setImportOpen(true)} className={buttonClass}>
                 <Upload size={16} />
                 Importer
@@ -530,7 +539,9 @@ export function PackagesPage() {
             </div>
           )}
 
-          <PackagesTable packages={packages} loading={loading} selectedId={selected?.id} onSelect={selectPackage} />
+          {layoutMode==="table"&&<PackagesTable packages={packages} loading={loading} selectedId={selected?.id} onSelect={selectPackage} />}
+          {layoutMode==="kanban"&&<PackagesKanban packages={packages} loading={loading} onSelect={selectPackage}/>}
+          {layoutMode==="analytics"&&<PackagesAnalytics stats={stats}/>}
 
           <div className="flex flex-col gap-3 border-t border-[#d8dce2] px-5 py-3 text-[13px] text-[#5f6b76] sm:flex-row sm:items-center sm:justify-between">
             <span>{pagination.total === 0 ? "0 colis" : `${(page - 1) * pagination.page_size + 1} - ${Math.min(page * pagination.page_size, pagination.total)} sur ${pagination.total} colis`}</span>
@@ -592,6 +603,14 @@ export function PackagesPage() {
     </div>
   );
 }
+
+function PackagesKanban({packages,loading,onSelect}:{packages:PackageRecord[];loading:boolean;onSelect:(item:PackageRecord)=>void}){
+ const columns:PackageStatus[]=["RECEIVED_AT_ORIGIN","WAREHOUSE_PROCESSING","READY_FOR_DISPATCH","IN_TRANSIT","DELIVERED"];
+ if(loading)return <LoadingLines/>;
+ return <div className="grid min-h-[420px] grid-cols-1 gap-3 overflow-x-auto bg-[#f7f7f6] p-4 md:grid-cols-5">{columns.map(status=><section key={status} className="min-w-[220px] rounded-lg border bg-white p-3"><header className="mb-3 flex justify-between text-[13px] font-semibold"><span>{statusLabels[status]}</span><span>{packages.filter(p=>p.status===status).length}</span></header><div className="space-y-2">{packages.filter(p=>p.status===status).map(p=><button key={p.id} onClick={()=>onSelect(p)} className="w-full rounded-md border bg-white p-3 text-left text-[12px] shadow-sm hover:border-blue-300"><b className="block text-[13px]">{p.package_reference}</b><span>{p.client_name||"Client non renseigné"}</span><small className="mt-2 block text-slate-500">{p.weight_kg?`${p.weight_kg} kg · `:""}{p.warehouse_zone||"Sans zone"}</small></button>)}</div></section>)}</div>
+}
+
+function PackagesAnalytics({stats}:{stats:PackageStats}){const max=Math.max(stats.total,1);const rows=[['En attente',stats.waiting],['Prêts à expédier',stats.ready_for_dispatch],['En transit',stats.in_transit],['Livrés',stats.delivered],['Anomalies',stats.issues],['Prioritaires',stats.priority_count||0],['Fragiles',stats.fragile_count||0]] as const;return <div className="grid gap-4 bg-[#f7f7f6] p-5 lg:grid-cols-2"><Section title="Flux des colis"><div className="space-y-4">{rows.map(([label,value])=><div key={label}><div className="mb-1 flex justify-between text-[13px]"><span>{label}</span><b>{value}</b></div><div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-[#12c76f]" style={{width:`${Math.max(value?3:0,value/max*100)}%`}}/></div></div>)}</div></Section><Section title="Stock physique"><div className="grid grid-cols-2 gap-3"><SmallMetric label="Poids total" value={`${Number(stats.total_weight_kg||0).toLocaleString('fr-FR')} kg`}/><SmallMetric label="Volume total" value={`${Number(stats.total_volume_cbm||0).toLocaleString('fr-FR')} m³`}/><SmallMetric label="Pièces" value={stats.total_pieces||0}/><SmallMetric label="Reçus aujourd’hui" value={stats.received_today}/></div></Section></div>}
 
 function PackagesTable({ packages, loading, selectedId, onSelect }: {
   packages: PackageRecord[];
@@ -720,9 +739,12 @@ function PackageDetails({
     { key: "shipment", label: "Expédition" },
     { key: "payment", label: "Paiement" },
     { key: "anomalies", label: "Anomalies" },
+    { key: "documents", label: "Documents" },
     { key: "media", label: "Photos" },
+    { key: "notes", label: "Notes" },
     { key: "notifications", label: "Notifications" },
     { key: "history", label: "Historique" },
+    { key: "settings", label: "Paramètres" },
   ];
 
   async function refreshPackage(next: PackageRecord) {
@@ -773,13 +795,16 @@ function PackageDetails({
             {activeTab === "summary" && <SummaryTab item={item} />}
             {activeTab === "dossier" && <DossierTab item={item} />}
             {activeTab === "measures" && <MeasuresTab item={item} />}
-            {activeTab === "warehouse" && <WarehouseTab item={item} />}
+            {activeTab === "warehouse" && <WarehouseTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "shipment" && <ShipmentTab item={item} />}
             {activeTab === "payment" && <PaymentTab item={item} />}
             {activeTab === "anomalies" && <AnomaliesTab item={item} onUpdated={refreshPackage} />}
+            {activeTab === "documents" && <DocumentsTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "media" && <MediaTab item={item} />}
+            {activeTab === "notes" && <NotesTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "notifications" && <NotificationsTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "history" && <HistoryTab events={timeline} loading={timelineLoading} />}
+            {activeTab === "settings" && <SettingsTab item={item} onArchived={close} />}
           </div>
         </div>
       </aside>
@@ -862,7 +887,11 @@ function DossierTab({ item }: { item: PackageRecord }) {
   );
 }
 
-function WarehouseTab({ item }: { item: PackageRecord }) {
+function WarehouseTab({ item, onUpdated }: { item: PackageRecord; onUpdated:(item:PackageRecord)=>void }) {
+  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+  async function move(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy(true);setError("");const f=new FormData(event.currentTarget);try{onUpdated(await movePackage(item.id,{to_warehouse:String(f.get("warehouse")||""),to_zone:clean(f.get("zone")),to_aisle:clean(f.get("aisle")),to_shelf:clean(f.get("shelf")),to_position:clean(f.get("position")),reason:clean(f.get("reason"))}));event.currentTarget.reset();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false)}}
+  async function weigh(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy(true);setError("");const f=new FormData(event.currentTarget);try{onUpdated(await weighPackage(item.id,{weight_kg:Number(f.get("weight")),source:"MANUAL",device_reference:clean(f.get("device")),notes:clean(f.get("notes"))}));event.currentTarget.reset();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false)}}
+  async function checklist(id:string,next:string){setBusy(true);try{onUpdated(await updatePackageChecklist(item.id,id,next));}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false)}}
   return (
     <div className="space-y-5">
       <Section title="Emplacement actuel">
@@ -877,6 +906,11 @@ function WarehouseTab({ item }: { item: PackageRecord }) {
         <Field label="Dernier scan" value={item.last_scan_location ? `${item.last_scan_location} · ${formatDate(item.last_scan_at)}` : "-"} />
         <Field label="Source" value={sourceLabels[item.source] || item.source} />
       </Section>
+      <Section title="Déplacer le colis"><form onSubmit={move} className="grid grid-cols-2 gap-2"><input required name="warehouse" className={inputClass} placeholder="Entrepôt"/><input name="zone" className={inputClass} placeholder="Zone"/><input name="aisle" className={inputClass} placeholder="Allée"/><input name="shelf" className={inputClass} placeholder="Étagère"/><input name="position" className={inputClass} placeholder="Position"/><input name="reason" className={inputClass} placeholder="Motif"/><button disabled={busy} className={primaryButtonClass}>Déplacer</button></form></Section>
+      <Section title="Peser"><form onSubmit={weigh} className="grid grid-cols-2 gap-2"><input required min="0" step="0.001" type="number" name="weight" className={inputClass} placeholder="Poids kg"/><input name="device" className={inputClass} placeholder="Balance / appareil"/><input name="notes" className={`${inputClass} col-span-2`} placeholder="Observation"/><button disabled={busy} className={primaryButtonClass}>Enregistrer la pesée</button></form></Section>
+      <Section title="Checklist opérationnelle"><div className="space-y-2">{(item.checklist||[]).map(c=><label key={c.id} className="flex items-center gap-3 rounded border p-3"><input type="checkbox" checked={c.status==="COMPLETED"} disabled={busy} onChange={e=>checklist(c.id,e.target.checked?"COMPLETED":"PENDING")}/><span>{c.label}</span></label>)}</div></Section>
+      <Section title="Historique des déplacements">{(item.movements||[]).length?<div className="space-y-2">{item.movements!.map(m=><div key={m.id} className="rounded border p-3 text-[13px]"><b>{[m.to_warehouse,m.to_zone,m.to_aisle,m.to_shelf,m.to_position].filter(Boolean).join(" / ")}</b><p className="text-slate-500">{m.reason||"Déplacement entrepôt"} · {formatDate(m.created_at)}</p></div>)}</div>:<p className="text-[13px] text-slate-500">Aucun déplacement enregistré.</p>}</Section>
+      {error&&<p className="text-[13px] text-red-600">{error}</p>}
     </div>
   );
 }
@@ -1075,6 +1109,20 @@ function AddMediaForm({ item }: { item: PackageRecord }) {
     </Section>
   );
 }
+
+function DocumentsTab({item,onUpdated}:{item:PackageRecord;onUpdated:(item:PackageRecord)=>void}){
+  const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError("");const f=new FormData(e.currentTarget);const file=f.get("file");if(!(file instanceof File)||!file.size){setError("Sélectionnez un fichier.");setBusy(false);return}try{await uploadPackageDocument(item.id,file,String(f.get("type")||"OTHER"),clean(f.get("notes"))||undefined);onUpdated(await getPackage(item.id));e.currentTarget.reset()}catch(x){setError(apiErrorMessage(x))}finally{setBusy(false)}}
+  async function download(id:string){try{window.open(await getPackageDocumentDownload(item.id,id),"_blank","noopener,noreferrer")}catch(x){setError(apiErrorMessage(x))}}
+  return <div className="space-y-5"><Section title="Téléverser un document"><form onSubmit={submit} className="space-y-2"><input required type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" className={inputClass}/><select name="type" className={inputClass}><option value="SUPPLIER_INVOICE">Facture fournisseur</option><option value="RECEIPT">Bon de réception</option><option value="CUSTOMS">Déclaration douanière</option><option value="INSURANCE">Assurance</option><option value="LABEL">Étiquette</option><option value="OTHER">Autre</option></select><input name="notes" className={inputClass} placeholder="Observation"/><button disabled={busy} className={primaryButtonClass}>{busy?"Téléversement…":"Téléverser"}</button></form></Section><Section title="Documents">{(item.documents||[]).length?<div className="space-y-2">{item.documents!.map(d=><button key={d.id} onClick={()=>download(d.id)} className="flex w-full justify-between rounded border p-3 text-left text-[13px]"><span><b>{d.file_name}</b><small className="block text-slate-500">{d.document_type} · {Math.ceil(d.size_bytes/1024)} Ko</small></span><Download size={16}/></button>)}</div>:<EmptyState title="Aucun document" text="Ajoutez les pièces liées à ce colis."/>}</Section>{error&&<p className="text-red-600">{error}</p>}</div>
+}
+
+function NotesTab({item,onUpdated}:{item:PackageRecord;onUpdated:(item:PackageRecord)=>void}){
+ const [busy,setBusy]=useState(false);const [error,setError]=useState("");async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);setBusy(true);try{onUpdated(await addPackageNote(item.id,String(f.get("body")||"")));e.currentTarget.reset()}catch(x){setError(apiErrorMessage(x))}finally{setBusy(false)}}
+ return <div className="space-y-5"><Section title="Nouvelle note"><form onSubmit={submit} className="space-y-2"><textarea required minLength={1} maxLength={4000} name="body" className="min-h-24 w-full rounded-md border p-3 text-[13px]" placeholder="Note privée pour l’équipe…"/><button disabled={busy} className={primaryButtonClass}>Ajouter la note</button></form></Section><Section title="Notes internes">{(item.notes_items||[]).length?<div className="space-y-2">{item.notes_items!.map(n=><article key={n.id} className="rounded border p-3 text-[13px]"><p>{n.body}</p><small className="mt-2 block text-slate-500">{n.author_id} · {formatDate(n.created_at)}</small></article>)}</div>:<EmptyState title="Aucune note" text="Les notes privées apparaîtront ici."/>}</Section>{error&&<p className="text-red-600">{error}</p>}</div>
+}
+
+function SettingsTab({item,onArchived}:{item:PackageRecord;onArchived:()=>void}){const [busy,setBusy]=useState(false);const [error,setError]=useState("");async function archive(){if(!window.confirm(`Archiver ${item.package_reference || "ce colis"} ?`))return;setBusy(true);try{await archivePackage(item.id);onArchived()}catch(x){setError(apiErrorMessage(x));setBusy(false)}}function printLabel(){const popup=window.open("","_blank","width=520,height=680");if(!popup)return;const safe=(value:unknown)=>String(value??"-").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c));popup.document.write(`<html><head><title>${safe(item.package_reference||"Colis")}</title><style>body{font-family:Arial;padding:28px}.label{border:3px solid #111;padding:24px}h1{font-size:32px}.code{font-family:monospace;font-size:22px;letter-spacing:3px;border:1px solid;padding:16px;text-align:center}</style></head><body><div class="label"><h1>${safe(item.package_reference||"COLIS")}</h1><p><b>Client:</b> ${safe(item.client_name)}</p><p><b>Dossier:</b> ${safe(item.dossier_reference)}</p><p><b>Destination:</b> ${safe(item.destination_city)}, ${safe(item.destination_country)}</p><p><b>Poids:</b> ${safe(item.weight_kg)} kg</p><div class="code">${safe(item.barcode||item.tracking_id||item.package_reference)}</div></div><script>window.print();<\/script></body></html>`);popup.document.close()}return <div className="space-y-5"><Section title="Identité"><Field label="Parcel ID" value={item.package_reference||"-"}/><Field label="Tracking fournisseur" value={item.tracking_id||"-"}/><Field label="Code-barres" value={item.barcode||"-"}/><Field label="QR" value={item.qr_code_value||"-"}/><button onClick={printLabel} className={buttonClass}>Imprimer l’étiquette</button></Section><section className="rounded-lg border border-red-200 bg-red-50 p-4"><h3 className="font-semibold text-red-800">Zone sensible</h3><p className="my-2 text-[13px] text-red-700">L’archivage retire le colis des opérations courantes sans effacer son historique.</p><button disabled={busy} onClick={archive} className="rounded bg-red-700 px-3 py-2 text-[13px] font-semibold text-white">Archiver le colis</button>{error&&<p className="mt-2 text-red-700">{error}</p>}</section></div>}
 
 function NotificationsTab({ item, onUpdated }: { item: PackageRecord; onUpdated: (item: PackageRecord) => void }) {
   const [saving, setSaving] = useState(false);

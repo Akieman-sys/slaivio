@@ -48,6 +48,8 @@ export type PackageRecord = {
   warehouse_zone: string | null;
   warehouse_rack: string | null;
   warehouse_location: string | null;
+  warehouse_aisle?: string|null; warehouse_shelf?:string|null; warehouse_position?:string|null;
+  priority?: "LOW"|"NORMAL"|"HIGH"|"URGENT"; assigned_to?:string|null; supplier_name?:string|null; row_version?:number;
   origin_country: string | null;
   origin_city: string | null;
   destination_country: string | null;
@@ -99,7 +101,18 @@ export type PackageRecord = {
   events?: PackageLifecycleEvent[];
   anomalies?: PackageAnomaly[];
   notifications?: PackageNotification[];
+  movements?: PackageMovement[];
+  weight_measurements?: PackageWeightMeasurement[];
+  notes_items?: PackageNote[];
+  documents?: PackageDocument[];
+  checklist?: PackageChecklistItem[];
 };
+
+export type PackageMovement = { id:string; from_warehouse:string|null; from_zone:string|null; from_aisle:string|null; from_shelf:string|null; from_position:string|null; to_warehouse:string|null; to_zone:string|null; to_aisle:string|null; to_shelf:string|null; to_position:string|null; reason:string|null; moved_by:string; created_at:string };
+export type PackageWeightMeasurement = { id:string; weight_kg:number; source:string; device_reference:string|null; notes:string|null; measured_by:string; created_at:string };
+export type PackageNote = { id:string; body:string; author_id:string; created_at:string; updated_at:string };
+export type PackageDocument = { id:string; document_type:string; file_name:string; mime_type:string; size_bytes:number; notes:string|null; uploaded_by:string; created_at:string };
+export type PackageChecklistItem = { id:string; code:string; label:string; status:"PENDING"|"COMPLETED"|"NOT_APPLICABLE"; sort_order:number; completed_at:string|null; completed_by:string|null };
 
 export type PackageMedia = {
   id: string;
@@ -165,7 +178,10 @@ export type PackageTimelineEvent = {
 
 export type PackageStats = {
   total: number;
+  received_today: number;
   received: number;
+  waiting: number;
+  ready_for_dispatch: number;
   in_stock: number;
   in_transit: number;
   issues: number;
@@ -173,6 +189,7 @@ export type PackageStats = {
   total_weight_kg: number;
   total_volume_cbm: number;
   total_pieces?: number;
+  priority_count?:number; fragile_count?:number;
 };
 
 export type PackagePayload = {
@@ -316,3 +333,24 @@ export async function resolvePackageAnomaly(id: string, anomalyId: string, notes
 export async function createPackageNotification(id: string, payload: { channel?: NotificationChannel; notification_type?: string; recipient?: string | null; message: string }) {
   return (await api.post<{ status: "ok"; package: PackageRecord }>(`/packages/${id}/notifications`, payload)).data.package;
 }
+
+export async function movePackage(id:string,payload:{to_warehouse:string;to_zone?:string|null;to_aisle?:string|null;to_shelf?:string|null;to_position?:string|null;reason?:string|null}) {
+  return (await api.post<{package:PackageRecord}>(`/packages/${id}/move`,payload)).data.package;
+}
+export async function weighPackage(id:string,payload:{weight_kg:number;source?:string;device_reference?:string|null;notes?:string|null}) {
+  return (await api.post<{package:PackageRecord}>(`/packages/${id}/weigh`,payload)).data.package;
+}
+export async function addPackageNote(id:string,body:string) {
+  return (await api.post<{package:PackageRecord}>(`/packages/${id}/notes`,{body})).data.package;
+}
+export async function updatePackageChecklist(id:string,itemId:string,status:string) {
+  return (await api.patch<{package:PackageRecord}>(`/packages/${id}/checklist/${itemId}`,{status})).data.package;
+}
+export async function uploadPackageDocument(id:string,file:File,documentType="OTHER",notes?:string) {
+  const form=new FormData(); form.append("file",file); form.append("document_type",documentType); if(notes) form.append("notes",notes);
+  return (await api.post<{document:PackageDocument}>(`/packages/${id}/documents`,form)).data.document;
+}
+export async function getPackageDocumentDownload(id:string,documentId:string) {
+  return (await api.get<{url:string}>(`/packages/${id}/documents/${documentId}/download`)).data.url;
+}
+export async function archivePackage(id:string) { await api.delete(`/packages/${id}`); }

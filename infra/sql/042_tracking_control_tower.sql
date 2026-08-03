@@ -17,7 +17,14 @@ alter table cargo_expeditions add column if not exists public_tracking_enabled b
 alter table cargo_expeditions add column if not exists public_tracking_expires_at timestamptz;
 alter table cargo_expeditions add column if not exists last_signal_at timestamptz;
 alter table cargo_expeditions add column if not exists last_signal_source text;
+alter table cargo_expeditions add column if not exists tracking_row_version integer not null default 1;
+alter table expedition_events add column if not exists idempotency_key text;
+alter table expedition_anomalies add column if not exists assigned_to text;
+alter table expedition_anomalies add column if not exists assigned_name text;
+alter table expedition_anomalies add column if not exists detection_key text;
 create unique index if not exists ux_cargo_expeditions_public_token on cargo_expeditions(public_tracking_token) where public_tracking_token is not null;
+create unique index if not exists ux_tracking_event_idempotency on expedition_events(org_id,expedition_id,idempotency_key) where idempotency_key is not null;
+create unique index if not exists ux_tracking_alert_detection on expedition_anomalies(org_id,expedition_id,detection_key) where detection_key is not null and status in ('OPEN','IN_REVIEW');
 
 create table if not exists tracking_saved_views(
  id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id) on delete cascade,
@@ -29,5 +36,19 @@ create table if not exists tracking_public_access_logs(
  expedition_id uuid not null references cargo_expeditions(id) on delete cascade,ip_address text,user_agent text,
  accessed_at timestamptz not null default now()
 );
+create table if not exists tracking_alert_history(
+ id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id) on delete cascade,
+ expedition_id uuid not null references cargo_expeditions(id) on delete cascade,
+ alert_id uuid not null references expedition_anomalies(id) on delete cascade,
+ action text not null,previous_status text,new_status text,comment text,actor_id text,
+ created_at timestamptz not null default now()
+);
+create table if not exists tracking_audit_log(
+ id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id) on delete cascade,
+ expedition_id uuid references cargo_expeditions(id) on delete cascade,action text not null,
+ actor_id text,request_id text,payload jsonb not null default '{}'::jsonb,created_at timestamptz not null default now()
+);
 create index if not exists idx_tracking_public_access on tracking_public_access_logs(org_id,expedition_id,accessed_at desc);
-revoke all on tracking_saved_views,tracking_public_access_logs from public;
+create index if not exists idx_tracking_alert_history on tracking_alert_history(org_id,expedition_id,created_at desc);
+create index if not exists idx_tracking_audit on tracking_audit_log(org_id,expedition_id,created_at desc);
+revoke all on tracking_saved_views,tracking_public_access_logs,tracking_alert_history,tracking_audit_log from public;

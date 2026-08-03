@@ -54,6 +54,13 @@ export type ExpeditionRecord = {
   delivered_at: string | null;
   is_delayed: boolean;
   delay_reason: string | null;
+  last_location?: string | null;
+  last_signal_at?: string | null;
+  last_signal_source?: string | null;
+  progress_percent?: number;
+  public_tracking_enabled?: boolean;
+  public_tracking_expires_at?: string | null;
+  tracking_row_version?: number;
   packages_count: number;
   clients_count: number;
   total_weight_kg: number;
@@ -178,6 +185,9 @@ export type ExpeditionAnomaly = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  assigned_to?: string | null;
+  assigned_name?: string | null;
+  history?: Array<{action:string;previous_status:string|null;new_status:string|null;comment:string|null;actor_id:string|null;created_at:string}>;
 };
 
 export type ExpeditionNote = {

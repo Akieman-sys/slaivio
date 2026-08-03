@@ -39,6 +39,15 @@ SHIPMENT_ROLE_PERMISSIONS = {
     "FINANCE": ("shipments.read",),
 }
 
+TRACKING_ROLE_PERMISSIONS = {
+    "OWNER": ("tracking.read", "tracking.update", "tracking.alerts", "tracking.notify", "tracking.export", "tracking.public"),
+    "MANAGER": ("tracking.read", "tracking.update", "tracking.alerts", "tracking.notify", "tracking.export", "tracking.public"),
+    "OPERATOR": ("tracking.read", "tracking.update", "tracking.alerts", "tracking.notify"),
+    "WAREHOUSE": ("tracking.read", "tracking.update", "tracking.alerts", "tracking.notify"),
+    "SUPPORT": ("tracking.read", "tracking.export"),
+    "FINANCE": ("tracking.read", "tracking.export"),
+}
+
 CLIENT_ROLE_PERMISSION_INSERT_SQL = """
     insert into role_permissions (role_id, permission_id)
     select r.id, p.id
@@ -117,6 +126,16 @@ def ensure_shipment_role_permissions(org_id: str):
         conn.commit()
 
 
+def ensure_tracking_role_permissions(org_id: str):
+    with engine.connect() as conn:
+        for role_code, permission_codes in TRACKING_ROLE_PERMISSIONS.items():
+            conn.execute(
+                text(CLIENT_ROLE_PERMISSION_INSERT_SQL),
+                {"org_id": org_id, "role_code": role_code, "permission_codes": list(permission_codes)},
+            )
+        conn.commit()
+
+
 def provision_organization(
     clerk_org_id: str,
     organization_name: str,
@@ -131,4 +150,5 @@ def provision_organization(
         ensure_client_role_permissions(org_id)
         ensure_dossier_role_permissions(org_id)
         ensure_shipment_role_permissions(org_id)
+        ensure_tracking_role_permissions(org_id)
     return org

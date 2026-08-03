@@ -1,47 +1,62 @@
 import csv
+import hashlib
 import io
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter,Depends,HTTPException,Query,Request
+from fastapi import APIRouter,Depends,File,Form,HTTPException,Query,Request,UploadFile
 from pydantic import BaseModel,Field
 from starlette.responses import StreamingResponse
 
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
-from app.expeditions.repository import add_note,create_anomaly,create_notification,resolve_anomaly,update_expedition
-from app.tracking.repository import add_manual_event,control_tower,global_timeline,list_views,public_token,public_view,save_view,tracking_detail,tracking_stats
+from app.expeditions.repository import add_document,add_note,create_anomaly,create_notification
+from app.tracking.repository import add_manual_event,archive_tracking,control_tower,detect_simple_alerts,disable_public_token,global_timeline,list_alerts,list_views,public_token,public_view,record_audit,save_view,tracking_analytics,tracking_detail,tracking_stats,update_alert,update_tracking_fields
+from app.services.dossier_document_storage import create_document_download_url,upload_private_document
 
 router=APIRouter()
 def _user(tenant:dict)->str:return str(tenant.get("user_id") or tenant.get("clerk_user_id") or "system")
 
 class EventPayload(BaseModel):
-    event_type:str=Field(min_length=2,max_length=60);title:str=Field(min_length=2,max_length=180);description:str|None=Field(default=None,max_length=1000);location:str|None=Field(default=None,max_length=200);latitude:float|None=Field(default=None,ge=-90,le=90);longitude:float|None=Field(default=None,ge=-180,le=180);occurred_at:str|None=None
+    event_type:str=Field(min_length=2,max_length=60);title:str=Field(min_length=2,max_length=180);description:str|None=Field(default=None,max_length=1000);location:str|None=Field(default=None,max_length=200);latitude:float|None=Field(default=None,ge=-90,le=90);longitude:float|None=Field(default=None,ge=-180,le=180);occurred_at:str|None=None;idempotency_key:str|None=Field(default=None,min_length=8,max_length=120)
 class AlertPayload(BaseModel):
     anomaly_type:str="OPERATIONAL";severity:str=Field(default="MEDIUM",pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$");title:str=Field(min_length=2,max_length=180);description:str|None=Field(default=None,max_length=1000)
 class ResolvePayload(BaseModel):notes:str|None=Field(default=None,max_length=1000)
+class AlertUpdatePayload(BaseModel):status:str|None=Field(default=None,pattern="^(OPEN|IN_REVIEW|RESOLVED|DISMISSED)$");assigned_to:str|None=Field(default=None,max_length=200);assigned_name:str|None=Field(default=None,max_length=200);comment:str|None=Field(default=None,max_length=1000)
 class NotePayload(BaseModel):note:str=Field(min_length=1,max_length=4000);priority:str=Field(default="NORMAL",pattern="^(LOW|NORMAL|HIGH|URGENT)$")
+class DocumentPayload(BaseModel):document_type:str="DOCUMENT";file_url:str=Field(min_length=1,max_length=2000);file_name:str|None=Field(default=None,max_length=255);mime_type:str|None=Field(default=None,max_length=120);visibility:str="INTERNAL";notes:str|None=Field(default=None,max_length=1000)
 class NotificationPayload(BaseModel):channel:str=Field(default="whatsapp",pattern="^(whatsapp|email|sms|internal)$");audience:str="ALL_CLIENTS";recipient:str|None=None;message:str=Field(min_length=2,max_length=1600)
-class EtaPayload(BaseModel):eta_at:str;reason:str=Field(min_length=2,max_length=500)
+class EtaPayload(BaseModel):eta_at:str;reason:str=Field(min_length=2,max_length=500);expected_version:int|None=Field(default=None,ge=1)
+class AssignmentPayload(BaseModel):owner_id:str|None=Field(default=None,max_length=200);owner_name:str|None=Field(default=None,max_length=200);expected_version:int|None=Field(default=None,ge=1)
 class TokenPayload(BaseModel):expires_at:str|None=None
 class SavedViewPayload(BaseModel):name:str=Field(min_length=2,max_length=80);filters:dict=Field(default_factory=dict)
 class BulkNotificationPayload(NotificationPayload):tracking_ids:list[str]=Field(min_length=1,max_length=100)
 
 @router.get("/tracking",dependencies=[Depends(require_permission("tracking.read"))])
-def index(q:str|None=None,status:str|None=None,risk_level:str|None=None,country:str|None=None,route:str|None=None,warehouse:str|None=None,client_id:str|None=None,container:str|None=None,batch:str|None=None,incident:bool|None=None,page:int=Query(default=1,ge=1),page_size:int=Query(default=30,ge=1,le=100),tenant=Depends(get_current_tenant)):
-    result=control_tower(tenant["org_id"],q=q,status=status,risk_level=risk_level,country=country,route=route,warehouse=warehouse,client_id=client_id,container=container,batch=batch,incident=incident,page=page,page_size=page_size)
+def index(q:str|None=None,status:str|None=None,risk_level:str|None=None,country:str|None=None,route:str|None=None,warehouse:str|None=None,client_id:str|None=None,container:str|None=None,batch:str|None=None,incident:bool|None=None,date_from:str|None=None,date_to:str|None=None,page:int=Query(default=1,ge=1),page_size:int=Query(default=30,ge=1,le=100),tenant=Depends(get_current_tenant)):
+    result=control_tower(tenant["org_id"],q=q,status=status,risk_level=risk_level,country=country,route=route,warehouse=warehouse,client_id=client_id,container=container,batch=batch,incident=incident,date_from=date_from,date_to=date_to,page=page,page_size=page_size)
     return {"status":"ok","items":result["items"],"pagination":result["pagination"]}
 
 @router.get("/tracking/stats",dependencies=[Depends(require_permission("tracking.read"))])
 def stats(tenant=Depends(get_current_tenant)):return {"status":"ok","stats":tracking_stats(tenant["org_id"])}
 @router.get("/tracking/timeline",dependencies=[Depends(require_permission("tracking.read"))])
 def timeline(limit:int=Query(default=80,ge=1,le=200),tenant=Depends(get_current_tenant)):return {"status":"ok","items":global_timeline(tenant["org_id"],limit)}
+@router.get("/tracking/analytics",dependencies=[Depends(require_permission("tracking.read"))])
+def analytics(tenant=Depends(get_current_tenant)):return {"status":"ok","analytics":tracking_analytics(tenant["org_id"])}
+@router.get("/tracking/alerts",dependencies=[Depends(require_permission("tracking.read"))])
+def alerts(status:str|None=None,severity:str|None=None,assigned_to:str|None=None,tenant=Depends(get_current_tenant)):return {"status":"ok","items":list_alerts(tenant["org_id"],status=status,severity=severity,assigned_to=assigned_to)}
+@router.post("/tracking/alerts/detect",dependencies=[Depends(require_permission("tracking.alerts"))])
+def detect(tenant=Depends(get_current_tenant)):return {"status":"ok","created":detect_simple_alerts(tenant["org_id"],_user(tenant))}
 @router.get("/tracking/views",dependencies=[Depends(require_permission("tracking.read"))])
 def views(tenant=Depends(get_current_tenant)):return {"status":"ok","items":list_views(tenant["org_id"],_user(tenant))}
 @router.post("/tracking/views",dependencies=[Depends(require_permission("tracking.update"))])
 def view_save(body:SavedViewPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","view":save_view(tenant["org_id"],_user(tenant),body.name,body.filters)}
 
 @router.get("/tracking/export",dependencies=[Depends(require_permission("tracking.export"))])
-def export(tenant=Depends(get_current_tenant)):
-    items=control_tower(tenant["org_id"],page=1,page_size=100)["items"];output=io.StringIO();fields=["tracking_id","status","mode","origin_city","origin_country","destination_city","destination_country","last_location","eta_at","risk_level","is_delayed","packages_count","clients_count","updated_at"]
+def export(q:str|None=None,status:str|None=None,risk_level:str|None=None,country:str|None=None,route:str|None=None,warehouse:str|None=None,client_id:str|None=None,container:str|None=None,batch:str|None=None,incident:bool|None=None,date_from:str|None=None,date_to:str|None=None,tenant=Depends(get_current_tenant)):
+    params=dict(q=q,status=status,risk_level=risk_level,country=country,route=route,warehouse=warehouse,client_id=client_id,container=container,batch=batch,incident=incident,date_from=date_from,date_to=date_to);first=control_tower(tenant["org_id"],**params,page=1,page_size=100);items=list(first["items"])
+    for page in range(2,first["pagination"]["total_pages"]+1):items.extend(control_tower(tenant["org_id"],**params,page=page,page_size=100)["items"])
+    output=io.StringIO();fields=["tracking_id","status","mode","origin_city","origin_country","destination_city","destination_country","last_location","eta_at","risk_level","is_delayed","packages_count","clients_count","updated_at"]
     writer=csv.DictWriter(output,fieldnames=fields);writer.writeheader()
     for item in items:writer.writerow({key:item.get(key,"") for key in fields})
     return StreamingResponse(iter([output.getvalue()]),media_type="text/csv",headers={"Content-Disposition":'attachment; filename="slaivio-tracking.csv"'})
@@ -66,8 +81,17 @@ def event(tracking_id:str,body:EventPayload,tenant=Depends(get_current_tenant)):
     return {"status":"ok","tracking":item}
 @router.patch("/tracking/{tracking_id}/eta",dependencies=[Depends(require_permission("tracking.update"))])
 def eta(tracking_id:str,body:EtaPayload,tenant=Depends(get_current_tenant)):
-    item=update_expedition(tenant["org_id"],tracking_id,_user(tenant),{"eta_at":body.eta_at,"delay_reason":body.reason})
+    try:item=update_tracking_fields(tenant["org_id"],tracking_id,_user(tenant),{"eta_at":body.eta_at,"delay_reason":body.reason},body.expected_version)
+    except ValueError as exc:raise HTTPException(status_code=409,detail=str(exc)) from exc
     if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    record_audit(tenant["org_id"],tracking_id,"ETA_UPDATED",_user(tenant),body.model_dump())
+    return {"status":"ok","tracking":item}
+@router.patch("/tracking/{tracking_id}/assignment",dependencies=[Depends(require_permission("tracking.update"))])
+def assignment(tracking_id:str,body:AssignmentPayload,tenant=Depends(get_current_tenant)):
+    try:item=update_tracking_fields(tenant["org_id"],tracking_id,_user(tenant),body.model_dump(exclude={"expected_version"}),body.expected_version)
+    except ValueError as exc:raise HTTPException(status_code=409,detail=str(exc)) from exc
+    if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    record_audit(tenant["org_id"],tracking_id,"ASSIGNMENT_UPDATED",_user(tenant),body.model_dump())
     return {"status":"ok","tracking":item}
 @router.post("/tracking/{tracking_id}/alerts",dependencies=[Depends(require_permission("tracking.alerts"))])
 def alert(tracking_id:str,body:AlertPayload,tenant=Depends(get_current_tenant)):
@@ -76,7 +100,12 @@ def alert(tracking_id:str,body:AlertPayload,tenant=Depends(get_current_tenant)):
     return {"status":"ok","tracking":item}
 @router.patch("/tracking/{tracking_id}/alerts/{alert_id}/resolve",dependencies=[Depends(require_permission("tracking.alerts"))])
 def alert_resolve(tracking_id:str,alert_id:str,body:ResolvePayload,tenant=Depends(get_current_tenant)):
-    item=resolve_anomaly(tenant["org_id"],tracking_id,alert_id,_user(tenant),body.notes)
+    item=update_alert(tenant["org_id"],tracking_id,alert_id,_user(tenant),status="RESOLVED",comment=body.notes)
+    if not item:raise HTTPException(status_code=404,detail="alert_not_found")
+    return {"status":"ok","tracking":item}
+@router.patch("/tracking/{tracking_id}/alerts/{alert_id}",dependencies=[Depends(require_permission("tracking.alerts"))])
+def alert_update(tracking_id:str,alert_id:str,body:AlertUpdatePayload,tenant=Depends(get_current_tenant)):
+    item=update_alert(tenant["org_id"],tracking_id,alert_id,_user(tenant),**body.model_dump())
     if not item:raise HTTPException(status_code=404,detail="alert_not_found")
     return {"status":"ok","tracking":item}
 @router.post("/tracking/{tracking_id}/notes",dependencies=[Depends(require_permission("tracking.update"))])
@@ -84,6 +113,34 @@ def note(tracking_id:str,body:NotePayload,tenant=Depends(get_current_tenant)):
     item=add_note(tenant["org_id"],tracking_id,_user(tenant),{"note":body.note,"priority":body.priority,"visibility":"PRIVATE"})
     if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
     return {"status":"ok","tracking":item}
+@router.post("/tracking/{tracking_id}/documents",dependencies=[Depends(require_permission("tracking.update"))])
+def document(tracking_id:str,body:DocumentPayload,tenant=Depends(get_current_tenant)):
+    item=add_document(tenant["org_id"],tracking_id,_user(tenant),body.model_dump())
+    if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    return {"status":"ok","tracking":item}
+@router.post("/tracking/{tracking_id}/documents/upload",dependencies=[Depends(require_permission("tracking.update"))])
+async def document_upload(tracking_id:str,file:UploadFile=File(...),document_type:str=Form(default="DOCUMENT"),notes:str|None=Form(default=None),tenant=Depends(get_current_tenant)):
+    allowed={"application/pdf","image/jpeg","image/png","image/webp","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+    if file.content_type not in allowed:raise HTTPException(status_code=415,detail="unsupported_document_type")
+    content=await file.read()
+    if not content or len(content)>26_214_400:raise HTTPException(status_code=413,detail="document_too_large")
+    safe_name=Path(file.filename or "document").name;object_path=f"{tenant['org_id']}/{tracking_id}/{uuid4().hex}-{safe_name}"
+    try:upload_private_document(object_path,content,file.content_type,"tracking-documents")
+    except Exception as exc:raise HTTPException(status_code=503,detail="document_storage_unavailable") from exc
+    item=add_document(tenant["org_id"],tracking_id,_user(tenant),{"document_type":document_type,"file_url":f"private://tracking-documents/{object_path}","file_name":safe_name,"mime_type":file.content_type,"notes":notes or f"sha256:{hashlib.sha256(content).hexdigest()}"})
+    if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    return {"status":"ok","tracking":item}
+@router.get("/tracking/{tracking_id}/documents/{document_id}/view",dependencies=[Depends(require_permission("tracking.read"))])
+def document_view(tracking_id:str,document_id:str,tenant=Depends(get_current_tenant)):
+    item=tracking_detail(tenant["org_id"],tracking_id)
+    if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    document=next((entry for entry in item.get("documents",[]) if str(entry.get("id"))==document_id),None)
+    if not document:raise HTTPException(status_code=404,detail="document_not_found")
+    prefix="private://tracking-documents/";value=str(document.get("file_url") or "")
+    if not value.startswith(prefix):return {"status":"ok","url":value}
+    try:url=create_document_download_url(value[len(prefix):],bucket_name="tracking-documents")
+    except Exception as exc:raise HTTPException(status_code=503,detail="document_storage_unavailable") from exc
+    return {"status":"ok","url":url}
 @router.post("/tracking/{tracking_id}/notifications",dependencies=[Depends(require_permission("tracking.notify"))])
 def notify(tracking_id:str,body:NotificationPayload,tenant=Depends(get_current_tenant)):
     item=create_notification(tenant["org_id"],tracking_id,_user(tenant),{"channel":body.channel,"audience":body.audience,"recipient":body.recipient,"notification_type":"TRACKING_UPDATE","message":body.message})
@@ -94,6 +151,15 @@ def token(tracking_id:str,body:TokenPayload,tenant=Depends(get_current_tenant)):
     result=public_token(tenant["org_id"],tracking_id,body.expires_at)
     if not result:raise HTTPException(status_code=404,detail="tracking_not_found")
     return {"status":"ok",**result,"tracking_path":f"/track/{result['public_tracking_token']}"}
+@router.delete("/tracking/{tracking_id}/public-token",dependencies=[Depends(require_permission("tracking.public"))])
+def token_disable(tracking_id:str,tenant=Depends(get_current_tenant)):
+    item=disable_public_token(tenant["org_id"],tracking_id,_user(tenant))
+    if not item:raise HTTPException(status_code=404,detail="tracking_not_found")
+    return {"status":"ok","tracking":item}
+@router.delete("/tracking/{tracking_id}",dependencies=[Depends(require_permission("tracking.update"))])
+def archive(tracking_id:str,tenant=Depends(get_current_tenant)):
+    if not archive_tracking(tenant["org_id"],tracking_id,_user(tenant)):raise HTTPException(status_code=404,detail="tracking_not_found")
+    return {"status":"ok"}
 
 @router.get("/public/tracking/{token}")
 def public(token:str,request:Request):

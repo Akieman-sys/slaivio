@@ -34,6 +34,7 @@ def sync_membership_with_role(
     clerk_org_id: str,
     org_id: str,
     user_email: str | None = None,
+    user_display_name: str | None = None,
     default_role_code: str = "SUPPORT",
 ):
     invitation = None
@@ -51,6 +52,8 @@ def sync_membership_with_role(
         clerk_org_id=clerk_org_id,
         org_id=org_id,
         role_code=role_code,
+        member_email=user_email,
+        member_display_name=user_display_name,
     )
 
     role = get_role_by_code(

@@ -53,6 +53,7 @@ def ensure_personal_tenant(manager: dict):
         clerk_org_id=clerk_org_id,
         org_id=str(org["id"]),
         user_email=email,
+        user_display_name=display_name,
         default_role_code="OWNER",
     )
     return get_tenant_context(user_id)

@@ -20,6 +20,7 @@ export type DossierCaseType = "UNKNOWN" | "IMPORT" | "EXPORT" | "PURCHASE" | "QU
 export type DossierIntakeStatus = "PARTIAL" | "COMPLETE" | "WAITING_CLIENT" | "WAITING_PACKAGE";
 export type DossierValidationStatus = "PENDING" | "VALIDATED" | "REJECTED" | "NEEDS_REVIEW";
 export type DossierPaymentStatus = "PENDING" | "WAITING" | "PARTIAL" | "PAID" | "OVERDUE" | "CANCELLED";
+export type DossierPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export type DossierRecord = {
   id: string;
@@ -55,6 +56,11 @@ export type DossierRecord = {
   client_full_name: string | null;
   supplier_payment_amount: number | null;
   supplier_payment_currency: string | null;
+  priority: DossierPriority;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  assigned_by: string | null;
+  due_at: string | null;
   message_count: number;
   event_count: number;
   shipment_count: number;
@@ -105,6 +111,12 @@ export type DossierChecklistItem = {
   id: string; code: string; label: string; required: boolean;
   status: "PENDING" | "COMPLETED" | "NOT_APPLICABLE";
   completed_at: string | null; completed_by: string | null; row_version: number;
+};
+
+export type DossierMember = { user_id: string; role_code: string; display_name: string; email: string | null };
+export type DossierInternalNote = {
+  id: string; body: string; author_id: string; edited_at: string | null;
+  row_version: number; created_at: string; updated_at: string;
 };
 
 export type DossierMessage = {
@@ -232,6 +244,30 @@ export async function listDossierChecklist(id: string) {
 
 export async function updateDossierChecklistItem(id: string, item: DossierChecklistItem, status: DossierChecklistItem["status"]) {
   return (await api.patch(`/dossiers/${id}/checklist/${item.id}`, { status, row_version: item.row_version })).data.item as DossierChecklistItem;
+}
+
+export async function listDossierMembers() {
+  return (await api.get<{ items: DossierMember[] }>("/dossiers/collaboration/members")).data.items;
+}
+
+export async function updateDossierCollaboration(id: string, payload: { row_version: number; priority: DossierPriority; assigned_to: string | null; due_at: string | null }) {
+  return (await api.patch<{ dossier: DossierRecord }>(`/dossiers/${id}/collaboration`, payload)).data.dossier;
+}
+
+export async function listDossierNotes(id: string) {
+  return (await api.get<{ items: DossierInternalNote[] }>(`/dossiers/${id}/notes`)).data.items;
+}
+
+export async function createDossierNote(id: string, body: string) {
+  return (await api.post<{ note: DossierInternalNote }>(`/dossiers/${id}/notes`, { body })).data.note;
+}
+
+export async function updateDossierNote(id: string, note: DossierInternalNote, body: string) {
+  return (await api.patch<{ note: DossierInternalNote }>(`/dossiers/${id}/notes/${note.id}`, { body, row_version: note.row_version })).data.note;
+}
+
+export async function deleteDossierNote(id: string, note: DossierInternalNote) {
+  await api.delete(`/dossiers/${id}/notes/${note.id}`, { params: { row_version: note.row_version } });
 }
 
 export async function exportDossiers(params: {

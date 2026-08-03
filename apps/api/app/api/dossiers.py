@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -33,6 +34,14 @@ from app.db.dossier_document_repository import (
     list_checklist,
     list_documents,
     update_checklist_item,
+)
+from app.db.dossier_collaboration_repository import (
+    create_note,
+    delete_note,
+    list_active_members,
+    list_notes,
+    update_collaboration,
+    update_note,
 )
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
 
@@ -134,6 +143,27 @@ class ChecklistPatchPayload(BaseModel):
         if self.status not in {"PENDING", "COMPLETED", "NOT_APPLICABLE"}:
             raise ValueError("invalid_checklist_status")
         return self
+
+
+class DossierCollaborationPayload(BaseModel):
+    row_version: int = Field(ge=1)
+    priority: str = "NORMAL"
+    assigned_to: str | None = Field(default=None, max_length=200)
+    due_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_priority(self):
+        if self.priority not in {"LOW", "NORMAL", "HIGH", "URGENT"}:
+            raise ValueError("invalid_dossier_priority")
+        return self
+
+
+class DossierNotePayload(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class DossierNotePatchPayload(DossierNotePayload):
+    row_version: int = Field(ge=1)
 
 
 def _user_id(tenant: dict) -> str:
@@ -309,6 +339,59 @@ def dossiers_timeline(dossier_id: str, tenant=Depends(get_current_tenant)):
     if not dossier:
         raise HTTPException(status_code=404, detail="dossier_not_found")
     return {"status": "ok", "items": dossier_timeline(tenant["org_id"], dossier_id)}
+
+
+@router.get("/dossiers/collaboration/members", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossier_collaboration_members(tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "items": list_active_members(tenant["org_id"])}
+
+
+@router.patch("/dossiers/{dossier_id}/collaboration", dependencies=[Depends(require_permission("dossiers.update"))])
+def dossier_collaboration_update(dossier_id: str, body: DossierCollaborationPayload, tenant=Depends(get_current_tenant)):
+    try:
+        dossier = update_collaboration(
+            tenant["org_id"], dossier_id, _user_id(tenant), body.model_dump()
+        )
+    except ValueError as exc:
+        if str(exc) == "invalid_dossier_assignee":
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if str(exc) == "stale_dossier_version":
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
+    if not dossier:
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "dossier": dossier}
+
+
+@router.get("/dossiers/{dossier_id}/notes", dependencies=[Depends(require_permission("dossiers.read"))])
+def dossier_notes(dossier_id: str, tenant=Depends(get_current_tenant)):
+    if not get_dossier(tenant["org_id"], dossier_id):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "items": list_notes(tenant["org_id"], dossier_id)}
+
+
+@router.post("/dossiers/{dossier_id}/notes", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(require_permission("dossiers.update"))])
+def dossier_note_create(dossier_id: str, body: DossierNotePayload, tenant=Depends(get_current_tenant)):
+    note = create_note(tenant["org_id"], dossier_id, _user_id(tenant), body.body)
+    if not note:
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    return {"status": "ok", "note": note}
+
+
+@router.patch("/dossiers/{dossier_id}/notes/{note_id}", dependencies=[Depends(require_permission("dossiers.update"))])
+def dossier_note_update(dossier_id: str, note_id: str, body: DossierNotePatchPayload, tenant=Depends(get_current_tenant)):
+    note = update_note(tenant["org_id"], dossier_id, note_id, _user_id(tenant), body.body, body.row_version)
+    if not note:
+        raise HTTPException(status_code=409, detail="note_not_owned_or_stale")
+    return {"status": "ok", "note": note}
+
+
+@router.delete("/dossiers/{dossier_id}/notes/{note_id}", dependencies=[Depends(require_permission("dossiers.update"))])
+def dossier_note_delete(dossier_id: str, note_id: str, row_version: int = Query(ge=1), tenant=Depends(get_current_tenant)):
+    if not delete_note(tenant["org_id"], dossier_id, note_id, _user_id(tenant), row_version):
+        raise HTTPException(status_code=409, detail="note_not_owned_or_stale")
+    return {"status": "ok"}
 
 
 @router.patch(

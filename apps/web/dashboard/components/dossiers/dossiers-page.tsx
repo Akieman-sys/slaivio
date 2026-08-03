@@ -16,6 +16,7 @@ import {
   Search,
   Upload,
   X,
+  Trash2,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -39,9 +40,18 @@ import {
   updateDossierChecklistItem,
   uploadDossierDocument,
   updateDossier,
+  createDossierNote,
+  deleteDossierNote,
+  listDossierMembers,
+  listDossierNotes,
+  updateDossierCollaboration,
+  updateDossierNote,
   type DossierCaseType,
   type DossierChecklistItem,
   type DossierDocument,
+  type DossierInternalNote,
+  type DossierMember,
+  type DossierPriority,
   type DossierIntakeStatus,
   type DossierPaymentStatus,
   type DossierPayload,
@@ -153,7 +163,7 @@ const pagerButtonClass = "flex h-8 w-8 items-center justify-center rounded-md bo
 
 type Pagination = { page: number; page_size: number; total: number; total_pages: number };
 type DossierFormMode = "create" | "edit";
-type DetailTab = "summary" | "client" | "shipments" | "documents" | "checklist" | "messages" | "notifications" | "history";
+type DetailTab = "summary" | "collaboration" | "client" | "shipments" | "documents" | "checklist" | "messages" | "notifications" | "history";
 
 export function DossiersPage() {
   const [dossiers, setDossiers] = useState<DossierRecord[]>([]);
@@ -163,6 +173,8 @@ export function DossiersPage() {
   const [timeline, setTimeline] = useState<DossierTimelineEvent[]>([]);
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
   const [checklist, setChecklist] = useState<DossierChecklistItem[]>([]);
+  const [members, setMembers] = useState<DossierMember[]>([]);
+  const [notes, setNotes] = useState<DossierInternalNote[]>([]);
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
   const [query, setQuery] = useState("");
@@ -205,6 +217,9 @@ export function DossiersPage() {
     if (!selected) return;
     if (activeTab === "documents") listDossierDocuments(selected.id).then(setDocuments).catch(() => setDocuments([]));
     if (activeTab === "checklist") listDossierChecklist(selected.id).then(setChecklist).catch(() => setChecklist([]));
+    if (activeTab === "collaboration") Promise.all([listDossierMembers(), listDossierNotes(selected.id)])
+      .then(([nextMembers, nextNotes]) => { setMembers(nextMembers); setNotes(nextNotes); })
+      .catch(() => { setMembers([]); setNotes([]); });
   }, [selected, activeTab]);
 
   async function loadStats() {
@@ -514,6 +529,8 @@ export function DossiersPage() {
           onRestore={handleRestore}
           documents={documents}
           checklist={checklist}
+          members={members}
+          notes={notes}
           onUpload={async (file, type, notes) => {
             await uploadDossierDocument(selected.id, file, type, notes);
             setDocuments(await listDossierDocuments(selected.id));
@@ -525,6 +542,14 @@ export function DossiersPage() {
             const updated = await updateDossierChecklistItem(selected.id, item, nextStatus);
             setChecklist((items) => items.map((current) => current.id === updated.id ? updated : current));
           }}
+          onCollaboration={async (priority, assignedTo, dueAt) => {
+            const updated = await updateDossierCollaboration(selected.id, { row_version: selected.row_version, priority, assigned_to: assignedTo, due_at: dueAt });
+            setSelected(updated);
+            setDossiers((items) => items.map((item) => item.id === updated.id ? updated : item));
+          }}
+          onCreateNote={async (body) => { await createDossierNote(selected.id, body); setNotes(await listDossierNotes(selected.id)); }}
+          onUpdateNote={async (note, body) => { await updateDossierNote(selected.id, note, body); setNotes(await listDossierNotes(selected.id)); }}
+          onDeleteNote={async (note) => { await deleteDossierNote(selected.id, note); setNotes(await listDossierNotes(selected.id)); }}
         />
       )}
 
@@ -634,9 +659,15 @@ function DossierDetails({
   onRestore,
   documents,
   checklist,
+  members,
+  notes,
   onUpload,
   onDownload,
   onChecklist,
+  onCollaboration,
+  onCreateNote,
+  onUpdateNote,
+  onDeleteNote,
 }: {
   dossier: DossierRecord;
   loading: boolean;
@@ -652,9 +683,15 @@ function DossierDetails({
   onRestore: () => void;
   documents: DossierDocument[];
   checklist: DossierChecklistItem[];
+  members: DossierMember[];
+  notes: DossierInternalNote[];
   onUpload: (file: File, type: string, notes?: string) => Promise<void>;
   onDownload: (documentId: string) => Promise<void>;
   onChecklist: (item: DossierChecklistItem, status: DossierChecklistItem["status"]) => Promise<void>;
+  onCollaboration: (priority: DossierPriority, assignedTo: string | null, dueAt: string | null) => Promise<void>;
+  onCreateNote: (body: string) => Promise<void>;
+  onUpdateNote: (note: DossierInternalNote, body: string) => Promise<void>;
+  onDeleteNote: (note: DossierInternalNote) => Promise<void>;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -670,6 +707,7 @@ function DossierDetails({
 
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "summary", label: "Résumé" },
+    { key: "collaboration", label: "Collaboration" },
     { key: "client", label: "Client" },
     { key: "shipments", label: "Colis & expéditions" },
     { key: "documents", label: "Documents" },
@@ -726,6 +764,7 @@ function DossierDetails({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {activeTab === "summary" && <SummaryTab dossier={dossier} />}
+          {activeTab === "collaboration" && <CollaborationTab dossier={dossier} members={members} notes={notes} onSave={onCollaboration} onCreateNote={onCreateNote} onUpdateNote={onUpdateNote} onDeleteNote={onDeleteNote} />}
           {activeTab === "client" && <ClientTab dossier={dossier} />}
           {activeTab === "shipments" && <ShipmentsTab dossier={dossier} />}
           {activeTab === "documents" && <DocumentsTab documents={documents} onUpload={onUpload} onDownload={onDownload} />}
@@ -737,6 +776,56 @@ function DossierDetails({
       </aside>
     </div>
   );
+}
+
+function CollaborationTab({ dossier, members, notes, onSave, onCreateNote, onUpdateNote, onDeleteNote }: {
+  dossier: DossierRecord;
+  members: DossierMember[];
+  notes: DossierInternalNote[];
+  onSave: (priority: DossierPriority, assignedTo: string | null, dueAt: string | null) => Promise<void>;
+  onCreateNote: (body: string) => Promise<void>;
+  onUpdateNote: (note: DossierInternalNote, body: string) => Promise<void>;
+  onDeleteNote: (note: DossierInternalNote) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  async function saveTracking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true); setError("");
+    try {
+      const rawDue = String(form.get("due_at") || "");
+      await onSave(String(form.get("priority")) as DossierPriority, String(form.get("assigned_to") || "") || null, rawDue ? new Date(rawDue).toISOString() : null);
+    } catch (err) { setError(apiErrorMessage(err)); } finally { setSaving(false); }
+  }
+  async function addNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const body = String(new FormData(formElement).get("body") || "").trim();
+    if (!body) return;
+    setSaving(true); setError("");
+    try { await onCreateNote(body); formElement.reset(); } catch (err) { setError(apiErrorMessage(err)); } finally { setSaving(false); }
+  }
+  return <div className="space-y-5">
+    <PermissionGuard permission="dossiers.update"><form onSubmit={saveTracking} className="rounded-md border border-[#d8dce2] p-4">
+      <h3 className="text-[14px] font-semibold">Pilotage du dossier</h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <label className="text-[12px] text-[#617083]">Priorité<select name="priority" defaultValue={dossier.priority || "NORMAL"} className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"><option value="LOW">Basse</option><option value="NORMAL">Normale</option><option value="HIGH">Haute</option><option value="URGENT">Urgente</option></select></label>
+        <label className="text-[12px] text-[#617083]">Responsable<select name="assigned_to" defaultValue={dossier.assigned_to || ""} className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"><option value="">Non assigné</option>{members.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name} ({member.role_code})</option>)}</select></label>
+        <label className="text-[12px] text-[#617083]">Échéance<input name="due_at" type="datetime-local" defaultValue={toLocalInput(dossier.due_at)} className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]" /></label>
+      </div>
+      <button disabled={saving} className={`${buttonClass} mt-3`}>{saving ? "Enregistrement…" : "Enregistrer le pilotage"}</button>
+    </form></PermissionGuard>
+    <PermissionGuard permission="dossiers.update"><form onSubmit={addNote} className="rounded-md border border-[#d8dce2] p-4"><h3 className="text-[14px] font-semibold">Ajouter une note interne</h3><textarea name="body" required maxLength={4000} rows={3} placeholder="Information visible uniquement par l'équipe de l'agence…" className="mt-3 w-full rounded-md border p-3 text-[13px]" /><button disabled={saving} className={`${buttonClass} mt-2`}>Ajouter la note</button></form></PermissionGuard>
+    {error && <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">{error}</p>}
+    <div className="space-y-3">{notes.length === 0 ? <EmptyState title="Aucune note interne" text="Centralisez ici les consignes et décisions de l'équipe." /> : notes.map((note) => <InternalNoteCard key={note.id} note={note} onUpdate={onUpdateNote} onDelete={onDeleteNote} />)}</div>
+  </div>;
+}
+
+function InternalNoteCard({ note, onUpdate, onDelete }: { note: DossierInternalNote; onUpdate: (note: DossierInternalNote, body: string) => Promise<void>; onDelete: (note: DossierInternalNote) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(note.body);
+  return <article className="rounded-md border border-[#d8dce2] bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-[#344054]">{note.author_id}</p><p className="text-[11px] text-[#687584]">{formatDate(note.created_at)}{note.edited_at ? " · modifiée" : ""}</p></div><PermissionGuard permission="dossiers.update"><div className="flex gap-1"><button onClick={() => setEditing(!editing)} className="p-1.5 text-[#617083]" aria-label="Modifier"><Edit3 size={14} /></button><button onClick={() => onDelete(note)} className="p-1.5 text-red-600" aria-label="Supprimer"><Trash2 size={14} /></button></div></PermissionGuard></div>{editing ? <div className="mt-3"><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} rows={3} className="w-full rounded-md border p-3 text-[13px]" /><button onClick={async () => { await onUpdate(note, body); setEditing(false); }} className={`${buttonClass} mt-2`}>Enregistrer</button></div> : <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-[#344054]">{note.body}</p>}</article>;
 }
 
 function SummaryTab({ dossier }: { dossier: DossierRecord }) {
@@ -1088,6 +1177,14 @@ function formatDate(value?: string | null) {
 function formatMoney(value?: number | null, currency?: string | null) {
   if (value === null || value === undefined) return "-";
   return `${Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${currency || ""}`.trim();
+}
+
+function toLocalInput(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function clean(value: FormDataEntryValue | null) {

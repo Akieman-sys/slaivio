@@ -47,6 +47,7 @@ async def clerk_webhook(
             clerk_org_id=personal_clerk_org_id,
             org_id=str(org["id"]),
             user_email=email,
+            user_display_name=display_name,
             default_role_code="OWNER",
         )
         return {
@@ -80,12 +81,16 @@ async def clerk_webhook(
             }
 
         public_user_data = data.get("public_user_data") or {}
+        member_name = " ".join(
+            part for part in [public_user_data.get("first_name"), public_user_data.get("last_name")] if part
+        ).strip() or public_user_data.get("identifier")
         result = sync_membership_with_role(
             clerk_membership_id=data["id"],
             clerk_user_id=public_user_data.get("user_id") or data.get("public_user_id"),
             clerk_org_id=clerk_org_id,
             org_id=str(org["id"]),
             user_email=public_user_data.get("identifier"),
+            user_display_name=member_name,
         )
 
         return {

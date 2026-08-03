@@ -21,6 +21,12 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers/{dossier_id}/documents/{document_id}/download", "GET"): "dossiers.read",
     ("/dossiers/{dossier_id}/checklist", "GET"): "dossiers.read",
     ("/dossiers/{dossier_id}/checklist/{item_id}", "PATCH"): "dossiers.update",
+    ("/dossiers/collaboration/members", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/collaboration", "PATCH"): "dossiers.update",
+    ("/dossiers/{dossier_id}/notes", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/notes", "POST"): "dossiers.update",
+    ("/dossiers/{dossier_id}/notes/{note_id}", "PATCH"): "dossiers.update",
+    ("/dossiers/{dossier_id}/notes/{note_id}", "DELETE"): "dossiers.update",
 }
 
 

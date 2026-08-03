@@ -22,18 +22,22 @@ import type { ReactNode } from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { listPackages, type PackageRecord } from "@/services/packages";
+import {PermissionGuard} from "@/components/permissions/permission-guard";
 import {
-  addShipmentDocument,
+  archiveShipment,
   addShipmentFinancialLine,
   addShipmentNote,
   addShipmentPackage,
   createShipmentAnomaly,
   createShipmentNotification,
   getShipment,
+  getShipmentDocumentUrl,
+  exportShipmentManifest,
   removeShipmentPackage,
   resolveShipmentAnomaly,
   updateShipment,
   updateShipmentCheckpoint,
+  uploadShipmentDocument,
   type ExpeditionDetail,
   type ExpeditionMode,
   type ExpeditionPayload,
@@ -74,8 +78,9 @@ const riskLabels: Record<RiskLevel, string> = {
   CRITICAL: "Critique",
 };
 
-const tabs = ["Overview", "Colis", "Clients", "Tracking", "Timeline", "Documents", "Finance", "Risques", "Notes", "Settings"] as const;
-type Tab = (typeof tabs)[number];
+const primaryTabs=["Overview","Colis","Tracking","Documents","Risques"] as const;
+const secondaryTabs=["Clients","Timeline","Finance","Notes","Settings"] as const;
+type Tab = (typeof primaryTabs)[number]|(typeof secondaryTabs)[number];
 
 const buttonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
 const primaryButtonClass = "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#0fb966]";
@@ -145,13 +150,13 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-[#f7f8fa] px-8 py-6 text-[#1f2328]">
-      <section className="mx-auto overflow-hidden rounded-lg border border-[#d8dce2] bg-white shadow-sm">
-        <header className="border-b border-[#d8dce2] px-6 py-5">
+      <section className="mx-auto overflow-hidden bg-white">
+        <header className="border-b border-[#eceef1] px-6 py-5">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <Link className={buttonClass} href="/app/shipments"><ArrowLeft size={16} /> Expéditions</Link>
             <div className="flex items-center gap-2">
               <button className={buttonClass} onClick={load}><RefreshCcw size={16} /> Actualiser</button>
-              <button className={primaryButtonClass} onClick={() => setActiveTab("Colis")}><Plus size={16} /> Ajouter colis</button>
+              <PermissionGuard permission="shipments.update"><button className={primaryButtonClass} onClick={() => setActiveTab("Colis")}><Plus size={16} /> Ajouter colis</button></PermissionGuard>
             </div>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-5">
@@ -173,11 +178,12 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
         {error ? <div className="m-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">{error}</div> : null}
 
         <div className="flex overflow-x-auto border-b border-[#d8dce2] px-4">
-          {tabs.map((tab) => (
+          {primaryTabs.map((tab) => (
             <button key={tab} className={`px-3 py-3 text-[13px] font-medium ${activeTab === tab ? "border-b-2 border-[#12c76f] text-[#067a45]" : "text-[#526071] hover:text-[#1f2328]"}`} onClick={() => setActiveTab(tab)}>
               {tab}
             </button>
           ))}
+          <select aria-label="Autres sections" value={secondaryTabs.includes(activeTab as typeof secondaryTabs[number])?activeTab:""} onChange={event=>setActiveTab(event.target.value as Tab)} className="ml-1 h-8 self-center rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{secondaryTabs.map(tab=><option key={tab} value={tab}>{tab}</option>)}</select>
         </div>
 
         <div className="p-5">
@@ -194,7 +200,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
           {activeTab === "Clients" ? <ClientsTab shipment={shipment} /> : null}
           {activeTab === "Tracking" ? <TrackingTab shipment={shipment} saving={saving} onComplete={(key) => mutate(() => updateShipmentCheckpoint(shipment.id, key, { status: "COMPLETED", completed_at: new Date().toISOString() }))} /> : null}
           {activeTab === "Timeline" ? <TimelineTab shipment={shipment} /> : null}
-          {activeTab === "Documents" ? <DocumentsTab shipment={shipment} saving={saving} onSubmit={(payload) => mutate(() => addShipmentDocument(shipment.id, payload))} /> : null}
+          {activeTab === "Documents" ? <DocumentsTab shipment={shipment} saving={saving} onUpload={(file,type,notes) => mutate(() => uploadShipmentDocument(shipment.id,file,type,notes))} /> : null}
           {activeTab === "Finance" ? <FinanceTab shipment={shipment} saving={saving} onSubmit={(payload) => mutate(() => addShipmentFinancialLine(shipment.id, payload))} /> : null}
           {activeTab === "Risques" ? (
             <RisksTab
@@ -206,7 +212,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
             />
           ) : null}
           {activeTab === "Notes" ? <NotesTab shipment={shipment} saving={saving} onSubmit={(note) => mutate(() => addShipmentNote(shipment.id, { note }))} /> : null}
-          {activeTab === "Settings" ? <SettingsTab shipment={shipment} saving={saving} onSubmit={(payload) => mutate(() => updateShipment(shipment.id, payload))} /> : null}
+          {activeTab === "Settings" ? <SettingsTab shipment={shipment} saving={saving} onSubmit={(payload) => mutate(() => updateShipment(shipment.id, {...payload,expected_version:shipment.shipment_row_version}))} onArchive={async()=>{await archiveShipment(shipment.id,shipment.shipment_row_version);window.location.href="/app/shipments"}} /> : null}
         </div>
       </section>
     </div>
@@ -379,21 +385,21 @@ function TimelineTab({ shipment }: { shipment: ExpeditionDetail }) {
   );
 }
 
-function DocumentsTab({ shipment, saving, onSubmit }: { shipment: ExpeditionDetail; saving: boolean; onSubmit: (payload: { document_type?: string; file_url: string; file_name?: string; notes?: string }) => void }) {
+function DocumentsTab({ shipment, saving, onUpload }: { shipment: ExpeditionDetail; saving: boolean; onUpload: (file:File,type:string,notes?:string) => Promise<void> }) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const file_url = value(form, "file_url");
-    if (!file_url) return;
-    onSubmit({ document_type: value(form, "document_type"), file_url, file_name: value(form, "file_name"), notes: value(form, "notes") });
-    event.currentTarget.reset();
+    const file=form.get("file");
+    if(!(file instanceof File)||!file.size)return;
+    void onUpload(file,value(form,"document_type")||"DOCUMENT",value(form,"notes")).then(()=>event.currentTarget.reset());
   }
+  async function open(documentId:string){const url=await getShipmentDocumentUrl(shipment.id,documentId);window.open(url,"_blank","noopener,noreferrer")}
+  async function manifest(){const blob=await exportShipmentManifest(shipment.id);const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`manifest-${shipment.expedition_reference}.csv`;link.click();URL.revokeObjectURL(url)}
   return (
-    <div className="space-y-4">
+    <div className="space-y-4"><div className="flex justify-end"><button className={buttonClass} onClick={manifest}>Télécharger le manifeste</button></div>
       <InlineForm onSubmit={handleSubmit} saving={saving} submitLabel="Ajouter document">
         <Field name="document_type" label="Type" placeholder="Manifest, AWB, BL..." />
-        <Field name="file_name" label="Nom" placeholder="manifest-juillet.pdf" />
-        <Field name="file_url" label="URL fichier" placeholder="https://..." required />
+        <label><span className="mb-1 block text-[13px] font-medium text-[#334155]">Fichier privé</span><input required name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx" className="block w-full text-[12px]"/></label>
         <Field name="notes" label="Notes" placeholder="Document douane" />
       </InlineForm>
       <DataTable headers={["Type", "Nom", "URL", "Visibilité", "Ajouté le"]}>
@@ -401,7 +407,7 @@ function DocumentsTab({ shipment, saving, onSubmit }: { shipment: ExpeditionDeta
           <tr className="border-b border-[#edf0f3]" key={doc.id}>
             <td className="px-4 py-3 font-semibold">{doc.document_type}</td>
             <td className="px-4 py-3">{doc.file_name || "-"}</td>
-            <td className="px-4 py-3"><a className="text-[#067a45] hover:underline" href={doc.file_url} target="_blank">Ouvrir</a></td>
+            <td className="px-4 py-3"><button className="text-[#5149bd] hover:underline" onClick={()=>open(doc.id)}>Ouvrir</button></td>
             <td className="px-4 py-3">{doc.visibility}</td>
             <td className="px-4 py-3">{formatDate(doc.created_at)}</td>
           </tr>
@@ -514,7 +520,7 @@ function NotesTab({ shipment, saving, onSubmit }: { shipment: ExpeditionDetail; 
   );
 }
 
-function SettingsTab({ shipment, saving, onSubmit }: { shipment: ExpeditionDetail; saving: boolean; onSubmit: (payload: ExpeditionPayload) => void }) {
+function SettingsTab({ shipment, saving, onSubmit,onArchive }: { shipment: ExpeditionDetail; saving: boolean; onSubmit: (payload: ExpeditionPayload) => void;onArchive:()=>Promise<void> }) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -546,14 +552,14 @@ function SettingsTab({ shipment, saving, onSubmit }: { shipment: ExpeditionDetai
         <span className="mb-1 block text-[13px] font-medium text-[#334155]">Notes</span>
         <textarea name="notes" defaultValue={shipment.notes || ""} className="min-h-24 w-full rounded-md border border-[#cfd5dd] px-3 py-2 text-[14px]" />
       </label>
-      <div className="md:col-span-3"><button className={primaryButtonClass} disabled={saving}><Save size={16} /> Enregistrer</button></div>
+      <div className="md:col-span-3 flex items-center justify-between"><PermissionGuard permission="shipments.update"><button className={primaryButtonClass} disabled={saving}><Save size={16} /> Enregistrer</button><button type="button" className="rounded-md px-3 py-2 text-[13px] text-red-700 hover:bg-red-50" onClick={()=>{if(window.confirm("Archiver cette expédition ?"))void onArchive()}}>Archiver</button></PermissionGuard></div>
     </form>
   );
 }
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-[#d8dce2] bg-white p-4 shadow-sm">
+    <section className="rounded-lg bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.045)] ring-1 ring-[#eceef1]">
       <h2 className="mb-4 text-[16px] font-semibold">{title}</h2>
       {children}
     </section>

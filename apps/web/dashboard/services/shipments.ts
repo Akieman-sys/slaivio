@@ -61,6 +61,7 @@ export type ExpeditionRecord = {
   public_tracking_enabled?: boolean;
   public_tracking_expires_at?: string | null;
   tracking_row_version?: number;
+  shipment_row_version?: number;
   packages_count: number;
   clients_count: number;
   total_weight_kg: number;
@@ -227,6 +228,7 @@ export type ExpeditionDetail = ExpeditionRecord & {
 };
 
 export type ExpeditionPayload = Partial<{
+  expected_version:number;
   expedition_reference: string;
   title: string;
   status: ExpeditionStatus;
@@ -272,6 +274,7 @@ export type ExpeditionStats = {
   total_weight_kg: number;
   total_volume_cbm: number;
 };
+export type ShipmentAnalytics={summary:{total:number;delivered:number;on_time:number;average_transit_hours:number|null;total_weight_kg:number;total_volume_cbm:number;profit_total:number};by_status:Array<{label:string;count:number}>;by_mode:Array<{label:string;count:number}>;by_route:Array<{label:string;count:number}>;delays_by_route:Array<{label:string;count:number}>;monthly_deliveries:Array<{label:string;count:number}>};
 
 export type ShipmentsResponse = {
   status: "ok";
@@ -314,6 +317,8 @@ export async function createShipment(payload: ExpeditionPayload) {
 export async function updateShipment(id: string, payload: ExpeditionPayload) {
   return (await api.patch<{ status: "ok"; shipment: ExpeditionDetail }>(`/shipments/${id}`, payload)).data.shipment;
 }
+export async function getShipmentAnalytics(){return (await api.get<{analytics:ShipmentAnalytics}>("/shipments/analytics")).data.analytics}
+export async function archiveShipment(id:string,expectedVersion?:number){await api.delete(`/shipments/${id}`,{params:{expected_version:expectedVersion}})}
 
 export async function exportShipments(params: {
   q?: string;
@@ -345,6 +350,10 @@ export async function updateShipmentCheckpoint(id: string, checkpointKey: string
 export async function addShipmentDocument(id: string, payload: { document_type?: string; file_url: string; file_name?: string; mime_type?: string; visibility?: string; notes?: string }) {
   return (await api.post<{ status: "ok"; shipment: ExpeditionDetail }>(`/shipments/${id}/documents`, payload)).data.shipment;
 }
+export async function uploadShipmentDocument(id:string,file:File,documentType="DOCUMENT",notes?:string){const form=new FormData();form.append("file",file);form.append("document_type",documentType);if(notes)form.append("notes",notes);return (await api.post<{shipment:ExpeditionDetail}>(`/shipments/${id}/documents/upload`,form)).data.shipment}
+export async function getShipmentDocumentUrl(id:string,documentId:string){return (await api.get<{url:string}>(`/shipments/${id}/documents/${documentId}/view`)).data.url}
+export async function exportShipmentManifest(id:string){return (await api.get<Blob>(`/shipments/${id}/manifest`,{responseType:"blob"})).data}
+export async function notifyShipmentsBulk(shipment_ids:string[],message:string,channel="whatsapp"){return (await api.post<{count:number}>("/shipments/notifications/bulk",{shipment_ids,message,channel,audience:"ALL_CLIENTS",notification_type:"EXPEDITION_UPDATE"})).data}
 
 export async function addShipmentFinancialLine(id: string, payload: Partial<ExpeditionFinancialLine> & { amount: number }) {
   return (await api.post<{ status: "ok"; shipment: ExpeditionDetail }>(`/shipments/${id}/financial-lines`, payload)).data.shipment;

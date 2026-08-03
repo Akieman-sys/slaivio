@@ -32,6 +32,13 @@ EXPEDITION_STATUSES = {
     "ARCHIVED",
 }
 EXPEDITION_MODES = {"AIR", "SEA", "ROAD", "EXPRESS", "GROUPAGE", "OTHER"}
+EXPEDITION_TRANSITIONS={
+ "DRAFT":{"PREPARING","CANCELLED"},"PREPARING":{"LOADING","BLOCKED","CANCELLED"},"LOADING":{"READY_FOR_DEPARTURE","BLOCKED","PREPARING"},
+ "READY_FOR_DEPARTURE":{"DISPATCHED","BLOCKED","LOADING"},"DISPATCHED":{"IN_TRANSIT","BLOCKED"},"IN_TRANSIT":{"ARRIVED_DESTINATION","CUSTOMS_CLEARANCE","BLOCKED"},
+ "ARRIVED_DESTINATION":{"CUSTOMS_CLEARANCE","AVAILABLE_FOR_PICKUP","OUT_FOR_DELIVERY","BLOCKED"},"CUSTOMS_CLEARANCE":{"AVAILABLE_FOR_PICKUP","OUT_FOR_DELIVERY","BLOCKED"},
+ "AVAILABLE_FOR_PICKUP":{"OUT_FOR_DELIVERY","DELIVERED","BLOCKED"},"OUT_FOR_DELIVERY":{"DELIVERED","BLOCKED"},"BLOCKED":{"PREPARING","LOADING","READY_FOR_DEPARTURE","IN_TRANSIT","CUSTOMS_CLEARANCE","AVAILABLE_FOR_PICKUP","OUT_FOR_DELIVERY","CANCELLED"},
+ "DELIVERED":{"ARCHIVED"},"CANCELLED":{"ARCHIVED"},"ARCHIVED":set(),
+}
 RISK_LEVELS = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 FINANCIAL_STATUSES = {"NOT_CALCULATED", "PENDING", "PARTIAL", "PAID", "OVERDUE", "BLOCKED"}
 ANOMALY_STATUSES = {"OPEN", "IN_REVIEW", "RESOLVED", "DISMISSED"}
@@ -365,6 +372,7 @@ def _select_expedition_sql() -> str:
             e.public_tracking_enabled,
             e.public_tracking_expires_at,
             e.tracking_row_version,
+            e.shipment_row_version,
             e.packages_count,
             e.clients_count,
             e.total_weight_kg,
@@ -642,6 +650,23 @@ def expedition_stats(org_id: str) -> dict:
     }
 
 
+def expedition_analytics(org_id:str)->dict:
+    _ensure_schema()
+    with engine.connect() as conn:
+        def rows(sql:str):return [_safe(dict(row._mapping)) for row in conn.execute(text(sql),{"org_id":org_id}).fetchall()]
+        summary=conn.execute(text("""select count(*)::int total,count(*) filter(where delivered_at is not null)::int delivered,
+          count(*) filter(where delivered_at is not null and eta_at is not null and delivered_at<=eta_at)::int on_time,
+          round(avg(extract(epoch from(delivered_at-coalesce(departed_at,planned_departure_at)))/3600) filter(where delivered_at is not null and coalesce(departed_at,planned_departure_at) is not null)::numeric,1) average_transit_hours,
+          coalesce(sum(total_weight_kg),0) total_weight_kg,coalesce(sum(total_volume_cbm),0) total_volume_cbm,
+          coalesce(sum(profit_total),0) profit_total from cargo_expeditions where org_id=:org_id and archived_at is null"""),{"org_id":org_id}).fetchone()
+        return {"summary":_safe(dict(summary._mapping)),
+          "by_status":rows("select status label,count(*)::int count from cargo_expeditions where org_id=:org_id and archived_at is null group by 1 order by 2 desc"),
+          "by_mode":rows("select mode label,count(*)::int count from cargo_expeditions where org_id=:org_id and archived_at is null group by 1 order by 2 desc"),
+          "by_route":rows("select coalesce(route_label,'Route non renseignée') label,count(*)::int count from cargo_expeditions where org_id=:org_id and archived_at is null group by 1 order by 2 desc limit 12"),
+          "delays_by_route":rows("select coalesce(route_label,'Route non renseignée') label,count(*)::int count from cargo_expeditions where org_id=:org_id and archived_at is null and (is_delayed or status='BLOCKED') group by 1 order by 2 desc limit 12"),
+          "monthly_deliveries":rows("select to_char(delivered_at,'YYYY-MM') label,count(*)::int count from cargo_expeditions where org_id=:org_id and delivered_at>=date_trunc('month',current_date)-interval '11 months' group by 1 order by 1")}
+
+
 def get_expedition(org_id: str, expedition_id: str) -> dict | None:
     _ensure_schema()
     with engine.connect() as conn:
@@ -834,7 +859,7 @@ def create_expedition(org_id: str, user_id: str, payload: dict) -> dict:
     return expedition
 
 
-def update_expedition(org_id: str, expedition_id: str, user_id: str, payload: dict) -> dict | None:
+def update_expedition(org_id: str, expedition_id: str, user_id: str, payload: dict, expected_version: int | None = None) -> dict | None:
     _ensure_schema()
     allowed = [
         "title", "status", "mode", "service_type", "risk_level", "financial_status",
@@ -861,15 +886,22 @@ def update_expedition(org_id: str, expedition_id: str, user_id: str, payload: di
         ).fetchone()
         if not current:
             return None
+        if updates.get("status") and updates["status"]!=current.status and updates["status"] not in EXPEDITION_TRANSITIONS.get(current.status,set()):
+            raise ValueError(f"invalid_status_transition:{current.status}:{updates['status']}")
         set_clause = ", ".join(f"{key} = :{key}" for key in updates)
-        conn.execute(
+        updated = conn.execute(
             text(f"""
                 update cargo_expeditions
-                set {set_clause}, updated_by = :user_id, updated_at = now()
+                set {set_clause}, shipment_row_version = shipment_row_version + 1, updated_by = :user_id, updated_at = now()
                 where org_id = :org_id and id = :id
+                  and (:expected_version is null or shipment_row_version = :expected_version)
+                returning id
             """),
-            dict(updates, user_id=user_id, org_id=org_id, id=expedition_id),
-        )
+            dict(updates, user_id=user_id, org_id=org_id, id=expedition_id, expected_version=expected_version),
+        ).fetchone()
+        if not updated:
+            raise ValueError("stale_shipment_version")
+        conn.execute(text("insert into shipment_audit_log(org_id,expedition_id,action,actor_id,payload) values(:org_id,:id,'SHIPMENT_UPDATED',:user_id,cast(:payload as jsonb))"),{"org_id":org_id,"id":expedition_id,"user_id":user_id,"payload":json.dumps(updates,default=str)})
         if "status" in updates and updates["status"] != current.status:
             _insert_event(
                 conn,
@@ -882,6 +914,19 @@ def update_expedition(org_id: str, expedition_id: str, user_id: str, payload: di
                 actor_id=user_id,
             )
     return get_expedition(org_id, expedition_id)
+
+
+def archive_expedition(org_id: str, expedition_id: str, user_id: str, expected_version: int | None = None) -> bool:
+    _ensure_schema()
+    with engine.begin() as conn:
+        row = conn.execute(text("""update cargo_expeditions set archived_at=now(),status='ARCHIVED',shipment_row_version=shipment_row_version+1,updated_by=:user_id,updated_at=now()
+          where org_id=:org_id and id=:id and archived_at is null and (:expected_version is null or shipment_row_version=:expected_version) returning id"""),{"org_id":org_id,"id":expedition_id,"user_id":user_id,"expected_version":expected_version}).fetchone()
+        if not row:
+            exists=conn.execute(text("select 1 from cargo_expeditions where org_id=:org_id and id=:id and archived_at is null"),{"org_id":org_id,"id":expedition_id}).fetchone()
+            if exists:raise ValueError("stale_shipment_version")
+            return False
+        conn.execute(text("insert into shipment_audit_log(org_id,expedition_id,action,actor_id) values(:org_id,:id,'SHIPMENT_ARCHIVED',:user_id)"),{"org_id":org_id,"id":expedition_id,"user_id":user_id})
+    return True
 
 
 def add_package_to_expedition(org_id: str, expedition_id: str, package_id: str, user_id: str) -> dict | None:
@@ -1043,8 +1088,8 @@ def add_document(org_id: str, expedition_id: str, user_id: str, payload: dict) -
             return None
         conn.execute(
             text("""
-                insert into expedition_documents (org_id, expedition_id, document_type, file_url, file_name, mime_type, visibility, notes, uploaded_by)
-                values (:org_id, :expedition_id, :document_type, :file_url, :file_name, :mime_type, :visibility, :notes, :user_id)
+                insert into expedition_documents (org_id, expedition_id, document_type, file_url, file_name, mime_type, visibility, notes, uploaded_by,size_bytes,checksum_sha256,object_path)
+                values (:org_id, :expedition_id, :document_type, :file_url, :file_name, :mime_type, :visibility, :notes, :user_id,:size_bytes,:checksum_sha256,:object_path)
             """),
             {
                 "org_id": org_id,
@@ -1056,6 +1101,9 @@ def add_document(org_id: str, expedition_id: str, user_id: str, payload: dict) -
                 "visibility": payload.get("visibility") or "INTERNAL",
                 "notes": payload.get("notes"),
                 "user_id": user_id,
+                "size_bytes":payload.get("size_bytes"),
+                "checksum_sha256":payload.get("checksum_sha256"),
+                "object_path":payload.get("object_path"),
             },
         )
         _insert_event(conn, org_id=org_id, expedition_id=expedition_id, event_type="DOCUMENT_ADDED", title="Document ajouté", actor_id=user_id, metadata={"type": payload.get("document_type")})
@@ -1216,14 +1264,17 @@ def expedition_timeline(org_id: str, expedition_id: str) -> list[dict]:
 
 
 def export_expeditions(org_id: str, **filters) -> str:
-    data = list_expeditions(org_id, page=1, page_size=5000, **filters)
+    first = list_expeditions(org_id, page=1, page_size=100, **filters)
+    items=list(first["items"])
+    for page in range(2,first["pagination"]["total_pages"]+1):
+        items.extend(list_expeditions(org_id,page=page,page_size=100,**filters)["items"])
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
         "reference", "titre", "statut", "mode", "route", "depart", "destination",
         "colis", "clients", "poids_kg", "volume_cbm", "eta", "risque", "retard",
     ])
-    for item in data["items"]:
+    for item in items:
         writer.writerow([
             item.get("expedition_reference"),
             item.get("title"),
@@ -1240,4 +1291,12 @@ def export_expeditions(org_id: str, **filters) -> str:
             item.get("risk_level"),
             item.get("is_delayed"),
         ])
+    return output.getvalue()
+
+
+def export_manifest(org_id:str,expedition_id:str)->str|None:
+    expedition=get_expedition(org_id,expedition_id)
+    if not expedition:return None
+    output=io.StringIO();writer=csv.writer(output);writer.writerow(["manifest_reference","shipment","package_reference","tracking_id","client","description","weight_kg","volume_cbm","origin","destination"])
+    for package in expedition["packages"]:writer.writerow([expedition.get("manifest_reference"),expedition["expedition_reference"],package.get("package_reference"),package.get("tracking_id"),package.get("client_name"),package.get("description"),package.get("weight_kg"),package.get("volume_cbm"),f"{package.get('origin_city') or ''} {package.get('origin_country') or ''}".strip(),f"{package.get('destination_city') or ''} {package.get('destination_country') or ''}".strip()])
     return output.getvalue()

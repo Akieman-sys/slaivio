@@ -23,15 +23,19 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {PermissionGuard} from "@/components/permissions/permission-guard";
 import {
   createShipment,
   exportShipments,
   getShipmentStats,
+  getShipmentAnalytics,
   listShipments,
+  notifyShipmentsBulk,
   type ExpeditionMode,
   type ExpeditionPayload,
   type ExpeditionRecord,
   type ExpeditionStats,
+  type ShipmentAnalytics,
   type ExpeditionStatus,
   type RiskLevel,
 } from "@/services/shipments";
@@ -129,6 +133,11 @@ export function ShipmentsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [allMetrics,setAllMetrics]=useState(false);
+  const [analyticsOpen,setAnalyticsOpen]=useState(false);
+  const [analytics,setAnalytics]=useState<ShipmentAnalytics|null>(null);
+  const [selected,setSelected]=useState<string[]>([]);
 
   const currentView = views.find((view) => view.key === activeView) || views[0];
   const page = pagination.page || 1;
@@ -142,6 +151,7 @@ export function ShipmentsPage() {
 
   useEffect(() => {
     loadStats();
+    void getShipmentAnalytics().then(setAnalytics).catch(()=>setAnalytics(null));
   }, []);
 
   const statusParam = currentView.status || status || "";
@@ -247,25 +257,14 @@ export function ShipmentsPage() {
     <div className="min-h-full bg-[#f7f7f6] text-[#1f2328]">
       <section className="overflow-hidden bg-white">
         <OperationPageHeader title="Expéditions" description="Pilotez les transports réels de vos colis : routes, ETA, statuts, clients concernés, documents, coûts et risques."
-          actions={<>
-              <button className={buttonClass} onClick={handleExport}><Download size={16} /> Exporter</button>
-              <button className={primaryButtonClass} onClick={() => setFormOpen(true)}><Plus size={16} /> Nouvelle expédition</button>
-            </>}
+          actions={<><button className={buttonClass} onClick={()=>setAnalyticsOpen(value=>!value)}>{analyticsOpen?'Liste':'Analytics'}</button><details className="relative"><summary className={`${buttonClass} cursor-pointer list-none`}>Plus</summary><div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]"><PermissionGuard permission="shipments.read"><button className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]" onClick={handleExport}><Download size={14}/>Exporter CSV</button></PermissionGuard></div></details><PermissionGuard permission="shipments.create"><button className={primaryButtonClass} onClick={() => setFormOpen(true)}><Plus size={16} /> Nouvelle expédition</button></PermissionGuard></>}
         />
 
-        <div className="grid grid-cols-2 border-b border-[#d8dce2] md:grid-cols-3 xl:grid-cols-6">
-          {kpis.map((item) => (
-            <div className={`border-r border-[#d8dce2] px-5 py-4 last:border-r-0 ${item.warm ? "bg-[#fff7e6]" : "bg-[#fbfcfd]"}`} key={item.label}>
-              <item.icon className={item.warm ? "mb-3 text-[#b86b00]" : "mb-3 text-[#0f766e]"} size={20} strokeWidth={1.8} />
-              <div className={item.warm ? "text-[28px] font-medium text-[#b86b00]" : "text-[28px] font-medium text-[#075985]"}>{item.value}</div>
-              <div className="mt-1 text-[13px] text-[#5f6b7a]">{item.label}</div>
-            </div>
-          ))}
-        </div>
+        <div className="bg-white px-5 py-4"><div className={`grid grid-cols-2 ${allMetrics?'lg:grid-cols-6':'lg:grid-cols-4'}`}>{kpis.slice(0,allMetrics?6:4).map((item,index)=><button type="button" onClick={()=>setAllMetrics(value=>!value)} className={`px-4 py-1 text-left ${index?'border-l border-[#eceef1]':''}`} key={item.label}><div className="text-[12px] text-[#6b7580]">{item.label}</div><div className={`mt-1 text-[24px] font-medium tracking-[-.035em] ${item.warm?'text-[#a65f00]':''}`}>{item.value}</div></button>)}</div><button onClick={()=>setAllMetrics(value=>!value)} className="mt-3 text-[11px] font-medium text-[#5b52c7]">{allMetrics?'Réduire les indicateurs':'Voir tous les indicateurs'}</button></div>
 
-        <div className="border-b border-[#d8dce2] px-4 pt-3">
+        {analyticsOpen?<ShipmentAnalyticsView data={analytics}/>:<><div className="border-y border-[#eceef1] px-4 pt-2">
           <div className="flex flex-wrap items-center gap-1">
-            {views.map((view) => (
+            {views.slice(0,4).map((view) => (
               <button
                 className={`rounded-t-md px-3 py-2 text-[13px] font-medium transition ${activeView === view.key ? "border-b-2 border-[#12c76f] bg-[#effaf4] text-[#067a45]" : "text-[#526071] hover:bg-[#f2f4f7]"}`}
                 key={view.key}
@@ -277,12 +276,11 @@ export function ShipmentsPage() {
                 {view.label}
               </button>
             ))}
+            <select aria-label="Autres vues" value={views.slice(4).some(view=>view.key===activeView)?activeView:""} onChange={event=>{setActiveView(event.target.value);setStatus("")}} className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{views.slice(4).map(view=><option key={view.key} value={view.key}>{view.label}</option>)}</select>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#d8dce2] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <button className={buttonClass}><Filter size={15} /> Filtres</button>
+        <div className="border-b border-[#eceef1] px-4 py-2.5"><div className="flex flex-wrap items-center gap-2"><label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]"><Search className="text-[#7b8794]" size={16}/><input className="ml-2 flex-1 bg-transparent text-[13px] outline-none" placeholder="Rechercher une expédition…" value={query} onChange={event=>setQuery(event.target.value)}/></label><button className={buttonClass} onClick={()=>setFiltersOpen(value=>!value)}><Filter size={15}/>Filtres</button></div>{filtersOpen&&<div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-[#f6f7f8] p-3">
             <select className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]" value={status} onChange={(event) => setStatus(event.target.value as ExpeditionStatus | "")} disabled={Boolean(currentView.status)}>
               <option value="">Statut</option>
               {Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -301,17 +299,13 @@ export function ShipmentsPage() {
               <option value="created_desc">Création récente</option>
               <option value="reference_asc">Référence A-Z</option>
             </select>
-          </div>
-          <label className="relative block w-full max-w-[320px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7b8794]" size={16} />
-            <input className="h-9 w-full rounded-md border border-[#cfd5dd] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[#12c76f]" placeholder="Rechercher une expédition..." value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
-        </div>
+          </div>}</div>
 
         {error ? (
           <div className="m-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">{error}</div>
         ) : null}
 
+        {selected.length>0&&<div className="flex items-center justify-between bg-[#f0efff] px-4 py-2 text-[12px] text-[#5149bd]"><span>{selected.length} expédition(s) sélectionnée(s)</span><PermissionGuard permission="shipments.update"><button className={buttonClass} onClick={async()=>{const message=window.prompt("Message à envoyer aux clients concernés");if(message){await notifyShipmentsBulk(selected,message);setSelected([])}}}>Notifier les clients</button></PermissionGuard></div>}
         <div className="min-h-[460px] overflow-x-auto">
           {loading ? (
             <div className="flex h-[360px] items-center justify-center text-[#5f6b7a]"><Loader2 className="mr-2 animate-spin" size={18} /> Chargement des expéditions...</div>
@@ -325,6 +319,7 @@ export function ShipmentsPage() {
             <table className="w-full min-w-[1180px] border-collapse text-left text-[13px]">
               <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
                 <tr className="border-b border-[#e6e9ee]">
+                  <th className="w-10 px-4"><input type="checkbox" checked={shipments.length>0&&shipments.every(item=>selected.includes(item.id))} onChange={event=>setSelected(event.target.checked?shipments.map(item=>item.id):[])}/></th>
                   <th className="px-4 py-3 font-medium">Expédition</th>
                   <th className="px-4 py-3 font-medium">Statut</th>
                   <th className="px-4 py-3 font-medium">Mode</th>
@@ -341,6 +336,7 @@ export function ShipmentsPage() {
               <tbody>
                 {shipments.map((shipment) => (
                   <tr className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]" key={shipment.id} onClick={() => router.push(`/app/shipments/${shipment.id}`)}>
+                    <td className="px-4" onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(shipment.id)} onChange={()=>setSelected(selected.includes(shipment.id)?selected.filter(id=>id!==shipment.id):[...selected,shipment.id])}/></td>
                     <td className="px-4 py-3">
                       <div className="font-semibold text-[#1f2328]">{shipment.expedition_reference}</div>
                       <div className="text-[#64748b]">{shipment.title || shipment.batch_reference || "Expédition cargo"}</div>
@@ -372,7 +368,7 @@ export function ShipmentsPage() {
             <span className="rounded-md bg-[#12c76f] px-3 py-1.5 font-semibold text-white">{page}</span>
             <button className={pagerButtonClass} disabled={!pagination.total_pages || page >= pagination.total_pages} onClick={() => loadShipments(page + 1)}><ChevronRight size={16} /></button>
           </div>
-        </div>
+        </div></>}
       </section>
 
       {formOpen ? (
@@ -421,6 +417,14 @@ export function ShipmentsPage() {
     </div>
   );
 }
+
+function ShipmentAnalyticsView({data}:{data:ShipmentAnalytics|null}){
+ if(!data)return <div className="flex min-h-[420px] items-center justify-center text-[13px] text-[#687584]">Analytics indisponibles.</div>;
+ const delivered=data.summary.delivered||0;const etaRate=Math.round(data.summary.on_time/delivered*100)||0;
+ const groups:[[string,string|number],...Array<[string,string|number]>]=[["Respect des ETA",`${etaRate}%`],["Transit moyen",data.summary.average_transit_hours==null?"—":`${data.summary.average_transit_hours} h`],["Poids transporté",`${formatNumber(data.summary.total_weight_kg)} kg`],["Volume",`${formatNumber(data.summary.total_volume_cbm)} CBM`]];
+ return <div className="space-y-4 bg-[#f7f7f6] p-5"><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{groups.map(([label,value])=><div key={label} className="rounded-lg bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.04)]"><p className="text-[12px] text-[#687584]">{label}</p><p className="mt-2 text-[25px] font-medium">{value}</p></div>)}</div><div className="grid gap-4 lg:grid-cols-2"><AnalyticsRows title="Par statut" rows={data.by_status}/><AnalyticsRows title="Par mode" rows={data.by_mode}/><AnalyticsRows title="Routes principales" rows={data.by_route}/><AnalyticsRows title="Retards par route" rows={data.delays_by_route}/><AnalyticsRows title="Livraisons mensuelles" rows={data.monthly_deliveries}/></div></div>
+}
+function AnalyticsRows({title,rows}:{title:string;rows:Array<{label:string;count:number}>}){return <section className="rounded-lg bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.04)]"><h3 className="mb-2 text-[14px] font-semibold">{title}</h3>{rows.map(row=><div key={row.label} className="flex justify-between border-b border-[#f0f1f3] py-2 text-[12px]"><span>{row.label}</span><b>{row.count}</b></div>)}{!rows.length&&<p className="py-4 text-[12px] text-[#687584]">Aucune donnée.</p>}</section>}
 
 function Field({ label, name, placeholder, type = "text", defaultValue }: { label: string; name: string; placeholder?: string; type?: string; defaultValue?: string }) {
   return (

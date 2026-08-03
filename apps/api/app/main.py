@@ -80,6 +80,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.clients import router as clients_router
 from app.api.packages import router as packages_router
 from app.api.platform_quarantine import router as platform_quarantine_router
+from app.api.tracking import router as tracking_router
 
 
 app = FastAPI(title="Slaivio")
@@ -184,6 +185,7 @@ app.include_router(onboarding_experience_router)
 app.include_router(dashboard_router)
 app.include_router(clients_router)
 app.include_router(packages_router)
+app.include_router(tracking_router)
 app.include_router(platform_quarantine_router)
 
 

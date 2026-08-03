@@ -1,0 +1,14 @@
+import {api} from "@/services/api";
+export type TrackingItem={id:string;tracking_id:string;type:"SHIPMENT";title:string|null;status:string;mode:string;risk_level:string;origin_country:string|null;origin_city:string|null;destination_country:string|null;destination_city:string|null;route_label:string|null;origin_warehouse:string|null;destination_warehouse:string|null;last_location:string|null;eta_at:string|null;progress_percent:number;is_delayed:boolean;delay_hours:number;delay_reason:string|null;owner_name:string|null;container_number:string|null;batch_reference:string|null;packages_count:number;clients_count:number;total_weight_kg:number;total_volume_cbm:number;updated_at:string;last_signal_at:string;last_signal_source:string;open_alerts:number};
+export type TrackingStats={packages_in_transit:number;active_shipments:number;delivered_today:number;delays:number;incidents_open:number;average_transit_hours:number|null};
+export type TrackingEvent={id:string;expedition_id:string;tracking_id:string;event_type:string;title:string;description:string|null;actor_name:string|null;metadata:Record<string,unknown>;occurred_at:string;location:string|null};
+export type TrackingResponse={items:TrackingItem[];pagination:{page:number;page_size:number;total:number;total_pages:number}};
+export async function listTracking(params:Record<string,unknown>={}){return (await api.get<TrackingResponse>("/tracking",{params})).data}
+export async function getTrackingStats(){return (await api.get<{stats:TrackingStats}>("/tracking/stats")).data.stats}
+export async function getGlobalTrackingTimeline(){return (await api.get<{items:TrackingEvent[]}>("/tracking/timeline")).data.items}
+export async function exportTracking(){return (await api.get<Blob>("/tracking/export",{responseType:"blob"})).data}
+export async function createTrackingAlert(id:string,payload:{severity:string;title:string;description?:string}){return (await api.post(`/tracking/${id}/alerts`,payload)).data.tracking}
+export async function createTrackingEvent(id:string,payload:{event_type:string;title:string;description?:string;location?:string;occurred_at?:string}){return (await api.post(`/tracking/${id}/events`,payload)).data.tracking}
+export async function createTrackingNotification(id:string,payload:{channel:string;audience:string;recipient?:string;message:string}){return (await api.post(`/tracking/${id}/notifications`,payload)).data.tracking}
+export async function generatePublicTrackingToken(id:string,expires_at?:string){return (await api.post<{public_tracking_token:string;tracking_path:string}>(`/tracking/${id}/public-token`,{expires_at})).data}
+export async function getPublicTracking(token:string){return (await api.get<{tracking:TrackingItem&{events:Array<{event_type:string;title:string;description:string|null;occurred_at:string}>}}>(`/public/tracking/${token}`)).data.tracking}

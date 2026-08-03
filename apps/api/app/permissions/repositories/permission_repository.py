@@ -10,19 +10,30 @@ def get_user_permissions(
     with engine.connect() as conn:
         rows = conn.execute(
             text("""
-                select distinct
-                    p.permission_code
-                from user_role_assignments ura
-                join organization_roles r
-                    on r.id = ura.role_id
-                join role_permissions rp
-                    on rp.role_id = r.id
-                join permissions p
-                    on p.id = rp.permission_id
-                where ura.user_id = :user_id
-                  and ura.org_id = :org_id
-                  and ura.assignment_status = 'ACTIVE'
-                order by p.permission_code
+                select distinct granted.permission_code
+                from (
+                    select p.permission_code
+                    from user_role_assignments ura
+                    join organization_roles r on r.id = ura.role_id
+                    join role_permissions rp on rp.role_id = r.id
+                    join permissions p on p.id = rp.permission_id
+                    where ura.user_id = :user_id
+                      and ura.org_id = :org_id
+                      and ura.assignment_status = 'ACTIVE'
+
+                    union
+
+                    select p.permission_code
+                    from organization_memberships m
+                    join organization_roles r
+                      on r.org_id = m.org_id and r.role_code = m.role_code
+                    join role_permissions rp on rp.role_id = r.id
+                    join permissions p on p.id = rp.permission_id
+                    where m.clerk_user_id = :user_id
+                      and m.org_id = :org_id
+                      and m.status = 'ACTIVE'
+                ) granted
+                order by granted.permission_code
             """),
             {
                 "user_id": user_id,

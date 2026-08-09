@@ -20,4 +20,16 @@ Le module Retraits sécurise la remise physique d’un ou plusieurs colis appart
 2. Déployer l’API et le dashboard.
 3. Tester OWNER, MANAGER, COUNTER_AGENT, CASHIER et un utilisateur sans droit.
 
-Le module ne requiert aucune nouvelle variable Railway. Une preuve textuelle signée est stockée dès la remise ; les pièces jointes privées de preuve seront activées avec le bucket `pickup-proofs` dans le bloc média suivant.
+Le module ne requiert aucune nouvelle variable Railway.
+
+## Preuves, reçus et relances
+
+La migration `047_pickups_proofs_reminders.sql` ajoute :
+
+- photos et signatures privées avec somme SHA-256 ;
+- reçu numéroté imprimable ou enregistrable en PDF depuis le navigateur ;
+- relances WhatsApp idempotentes, limitées à une par période de 24 heures ;
+- paramètres agence pour délai de grâce, frais journaliers et règles de contrôle ;
+- analytics des délais, agents et frais de garde.
+
+Créer dans Supabase Storage un bucket privé nommé `pickup-proofs`, limité aux formats `image/jpeg`, `image/png` et `image/webp`.

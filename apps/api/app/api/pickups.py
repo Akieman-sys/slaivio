@@ -1,8 +1,13 @@
-from fastapi import APIRouter,Depends,Query,Response
+import hashlib
+from pathlib import Path
+from uuid import uuid4
+from fastapi import APIRouter,Depends,File,Form,HTTPException,Query,Response,UploadFile
 from pydantic import BaseModel,Field
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 from app.pickups import repository as repo
+from app.core.config import settings
+from app.services.dossier_document_storage import create_document_download_url,upload_private_document
 
 router=APIRouter(prefix="/pickups",tags=["pickups"])
 def actor(t):return str(t.get("user_id") or "system")
@@ -21,6 +26,8 @@ def index(q:str|None=None,status:str|None=None,page:int=Query(default=1,ge=1),pa
 def eligible(q:str|None=None,tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.create"))):return {"items":repo.eligible_packages(tenant["org_id"],q)}
 @router.get("/stats")
 def pickup_stats(tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.read"))):return repo.stats(tenant["org_id"])
+@router.get("/analytics")
+def pickup_analytics(tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.read"))):return repo.analytics(tenant["org_id"])
 @router.get("/settings")
 def get_settings(tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.read"))):return repo.settings_for(tenant["org_id"])
 @router.put("/settings")
@@ -47,3 +54,24 @@ def verify(pickup_id:str,body:VersionPayload,tenant=Depends(get_current_tenant),
 def release(pickup_id:str,body:ReleasePayload,tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.release"))):return repo.release(tenant["org_id"],pickup_id,actor(tenant),name(tenant),body.model_dump())
 @router.post("/{pickup_id}/override-release")
 def override_release(pickup_id:str,body:ReleasePayload,tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.override"))):return repo.release(tenant["org_id"],pickup_id,actor(tenant),name(tenant),body.model_dump(),True)
+@router.post("/reminders/run")
+def run_reminders(min_days:int=Query(default=3,ge=1,le=365),tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.notify"))):return repo.reminders(tenant["org_id"],actor(tenant),name(tenant),min_days)
+@router.get("/{pickup_id}/receipt")
+def receipt(pickup_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.read"))):return Response(repo.receipt_html(tenant["org_id"],pickup_id),media_type="text/html; charset=utf-8")
+@router.post("/{pickup_id}/proofs")
+async def proof_upload(pickup_id:str,file:UploadFile=File(...),proof_type:str=Form(default="PHOTO"),notes:str|None=Form(default=None),tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.release"))):
+ allowed={"image/jpeg","image/png","image/webp"}
+ if file.content_type not in allowed:raise HTTPException(415,"unsupported_pickup_proof_type")
+ content=await file.read(settings.dossier_document_max_bytes+1)
+ if not content or len(content)>settings.dossier_document_max_bytes:raise HTTPException(413,"pickup_proof_too_large")
+ safe=Path(file.filename or "proof").name;path=f"{tenant['org_id']}/{pickup_id}/{uuid4().hex}-{safe}"
+ try:upload_private_document(path,content,file.content_type,"pickup-proofs")
+ except RuntimeError as exc:raise HTTPException(503,str(exc)) from exc
+ return repo.add_proof_file(tenant["org_id"],pickup_id,actor(tenant),name(tenant),{"t":proof_type[:30].upper(),"path":path,"file":safe,"mime":file.content_type,"size":len(content),"checksum":hashlib.sha256(content).hexdigest(),"notes":notes[:500] if notes else None})
+@router.get("/{pickup_id}/proofs/{proof_id}")
+def proof_view(pickup_id:str,proof_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("pickups.read"))):
+ proof=repo.get_proof(tenant["org_id"],pickup_id,proof_id)
+ if not proof:raise HTTPException(404,"pickup_proof_not_found")
+ try:url=create_document_download_url(proof["object_path"],bucket_name="pickup-proofs")
+ except RuntimeError as exc:raise HTTPException(503,str(exc)) from exc
+ return {"url":url,"expires_in":300}

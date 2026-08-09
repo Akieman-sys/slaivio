@@ -21,3 +21,12 @@ def test_migration_blocks_duplicate_active_package_pickups():
  assert "revoke all" in sql.lower()
  assert "references agency_offices(id)" in sql
  assert "references offices(id)" not in sql
+def test_pickup_completion_supports_private_proofs_receipts_and_reminders():
+ source=(ROOT/"app/pickups/repository.py").read_text(encoding="utf-8")
+ api=(ROOT/"app/api/pickups.py").read_text(encoding="utf-8")
+ migration=(ROOT.parent.parent/"infra/sql/047_pickups_proofs_reminders.sql").read_text(encoding="utf-8")
+ assert "pickup_signature_required" in source
+ assert "REMINDER_QUEUED" in source and "last_reminded_at" in source
+ assert "receipt_html" in source and "text/html" in api
+ assert '"pickup-proofs"' in api
+ assert "checksum_sha256" in migration

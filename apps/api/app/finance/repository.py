@@ -1,5 +1,5 @@
 from __future__ import annotations
-import csv,io,json
+import csv,io,json,html
 from datetime import date,datetime,timezone
 from decimal import Decimal,ROUND_HALF_UP
 from fastapi import HTTPException
@@ -74,3 +74,41 @@ def void(o,d,a,n,version,reason):
   event(c,o,d,'VOIDED',a,n,{"reason":reason});return dict(row)
 def export(o):
  data=list_documents(o,page_size=10000)['items'];s=io.StringIO();w=csv.writer(s);w.writerow(['numero','type','client','statut','devise','total','paye','solde','echeance']);[w.writerow([x['document_number'],x['document_type'],x['client_name'],x['status'],x['currency'],x['total'],x['amount_paid'],x['balance_due'],x['due_date']]) for x in data];return s.getvalue()
+
+def settings_for(o):
+ with engine.begin() as c:
+  c.execute(text("insert into finance_settings(org_id) values(:o) on conflict do nothing"),{"o":o});return dict(c.execute(text("select * from finance_settings where org_id=:o"),{"o":o}).mappings().one())
+def save_settings(o,a,p):
+ with engine.begin() as c:return dict(c.execute(text("""insert into finance_settings(org_id,legal_name,tax_identifier,billing_address,default_currency,default_tax_rate,default_payment_terms_days,document_footer,updated_by) values(:o,:legal_name,:tax_identifier,:billing_address,:default_currency,:default_tax_rate,:default_payment_terms_days,:document_footer,:a) on conflict(org_id) do update set legal_name=excluded.legal_name,tax_identifier=excluded.tax_identifier,billing_address=excluded.billing_address,default_currency=excluded.default_currency,default_tax_rate=excluded.default_tax_rate,default_payment_terms_days=excluded.default_payment_terms_days,document_footer=excluded.document_footer,updated_by=excluded.updated_by,updated_at=now() returning *"""),{"o":o,"a":a,**p}).mappings().one())
+def quote_decision(o,d,a,n,version,accepted,reason=None):
+ status='ACCEPTED' if accepted else 'REJECTED'
+ with engine.begin() as c:
+  row=c.execute(text(f"update finance_documents set status=:s,{'accepted_at' if accepted else 'rejected_at'}=now(),rejection_reason=:r,row_version=row_version+1,updated_at=now() where org_id=:o and id=:d and document_type='QUOTE' and status='ISSUED' and row_version=:v returning *"),{"s":status,"r":reason,"o":o,"d":d,"v":version}).mappings().first()
+  if not row:raise HTTPException(409,'quote_state_conflict')
+  event(c,o,d,status,a,n,{"reason":reason});return dict(row)
+def convert_quote(o,d,a,n,version,due_date=None):
+ with engine.begin() as c:
+  quote=c.execute(text("select * from finance_documents where org_id=:o and id=:d and document_type='QUOTE' and status='ACCEPTED' and converted_document_id is null and row_version=:v for update"),{"o":o,"d":d,"v":version}).mappings().first()
+  if not quote:raise HTTPException(409,'quote_not_convertible')
+  new_id=c.execute(text("select gen_random_uuid()::text")).scalar_one();num=number(c,o,'INVOICE')
+  invoice=dict(c.execute(text("""insert into finance_documents(id,org_id,document_type,document_number,client_id,dossier_id,source_document_id,status,currency,subtotal,discount_total,tax_total,total,balance_due,due_date,notes,terms,created_by,created_by_name) values(cast(:id as uuid),:o,'INVOICE',:num,:client,:dossier,:source,'DRAFT',:currency,:subtotal,:discount,:tax,:total,:total,:due,:notes,:terms,:a,:n) returning *"""),{"id":new_id,"o":o,"num":num,"client":quote['client_id'],"dossier":quote['dossier_id'],"source":d,"currency":quote['currency'],"subtotal":quote['subtotal'],"discount":quote['discount_total'],"tax":quote['tax_total'],"total":quote['total'],"due":due_date,"notes":quote['notes'],"terms":quote['terms'],"a":a,"n":n}).mappings().one())
+  c.execute(text("insert into finance_document_lines(id,org_id,document_id,position,description,quantity,unit_price,discount_rate,tax_rate,line_subtotal,line_discount,line_tax,line_total,metadata) select gen_random_uuid(),org_id,cast(:new as uuid),position,description,quantity,unit_price,discount_rate,tax_rate,line_subtotal,line_discount,line_tax,line_total,metadata from finance_document_lines where org_id=:o and document_id=:old"),{"new":new_id,"o":o,"old":d})
+  c.execute(text("update finance_documents set converted_document_id=cast(:new as uuid),row_version=row_version+1,updated_at=now() where id=:old and org_id=:o"),{"new":new_id,"old":d,"o":o});event(c,o,d,'CONVERTED_TO_INVOICE',a,n,{"invoice_id":new_id,"invoice_number":num});event(c,o,new_id,'CREATED_FROM_QUOTE',a,n,{"quote_id":d});return invoice
+def apply_credit(o,credit_id,invoice_id,a,n,version):
+ with engine.begin() as c:
+  credit=c.execute(text("select * from finance_documents where org_id=:o and id=:id and document_type='CREDIT_NOTE' and status='ISSUED' and credit_applied=0 and row_version=:v for update"),{"o":o,"id":credit_id,"v":version}).mappings().first()
+  invoice=c.execute(text("select * from finance_documents where org_id=:o and id=:id and document_type='INVOICE' and status in ('ISSUED','PARTIALLY_PAID','OVERDUE') for update"),{"o":o,"id":invoice_id}).mappings().first()
+  if not credit or not invoice or credit['client_id']!=invoice['client_id'] or credit['currency']!=invoice['currency']:raise HTTPException(409,'credit_not_applicable')
+  amount=min(money(credit['total']),money(invoice['balance_due']));balance=money(invoice['balance_due'])-amount;status='PAID' if balance==0 else 'PARTIALLY_PAID'
+  c.execute(text("update finance_documents set credit_applied=:amount,status='ACCEPTED',source_document_id=:invoice,row_version=row_version+1,updated_at=now() where id=:credit and org_id=:o"),{"amount":amount,"invoice":invoice_id,"credit":credit_id,"o":o});c.execute(text("update finance_documents set balance_due=:balance,status=:status,row_version=row_version+1,updated_at=now() where id=:invoice and org_id=:o"),{"balance":balance,"status":status,"invoice":invoice_id,"o":o});event(c,o,credit_id,'CREDIT_APPLIED',a,n,{"invoice_id":invoice_id,"amount":str(amount)});event(c,o,invoice_id,'CREDIT_RECEIVED',a,n,{"credit_id":credit_id,"amount":str(amount)});return {"amount":amount,"invoice_balance":balance}
+def reverse_payment(o,d,payment_id,a,n,reason):
+ with engine.begin() as c:
+  p=c.execute(text("select * from finance_payments where org_id=:o and document_id=:d and id=:p and status='CONFIRMED' for update"),{"o":o,"d":d,"p":payment_id}).mappings().first();doc=c.execute(text("select * from finance_documents where org_id=:o and id=:d for update"),{"o":o,"d":d}).mappings().first()
+  if not p or not doc:raise HTTPException(409,'payment_not_reversible')
+  paid=max(D('0'),money(doc['amount_paid'])-money(p['amount']));balance=money(doc['total'])-money(doc.get('credit_applied'))-paid;status='ISSUED' if paid==0 else 'PARTIALLY_PAID'
+  c.execute(text("update finance_payments set status='REVERSED',reversed_at=now(),reversed_by=:a,reversal_reason=:r where id=:p and org_id=:o"),{"a":a,"r":reason,"p":payment_id,"o":o});c.execute(text("update finance_documents set amount_paid=:paid,balance_due=:balance,status=:status,row_version=row_version+1,updated_at=now() where id=:d and org_id=:o"),{"paid":paid,"balance":balance,"status":status,"d":d,"o":o});event(c,o,d,'PAYMENT_REVERSED',a,n,{"payment_id":payment_id,"reason":reason},payment_id);return {"amount_paid":paid,"balance_due":balance,"status":status}
+def refresh_overdue(o):
+ with engine.begin() as c:return c.execute(text("update finance_documents set status='OVERDUE',row_version=row_version+1,updated_at=now() where org_id=:o and document_type='INVOICE' and status in ('ISSUED','PARTIALLY_PAID') and balance_due>0 and due_date<current_date"),{"o":o}).rowcount
+def printable(o,d):
+ x=detail(o,d);cfg=settings_for(o);esc=lambda v:html.escape(str(v or '—'));line_html=''.join(f"<tr><td>{esc(v['description'])}</td><td>{v['quantity']}</td><td>{v['unit_price']}</td><td>{v['line_total']}</td></tr>" for v in x['lines']);kind={'QUOTE':'DEVIS','INVOICE':'FACTURE','CREDIT_NOTE':'AVOIR'}[x['document_type']]
+ return f"""<!doctype html><html><head><meta charset=utf-8><title>{esc(x['document_number'])}</title><style>body{{font:14px Arial;color:#17202a;max-width:900px;margin:40px auto}}header{{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:20px}}h1{{font-size:28px}}table{{width:100%;border-collapse:collapse;margin-top:30px}}th,td{{padding:12px;border-bottom:1px solid #ddd;text-align:left}}.totals{{margin:25px 0 0 auto;width:320px}}.totals p{{display:flex;justify-content:space-between}}@media print{{button{{display:none}}}}</style></head><body><button onclick=window.print()>Imprimer / Enregistrer en PDF</button><header><div><h2>{esc(cfg.get('legal_name') or 'SLAIVIO')}</h2><p>{esc(cfg.get('billing_address'))}</p><p>{esc(cfg.get('tax_identifier'))}</p></div><div><h1>{kind}</h1><b>{esc(x['document_number'])}</b><p>Date: {esc(x.get('issue_date') or x['created_at'].date())}</p><p>Échéance: {esc(x.get('due_date'))}</p></div></header><h3>Client</h3><p>{esc(x['client_name'])}<br>{esc(x.get('client_phone'))}<br>{esc(x.get('client_email'))}</p><table><thead><tr><th>Description</th><th>Quantité</th><th>Prix</th><th>Total</th></tr></thead><tbody>{line_html}</tbody></table><div class=totals><p><span>Sous-total</span><b>{x['subtotal']} {x['currency']}</b></p><p><span>Remise</span><b>-{x['discount_total']} {x['currency']}</b></p><p><span>Taxes</span><b>{x['tax_total']} {x['currency']}</b></p><p><span>Total</span><b>{x['total']} {x['currency']}</b></p><p><span>Solde</span><b>{x['balance_due']} {x['currency']}</b></p></div><p>{esc(x.get('terms'))}</p><footer>{esc(cfg.get('document_footer'))}</footer></body></html>"""

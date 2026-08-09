@@ -18,6 +18,6 @@ Ce module facture les clients cargo de chaque agence. Il est volontairement sép
 
 Exécuter `infra/sql/048_operational_invoicing.sql` dans Supabase avant de déployer l’API et le dashboard.
 
-## Suite du module
+## Finalisation métier
 
-La fondation rend le registre financier exploitable. Le prochain passage Facturation ajoutera les PDF brandés, conversion devis vers facture, notes de crédit appliquées au solde, rapprochement, taxes configurables, échéancier, emails et tests réels des rôles.
+La migration `049_operational_invoicing_completion.sql` ajoute les paramètres fiscaux et de présentation par agence, l'acceptation/refus puis la conversion transactionnelle des devis, l'application des avoirs, l'annulation auditée d'un paiement, le rafraîchissement des retards et les documents HTML imprimables en PDF par le navigateur. Les communications externes restent volontairement indépendantes jusqu'à la validation Meta.

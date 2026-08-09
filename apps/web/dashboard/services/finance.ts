@@ -11,3 +11,11 @@ export async function issueFinance(id:string,expected_version:number){return (aw
 export async function payFinance(id:string,payload:{amount:number;currency:string;method:string;reference?:string|null;paid_at:string;idempotency_key:string}){return (await api.post<FinancePayment>(`/finance/${id}/payments`,payload)).data}
 export async function voidFinance(id:string,expected_version:number,reason:string){return (await api.post<FinanceDocument>(`/finance/${id}/void`,{expected_version,reason})).data}
 export async function exportFinance(){return (await api.get<Blob>("/finance/export",{responseType:"blob"})).data}
+export type FinanceSettings={legal_name:string|null;tax_identifier:string|null;billing_address:string|null;default_currency:string;default_tax_rate:number;default_payment_terms_days:number;document_footer:string|null};
+export async function getFinanceSettings(){return (await api.get<FinanceSettings>("/finance/settings")).data}export async function saveFinanceSettings(p:FinanceSettings){return (await api.put<FinanceSettings>("/finance/settings",p)).data}
+export async function decideQuote(id:string,expected_version:number,accepted:boolean,reason?:string|null){return (await api.post(`/finance/${id}/decision`,{expected_version,accepted,reason})).data}
+export async function convertQuote(id:string,expected_version:number,due_date?:string|null){return (await api.post<FinanceDocument>(`/finance/${id}/convert`,{expected_version,due_date})).data}
+export async function applyCredit(id:string,expected_version:number,invoice_id:string){return (await api.post(`/finance/${id}/apply-credit`,{expected_version,invoice_id})).data}
+export async function reverseFinancePayment(documentId:string,paymentId:string,reason:string){return (await api.post(`/finance/${documentId}/payments/${paymentId}/reverse`,{reason})).data}
+export async function financePrint(id:string){return (await api.get<string>(`/finance/${id}/print`,{responseType:"text"})).data}
+export async function refreshFinanceOverdue(){return (await api.post<{updated:number}>("/finance/overdue/refresh")).data}

@@ -165,6 +165,9 @@ def create_quote_flow(
         shipping_service_id=str(service["id"]),
         weight_kg=fields.get("weight_kg"),
         volume_cbm=fields.get("volume_cbm"),
+        declared_value=fields.get("declared_value"),
+        client_id=str(client["id"]),
+        goods_category=fields.get("goods_category"),
     )
 
     if not pricing["pricing_available"]:

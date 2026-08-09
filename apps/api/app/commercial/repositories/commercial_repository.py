@@ -397,7 +397,7 @@ def create_quotation(
                 "currency_code": pricing.get("currency_code"),
                 "eta_min_days": service.get("eta_min_days"),
                 "eta_max_days": service.get("eta_max_days"),
-                "pricing_breakdown": _json_list(pricing.get("breakdown")),
+                "pricing_breakdown": _json_list(pricing.get("breakdown")) + [{"pricing_fingerprint": pricing.get("pricing_fingerprint"), "chargeable_weight_kg": pricing.get("chargeable_weight_kg")}],
                 "restriction_decision": restriction.get("decision"),
                 "required_documents": _json_list(restriction.get("required_documents")),
                 "required_declarations": _json_list(restriction.get("required_declarations")),

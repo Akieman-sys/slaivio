@@ -7,6 +7,7 @@ import {
   Users,
   Warehouse,
   HandCoins,
+  ReceiptText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +39,13 @@ export const appNavigation: readonly AppNavigationGroup[] = [
       { label: "Expéditions", href: "/app/shipments", icon: Truck, permission: "shipments.read", keywords: ["expédition", "shipment", "transport"] },
       { label: "Entrepôts", href: "/app/warehouses", icon: Warehouse, permission: "warehouses.read", keywords: ["entrepôt", "warehouse", "stock", "inventaire", "emplacement"] },
       { label: "Retraits", href: "/app/pickups", icon: HandCoins, permission: "pickups.read", keywords: ["retrait", "guichet", "remise", "pickup", "otp"] },
+    ],
+  },
+  {
+    label: "Finance",
+    icon: ReceiptText,
+    routes: [
+      { label: "Facturation", href: "/app/finance", icon: ReceiptText, permission: "finance.read", keywords: ["facture", "devis", "avoir", "paiement", "finance"] },
     ],
   },
 ];

@@ -8,6 +8,7 @@ import {
   Warehouse,
   HandCoins,
   ReceiptText,
+  Route,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +29,11 @@ export type AppNavigationGroup = {
 // Cette liste est la source de vérité de la navigation. Une route ne doit être
 // publiée ici que lorsqu'une page fonctionnelle existe réellement.
 export const appNavigation: readonly AppNavigationGroup[] = [
+  {
+    label: "Réseau",
+    icon: Route,
+    routes: [{ label: "Routes et services", href: "/app/routes", icon: Route, permission: "routes.read", keywords: ["route", "service", "tarif", "pricing", "corridor"] }],
+  },
   {
     label: "Opérations",
     icon: BriefcaseBusiness,

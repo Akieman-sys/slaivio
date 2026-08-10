@@ -2,7 +2,7 @@ import {api} from './api';
 export type PlatformMetrics={agencies:number;active_agencies:number;active_users:number;trials:number;paid_subscriptions:number;open_tickets:number;urgent_tickets:number;quarantined_events:number;collected_minor:number};
 export type Agency={id:string;name:string;organization_name?:string;country?:string;city?:string;email?:string;status:string;provisioning_status:string;members:number;subscription_status?:string;plan_name?:string;row_version:number;created_at:string};
 export type PlatformTicket={id:string;ticket_reference:string;organization_name:string;subject:string;priority:string;status:string;platform_row_version:number;updated_at:string};
-export const platformAccess=async()=>{try{return (await api.get<{allowed:boolean}>('/platform/admin/access')).data.allowed}catch{return false}};
+export const platformAccess=async()=>(await api.get<{allowed:boolean}>('/platform/admin/access',{timeout:8000})).data.allowed;
 export const platformOverview=async()=>(await api.get<{metrics:PlatformMetrics}>('/platform/admin/overview')).data.metrics;
 export const platformAgencies=async(params:Record<string,unknown>={})=>(await api.get<{items:Agency[]}>('/platform/admin/agencies',{params})).data.items;
 export const platformAgency=async(id:string)=>(await api.get(`/platform/admin/agencies/${id}`)).data;

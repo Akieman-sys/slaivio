@@ -7,6 +7,7 @@ import { EntitlementProvider } from "@/components/entitlements/entitlement-provi
 import { FeatureProvider } from "@/components/features/feature-provider";
 import { PermissionProvider } from "@/components/permissions/permission-provider";
 import { setAccessTokenProvider } from "@/services/api";
+import { LoadingState } from "@/components/ui/page-state";
 
 export function AppProviders({
   children,
@@ -56,8 +57,7 @@ function ClerkApiAuthBridge({ children }: { children: ReactNode }) {
   }, [getToken, isLoaded, isSignedIn]);
 
   if (!ready) {
-    return <div className="min-h-screen bg-[#f7f7f6]" aria-label="Initialisation de la session" />;
+    return <div className="min-h-screen bg-[#f7f7f6]"><LoadingState label="Préparation de votre espace Slaivio…" /></div>;
   }
   return children;
 }
-

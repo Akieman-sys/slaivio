@@ -21,7 +21,15 @@ function PageState({ icon, title, description, action }: StateProps & { icon: Re
 }
 
 export function LoadingState({ label = "Chargement des données…" }: { label?: string }) {
-  return <PageState icon={<LoaderCircle className="animate-spin" size={19} />} title="Chargement" description={label} />;
+  return (
+    <div className="grid min-h-[46vh] place-items-center bg-[#f7f7f6] p-6" role="status" aria-live="polite">
+      <div className="flex flex-col items-center text-center">
+        <span className="relative grid h-12 w-12 place-items-center overflow-hidden rounded-[9px] bg-[#087a46] shadow-[0_8px_24px_rgba(8,122,70,.18)]"><span className="absolute inset-0 animate-pulse bg-white/10" /><LoaderCircle className="relative animate-spin text-white" size={19} /></span>
+        <p className="mt-4 text-[13px] font-medium text-[#343a40]">{label}</p>
+        <span className="mt-3 h-1 w-32 overflow-hidden rounded-full bg-[#dde2df]"><span className="block h-full w-1/2 animate-[slaivioLoading_1.25s_ease-in-out_infinite] rounded-full bg-[#16855f]" /></span>
+      </div>
+    </div>
+  );
 }
 
 export function EmptyState(props: StateProps) {

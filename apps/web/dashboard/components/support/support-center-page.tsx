@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, Search, X } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   addTicketMessage,
   createTicket,
@@ -269,12 +270,9 @@ function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => 
 
 function Panel({ close, children }: { close: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/25">
-      <section className="h-full w-full max-w-2xl overflow-y-auto border-l border-[#d3d3d0] bg-white p-6 shadow-2xl">
-        <button className="float-right rounded-[4px] p-1 hover:bg-[#f0f0ef]" onClick={close}><X size={18} /></button>
-        {children}
-      </section>
-    </div>
+    <OperationDrawer open close={close} title="Support Slaivio" description="Article, ticket et historique de la demande." width="max-w-2xl">
+      {children}
+    </OperationDrawer>
   );
 }
 

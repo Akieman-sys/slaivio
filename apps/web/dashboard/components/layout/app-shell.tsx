@@ -42,6 +42,7 @@ import { listNotifications, notificationAction, type CenterItem } from "@/servic
 import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 
 type FloatingPanel = "account" | "notifications" | "help" | null;
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 const utilityRoutes: readonly AppRoute[] = [
   { label: "Paramètres", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["organisation", "équipe", "rôle", "sécurité", "paramètres"] },
@@ -248,6 +249,13 @@ function HeaderButton({ label, icon, onClick, active, showLabel = false }: { lab
 }
 
 function AccountTrigger({ onClick }: { onClick: () => void }) {
+  if (!clerkEnabled) {
+    return <FallbackAccountTrigger onClick={onClick} />;
+  }
+  return <ClerkAccountTrigger onClick={onClick} />;
+}
+
+function ClerkAccountTrigger({ onClick }: { onClick: () => void }) {
   const { user } = useUser();
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Compte";
   return (
@@ -258,14 +266,37 @@ function AccountTrigger({ onClick }: { onClick: () => void }) {
 }
 
 function AccountMenu({ close }: { close: () => void }) {
+  if (!clerkEnabled) {
+    return <FallbackAccountMenu close={close} />;
+  }
+  return <ClerkAccountMenu close={close} />;
+}
+
+function ClerkAccountMenu({ close }: { close: () => void }) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const name = user?.fullName || user?.firstName || "Utilisateur Slaivio";
   const email = user?.primaryEmailAddress?.emailAddress || "";
+  return <AccountMenuContent close={close} name={name} email={email} imageUrl={user?.imageUrl} logout={() => signOut({ redirectUrl: "/sign-in" })} />;
+}
+
+function FallbackAccountTrigger({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5">
+      <UserRound size={16} aria-hidden="true" />
+    </button>
+  );
+}
+
+function FallbackAccountMenu({ close }: { close: () => void }) {
+  return <AccountMenuContent close={close} name="Utilisateur Slaivio" email="Session locale" logout={() => { window.location.assign("/sign-in"); }} />;
+}
+
+function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: () => void; name: string; email: string; imageUrl?: string | null; logout: () => void | Promise<unknown> }) {
   return (
     <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
       <div className="flex items-center gap-3 px-4 py-4">
-        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={user?.imageUrl} name={name} size={40} /></div>
+        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={imageUrl} name={name} size={40} /></div>
         <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
       </div>
       <MenuDivider />
@@ -280,7 +311,7 @@ function AccountMenu({ close }: { close: () => void }) {
       <MenuLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" close={close} />
       <MenuDivider />
       <MenuDisabled icon={<Trash2 size={15} />} label="Corbeille" status="Bientôt" />
-      <button type="button" onClick={async () => { close(); await signOut({ redirectUrl: "/sign-in" }); }} className={menuClass}>
+      <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
         <LogOut size={15} /> Se déconnecter
       </button>
     </div>

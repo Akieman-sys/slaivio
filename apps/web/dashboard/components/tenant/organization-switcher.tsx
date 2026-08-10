@@ -68,11 +68,8 @@ export function OrganizationSwitcher() {
         onClick={() => setOpen((value) => !value)}
         disabled={loading || switching}
         aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-3 rounded-[6px] border border-[#d8dadd] bg-white px-3 text-left shadow-[0_1px_1px_rgba(15,23,42,.03)] hover:bg-[#f7f7f6] disabled:opacity-60"
+        className="flex min-h-11 w-full items-center gap-2 rounded-[6px] border border-[#d8dadd] bg-white px-3 text-left shadow-[0_1px_1px_rgba(15,23,42,.03)] hover:bg-[#f7f7f6] disabled:opacity-60"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] bg-[#eef1ff] text-[#5550d8]">
-          <Building2 size={16} />
-        </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-medium uppercase text-[#83878d]">Espace actif</span>
           <span className="block truncate text-[13px] font-medium text-[#25292e]">

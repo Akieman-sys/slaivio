@@ -489,3 +489,17 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
     animation: none;
   }
 }
+
+@keyframes slaivioLoading {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+@keyframes slaivioBrandCycle {
+  0%, 72% { max-width: 112px; opacity: 1; transform: translateX(0); }
+  78%, 84% { max-width: 0; opacity: 0; transform: translateX(-18px); }
+  91%, 100% { max-width: 112px; opacity: 1; transform: translateX(0); }
+}
+
+.slaivio-brand-cycle { animation: slaivioBrandCycle 15s ease-in-out infinite; overflow: hidden; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .slaivio-brand-cycle { animation: none; } }

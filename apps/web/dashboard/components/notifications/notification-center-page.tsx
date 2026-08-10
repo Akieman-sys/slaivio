@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Archive, CheckCheck, Clock3, RotateCcw, Search, Settings2, X } from "lucide-react";
+import { Archive, CheckCheck, Clock3, RotateCcw, Search, Settings2 } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   getNotificationPreferences,
   listNotifications,
@@ -17,8 +19,8 @@ import {
 } from "@/services/notification-center";
 
 const button = "inline-flex h-8 items-center gap-1.5 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f5f3]";
-const primary = "inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-[#1a73e8] px-3 text-[13px] font-medium text-white hover:bg-[#1768d1]";
-const input = "h-8 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] outline-none focus:border-[#1a73e8]";
+const primary = "inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
+const input = "h-8 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] outline-none focus:border-[#167d57]";
 
 export function NotificationCenterPage() {
   const [result, setResult] = useState<CenterResponse | null>(null);
@@ -118,7 +120,7 @@ export function NotificationCenterPage() {
             <span className="text-right">Actions</span>
           </div>
           {loading ? (
-            <p className="p-12 text-center text-[13px] text-[#6b7075]">Chargement...</p>
+            <LoadingState label="Chargement des notifications…" />
           ) : !result?.items.length ? (
             <p className="p-16 text-center text-[13px] text-[#9aa0a6]">Aucune notification dans cette vue.</p>
           ) : (
@@ -215,15 +217,10 @@ function Preferences({ close }: { close: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/25">
-      <aside className="h-full w-full max-w-[620px] overflow-y-auto border-l border-[#d3d3d0] bg-white shadow-2xl">
-        <div className="flex h-[60px] items-center border-b border-[#d9d9d6] px-5">
-          <h2 className="text-[16px] font-semibold">Préférences de notifications</h2>
-          <button onClick={close} className="ml-auto rounded-[4px] p-1 hover:bg-[#f0f0ef]"><X size={18} /></button>
-        </div>
+    <OperationDrawer open close={close} title="Préférences de notifications" description="Choisissez les canaux et la fréquence pour chaque activité." width="max-w-[720px]">
         {error && <p className="m-5 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
-        <form onSubmit={submit} className="p-5">
-          <div className="overflow-hidden rounded-[6px] border border-[#d3d3d0]">
+        <form onSubmit={submit}>
+          <div className="overflow-hidden border border-[#d3d3d0] bg-white">
             <div className="grid grid-cols-[1fr_repeat(3,78px)_128px] border-b bg-[#f7f7f5] px-3 py-2 text-[12px] font-medium text-[#5f6368]">
               <span>Catégorie</span><span>App</span><span>Email</span><span>WhatsApp</span><span>Fréquence</span>
             </div>
@@ -232,9 +229,9 @@ function Preferences({ close }: { close: () => void }) {
               return (
                 <div key={category} className="grid grid-cols-[1fr_repeat(3,78px)_128px] items-center border-b px-3 py-3 text-[13px] last:border-0">
                   <b>{category}</b>
-                  <input name={`${category}.in_app`} type="checkbox" defaultChecked={pref.in_app} className="h-4 w-4 accent-[#1a73e8]" />
-                  <input name={`${category}.email`} type="checkbox" defaultChecked={pref.email} className="h-4 w-4 accent-[#1a73e8]" />
-                  <input name={`${category}.whatsapp`} type="checkbox" defaultChecked={pref.whatsapp} className="h-4 w-4 accent-[#1a73e8]" />
+                  <input name={`${category}.in_app`} type="checkbox" defaultChecked={pref.in_app} className="h-4 w-4 accent-[#167d57]" />
+                  <input name={`${category}.email`} type="checkbox" defaultChecked={pref.email} className="h-4 w-4 accent-[#167d57]" />
+                  <input name={`${category}.whatsapp`} type="checkbox" defaultChecked={pref.whatsapp} className="h-4 w-4 accent-[#167d57]" />
                   <select name={`${category}.digest`} defaultValue={pref.digest_frequency} className={input}>
                     <option>IMMEDIATE</option><option>DAILY</option><option>WEEKLY</option><option>OFF</option>
                   </select>
@@ -242,9 +239,8 @@ function Preferences({ close }: { close: () => void }) {
               );
             })}
           </div>
-          <button className={`${primary} mt-4`}>Enregistrer les préférences</button>
+          <div className="mt-4 flex justify-end"><button className={primary}>Enregistrer les préférences</button></div>
         </form>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }

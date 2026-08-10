@@ -24,6 +24,12 @@ def get_current_tenant(
             detail="No verified active organization membership",
         )
 
+    if active.get("organization_status", "ACTIVE") != "ACTIVE":
+        raise HTTPException(
+            status_code=403,
+            detail="organization_access_suspended",
+        )
+
     return {
         "org_id": active["org_id"],
         "organization_name": active.get("organization_name"),

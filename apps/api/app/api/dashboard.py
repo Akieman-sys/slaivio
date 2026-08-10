@@ -27,6 +27,8 @@ def _resolve_active_tenant(manager: dict) -> dict:
         context = get_tenant_context(user_id)
         active = context.get("active_tenant")
         if active:
+            if active.get("organization_status", "ACTIVE") != "ACTIVE":
+                raise HTTPException(status_code=403, detail="organization_access_suspended")
             return {
                 "org_id": active.get("org_id"),
                 "organization_name": active.get("organization_name"),

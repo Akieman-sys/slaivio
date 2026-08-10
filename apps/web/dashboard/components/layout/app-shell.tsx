@@ -11,6 +11,7 @@ import { usePermissions } from "@/components/permissions/permission-provider";
 import { OrganizationSwitcher } from "@/components/tenant/organization-switcher";
 import { appNavigation, canAccessRoute, searchableAppRoutes } from "@/config/app-navigation";
 import { SESSION_EXPIRED_EVENT } from "@/services/api";
+import { platformAccess } from "@/services/platform-admin";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [platformAllowed, setPlatformAllowed] = useState(false);
   const initialGroup = appNavigation.find((group) => group.routes.some((route) => pathname.startsWith(route.href)))?.label ?? "Opérations";
   const [activeGroup, setActiveGroup] = useState<string | null>(initialGroup);
 
@@ -54,6 +56,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     const onSessionExpired = () => setSessionExpired(true);
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, []);
+
+  useEffect(() => {
+    platformAccess().then(setPlatformAllowed).catch(() => setPlatformAllowed(false));
   }, []);
 
   function openRoute(href: string) {
@@ -93,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         {!compact && !permissionsLoading && !permissionsAvailable && <div className="border-t border-amber-200 bg-amber-50 p-3 text-[11px] leading-4 text-amber-800"><span className="flex items-center gap-1.5 font-semibold"><ShieldAlert size={13} /> Droits indisponibles</span><span className="mt-1 block">Les API sécurisent toujours chaque action.</span></div>}
-        {!compact && <div className="border-t border-[#d8d8d5] px-2 py-2"><Link href="/app/support" className="flex min-h-[36px] items-center gap-2.5 rounded-[4px] px-2.5 text-[13px] text-[#343434] hover:bg-[#eeeeec]"><CircleHelp size={16} /> Centre d’aide</Link></div>}
+        {!compact && <div className="border-t border-[#d8d8d5] px-2 py-2">{platformAllowed&&<Link href="/app/platform" className="mb-1 flex min-h-[36px] items-center gap-2.5 rounded-[4px] bg-[#202124] px-2.5 text-[13px] text-white"><ShieldAlert size={16}/> Super Admin</Link>}<Link href="/app/support" className="flex min-h-[36px] items-center gap-2.5 rounded-[4px] px-2.5 text-[13px] text-[#343434] hover:bg-[#eeeeec]"><CircleHelp size={16} /> Centre d’aide</Link></div>}
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">

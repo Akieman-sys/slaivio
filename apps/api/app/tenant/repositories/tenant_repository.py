@@ -16,6 +16,7 @@ def list_user_tenants(
                     coalesce(o.organization_name, o.name, o.id) as organization_name,
                     coalesce(o.organization_code, o.id) as organization_code,
                     o.organization_type
+                    ,o.status as organization_status
                 from organization_memberships m
                 join organizations o
                     on o.id = m.org_id
@@ -94,6 +95,7 @@ def get_active_tenant(
                     coalesce(o.organization_name, o.name, o.id) as organization_name,
                     coalesce(o.organization_code, o.id) as organization_code,
                     o.organization_type
+                    ,o.status as organization_status
                 from tenant_sessions s
                 join organizations o
                     on o.id = s.org_id

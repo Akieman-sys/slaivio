@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.core.platform_permissions import require_platform_permission
 from pydantic import BaseModel
 
 from app.multi_agency.repositories.warehouse_repository import (
@@ -37,7 +38,7 @@ class CreateWarehouseRequest(BaseModel):
     contact_name: str | None = None
 
 
-@router.post("/multi-agency/setup-country")
+@router.post("/multi-agency/setup-country", dependencies=[Depends(require_platform_permission("platform.agencies.manage"))])
 def create_group_country_route(
     body: SetupGroupCountryRequest,
 ):
@@ -54,7 +55,7 @@ def create_group_country_route(
     }
 
 
-@router.get("/multi-agency/hierarchy")
+@router.get("/multi-agency/hierarchy", dependencies=[Depends(require_platform_permission("platform.admin.read"))])
 def hierarchy():
     return {
         "status": "ok",
@@ -62,7 +63,7 @@ def hierarchy():
     }
 
 
-@router.post("/multi-agency/warehouses")
+@router.post("/multi-agency/warehouses", dependencies=[Depends(require_platform_permission("platform.agencies.manage"))])
 def create_warehouse_route(
     body: CreateWarehouseRequest,
 ):
@@ -84,7 +85,7 @@ def create_warehouse_route(
     }
 
 
-@router.get("/multi-agency/warehouses")
+@router.get("/multi-agency/warehouses", dependencies=[Depends(require_platform_permission("platform.admin.read"))])
 def warehouses(
     org_id: str | None = None,
 ):

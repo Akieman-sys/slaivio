@@ -1,0 +1,17 @@
+import {api} from './api';
+export type PlatformMetrics={agencies:number;active_agencies:number;active_users:number;trials:number;paid_subscriptions:number;open_tickets:number;urgent_tickets:number;quarantined_events:number;collected_minor:number};
+export type Agency={id:string;name:string;organization_name?:string;country?:string;city?:string;email?:string;status:string;provisioning_status:string;members:number;subscription_status?:string;plan_name?:string;row_version:number;created_at:string};
+export type PlatformTicket={id:string;ticket_reference:string;organization_name:string;subject:string;priority:string;status:string;platform_row_version:number;updated_at:string};
+export const platformAccess=async()=>{try{return (await api.get<{allowed:boolean}>('/platform/admin/access')).data.allowed}catch{return false}};
+export const platformOverview=async()=>(await api.get<{metrics:PlatformMetrics}>('/platform/admin/overview')).data.metrics;
+export const platformAgencies=async(params:Record<string,unknown>={})=>(await api.get<{items:Agency[]}>('/platform/admin/agencies',{params})).data.items;
+export const platformAgency=async(id:string)=>(await api.get(`/platform/admin/agencies/${id}`)).data;
+export const changeAgencyStatus=async(id:string,payload:Record<string,unknown>)=>(await api.patch(`/platform/admin/agencies/${id}/status`,payload)).data;
+export const changeSubscription=async(id:string,payload:Record<string,unknown>)=>(await api.patch(`/platform/admin/agencies/${id}/subscription`,payload)).data;
+export const addPlatformNote=async(id:string,note:string)=>(await api.post(`/platform/admin/agencies/${id}/notes`,{note})).data;
+export const platformTickets=async(params:Record<string,unknown>={})=>(await api.get<{items:PlatformTicket[]}>('/platform/admin/tickets',{params})).data.items;
+export const platformReply=async(id:string,payload:Record<string,unknown>)=>(await api.post(`/platform/admin/tickets/${id}/reply`,payload)).data;
+export const platformAudit=async()=>(await api.get<{items:Array<Record<string,unknown>>}>('/platform/admin/audit')).data.items;
+export const platformOperators=async()=>(await api.get<{items:Array<{user_id:string;permissions:string[]}>}>('/platform/admin/operators')).data.items;
+export const savePlatformOperator=async(user_id:string,permissions:string[])=>(await api.put('/platform/admin/operators',{user_id,permissions})).data;
+export const quarantineMetrics=async()=>(await api.get('/platform/quarantine/metrics')).data;

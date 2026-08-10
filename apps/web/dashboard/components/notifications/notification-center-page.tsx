@@ -27,6 +27,10 @@ export function NotificationCenterPage() {
   const [error, setError] = useState("");
   const [settings, setSettings] = useState(false);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("preferences") === "1") setSettings(true);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -61,41 +65,41 @@ export function NotificationCenterPage() {
           <div className="ml-auto flex items-center gap-2">
             <button className={button} onClick={() => setSettings(true)}>
               <Settings2 size={15} />
-              Preferences
+              Préférences
             </button>
             <PermissionGuard permission="notifications.manage">
               <button className={primary} onClick={async () => { await markAllRead(); await load(); }}>
                 <CheckCheck size={15} />
-                Mark all read
+                Tout marquer comme lu
               </button>
             </PermissionGuard>
           </div>
         </div>
         <div className="flex h-[48px] items-center gap-2 border-t border-[#eeeeeb] px-6">
-          <button className="h-8 rounded-[4px] bg-[#f0f0ef] px-3 text-[13px]">Unread</button>
-          <button className="h-8 rounded-[4px] px-3 text-[13px] hover:bg-[#f0f0ef]">Read</button>
+          <button onClick={() => setFilters({ ...filters, status: "UNREAD" })} className={`h-8 rounded-[4px] px-3 text-[13px] ${filters.status === "UNREAD" ? "bg-[#ecebf9] text-[#393579]" : "hover:bg-[#f0f0ef]"}`}>Non lues</button>
+          <button onClick={() => setFilters({ ...filters, status: "READ" })} className={`h-8 rounded-[4px] px-3 text-[13px] ${filters.status === "READ" ? "bg-[#ecebf9] text-[#393579]" : "hover:bg-[#f0f0ef]"}`}>Lues</button>
           <label className="ml-2 flex h-8 w-[360px] max-w-[45vw] items-center gap-2 rounded-[4px] border border-[#d3d3d0] bg-white px-2 focus-within:border-[#1a73e8]">
             <Search size={15} className="text-[#6b7075]" />
             <input
               value={filters.q}
               onChange={(event) => setFilters({ ...filters, q: event.target.value })}
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-              placeholder="Search notifications"
+              placeholder="Rechercher une notification"
             />
           </label>
           <select className={`${input} ml-auto`} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-            <option value="">All statuses</option>
+            <option value="">Tous les statuts</option>
             <option>UNREAD</option>
             <option>READ</option>
             <option>ARCHIVED</option>
           </select>
           <select className={input} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}>
-            <option value="">All sources</option>
-            <option value="IN_APP">In app</option>
-            <option value="DELIVERY">Delivery</option>
+            <option value="">Toutes les sources</option>
+            <option value="IN_APP">Dans l’application</option>
+            <option value="DELIVERY">Canal externe</option>
           </select>
           <select className={input} value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}>
-            <option value="">All priorities</option>
+            <option value="">Toutes les priorités</option>
             <option>NORMAL</option>
             <option>HIGH</option>
             <option>CRITICAL</option>
@@ -116,7 +120,7 @@ export function NotificationCenterPage() {
           {loading ? (
             <p className="p-12 text-center text-[13px] text-[#6b7075]">Chargement...</p>
           ) : !result?.items.length ? (
-            <p className="p-16 text-center text-[13px] text-[#9aa0a6]">No unread notifications</p>
+            <p className="p-16 text-center text-[13px] text-[#9aa0a6]">Aucune notification dans cette vue.</p>
           ) : (
             result.items.map((item) => <NotificationRow key={`${item.source}-${item.id}`} item={item} action={action} reload={load} />)
           )}
@@ -214,14 +218,14 @@ function Preferences({ close }: { close: () => void }) {
     <div className="fixed inset-0 z-50 flex justify-end bg-black/25">
       <aside className="h-full w-full max-w-[620px] overflow-y-auto border-l border-[#d3d3d0] bg-white shadow-2xl">
         <div className="flex h-[60px] items-center border-b border-[#d9d9d6] px-5">
-          <h2 className="text-[16px] font-semibold">Notification preferences</h2>
+          <h2 className="text-[16px] font-semibold">Préférences de notifications</h2>
           <button onClick={close} className="ml-auto rounded-[4px] p-1 hover:bg-[#f0f0ef]"><X size={18} /></button>
         </div>
         {error && <p className="m-5 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
         <form onSubmit={submit} className="p-5">
           <div className="overflow-hidden rounded-[6px] border border-[#d3d3d0]">
             <div className="grid grid-cols-[1fr_repeat(3,78px)_128px] border-b bg-[#f7f7f5] px-3 py-2 text-[12px] font-medium text-[#5f6368]">
-              <span>Category</span><span>App</span><span>Email</span><span>WhatsApp</span><span>Frequency</span>
+              <span>Catégorie</span><span>App</span><span>Email</span><span>WhatsApp</span><span>Fréquence</span>
             </div>
             {categories.map((category) => {
               const pref = current(category);
@@ -238,7 +242,7 @@ function Preferences({ close }: { close: () => void }) {
               );
             })}
           </div>
-          <button className={`${primary} mt-4`}>Save preferences</button>
+          <button className={`${primary} mt-4`}>Enregistrer les préférences</button>
         </form>
       </aside>
     </div>

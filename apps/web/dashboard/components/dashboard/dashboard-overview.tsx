@@ -1,168 +1,148 @@
 "use client";
 
-import { ChevronDown, Grid2X2, List, MoreHorizontal, Star, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock3, RefreshCcw } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-const bases = [
-  { title: "Suivi des dossiers", href: "/app/dossiers", icon: "📦", meta: "Opened today" },
-  { title: "Clients", href: "/app/clients", icon: "👥", meta: "Opened 2 days ago" },
-  { title: "Facturation", href: "/app/finance", icon: "💳", meta: "Opened 5 days ago" },
-];
+import { getDashboardHome, type DashboardHome, type HomeAttentionItem, type HomeResource } from "@/services/dashboard";
 
 export function DashboardOverviewPage() {
-  const [typeOpen, setTypeOpen] = useState(false);
-  const [view, setView] = useState<"grid" | "list">("grid");
+  const [data, setData] = useState<DashboardHome | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await getDashboardHome());
+    } catch {
+      setError("Le tableau de bord n’a pas pu être chargé.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="min-h-full bg-[#f8f8f7]">
-      <div className="mx-auto max-w-[1540px] px-12 py-9 max-lg:px-6 max-sm:px-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-[#202124]">Home</h1>
-          <div className="hidden items-center gap-2 text-[#4f555a] sm:flex">
-            <button
-              onClick={() => setView("list")}
-              aria-label="List view"
-              className={`rounded-[4px] p-1.5 hover:bg-[#ececea] ${view === "list" ? "bg-[#ececea]" : ""}`}
-            >
-              <List size={19} />
-            </button>
-            <button
-              onClick={() => setView("grid")}
-              aria-label="Grid view"
-              className={`rounded-[4px] p-1.5 hover:bg-[#ececea] ${view === "grid" ? "bg-[#ececea]" : ""}`}
-            >
-              <Grid2X2 size={19} />
-            </button>
+    <div className="min-h-full bg-[#f5f6f6]">
+      <header className="border-b border-[#dfe1e3] bg-white px-5 py-5 sm:px-7">
+        <div className="mx-auto flex max-w-[1500px] items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase text-[#858b92]">Vue d’ensemble</p>
+            <h1 className="mt-1 text-[24px] font-semibold text-[#24282d]">
+              {data?.workspace.name ? `Bonjour, bienvenue chez ${data.workspace.name}` : "Bonjour, bienvenue sur Slaivio"}
+            </h1>
+            <p className="mt-1 text-[13px] text-[#69717a]">Les priorités opérationnelles de votre agence, au même endroit.</p>
           </div>
-        </div>
-
-        <section className="relative mt-7 min-h-[150px] overflow-hidden rounded-[6px] border border-[#cfd8df] bg-[#eef6ff] shadow-sm">
-          <button aria-label="Fermer" className="absolute right-4 top-4 rounded-[4px] p-1 text-[#2f3437] hover:bg-white/70">
-            <X size={16} />
+          <button type="button" onClick={load} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-[#d2d5d8] bg-white px-3 text-[12px] hover:bg-[#f2f3f3] disabled:opacity-60">
+            <RefreshCcw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
-          <div className="relative z-10 px-10 py-7 max-sm:px-5">
-            <h2 className="text-[17px] font-medium text-[#202124]">Unlock more power on the Team plan</h2>
-            <p className="mt-2 text-[13px] text-[#2f3437]">
-              More records. More automations. More customization. More Slaivio.
-            </p>
-            <div className="mt-5 flex flex-wrap items-center gap-5">
-              <button className="inline-flex h-9 items-center gap-2 rounded-full bg-[#202124] px-8 text-[15px] font-medium text-white hover:bg-black">
-                <Star size={15} />
-                Upgrade
-              </button>
-              <button className="inline-flex h-9 items-center gap-2 text-[15px] text-[#5f6368] hover:text-[#202124]">
-                ⇆ Compare plans
-              </button>
-            </div>
-          </div>
-          <div className="absolute bottom-0 right-8 hidden h-[120px] w-[380px] opacity-90 md:block">
-            <div className="absolute bottom-5 right-0 h-12 w-24 rounded-[4px] bg-[#38bdf8]/30" />
-            <div className="absolute bottom-6 right-28 h-20 w-24 rounded-[5px] bg-[#0ea5e9]/60" />
-            <div className="absolute bottom-4 right-58 h-11 w-24 rounded-[4px] bg-[#c4b5fd]/70" />
-            <div className="absolute bottom-3 right-16 h-24 w-44 rounded-[5px] border border-[#b8c7d8] bg-white shadow-sm">
-              <div className="h-6 rounded-t-[5px] bg-[#1f5f9e]" />
-              <div className="grid grid-cols-3 gap-1 p-2">
-                {Array.from({ length: 9 }).map((_, index) => (
-                  <span key={index} className="h-2 rounded bg-[#dbeafe]" />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="relative mt-5">
-          <button
-            onClick={() => setTypeOpen((value) => !value)}
-            className="inline-flex h-8 items-center gap-1.5 text-[15px] text-[#5f6368] hover:text-[#202124]"
-          >
-            Opened anytime
-            <ChevronDown size={15} />
-          </button>
-          {typeOpen && (
-            <div className="absolute left-0 top-9 z-20 w-[242px] rounded-[5px] border border-[#d3d3d0] bg-white py-3 shadow-2xl">
-              {["Select all", "Interfaces", "Apps", "Workspaces"].map((item) => (
-                <label key={item} className="flex h-10 items-center gap-3 px-4 text-[13px] hover:bg-[#f5f5f3]">
-                  <input type="checkbox" defaultChecked className="h-4 w-4 accent-[#1a73e8]" />
-                  {item}
-                </label>
-              ))}
-            </div>
-          )}
         </div>
+      </header>
 
-        {view === "grid" ? (
-          <div className="mt-7 grid max-w-5xl gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {bases.map((base) => (
-              <BaseCard key={base.href} {...base} />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-7 max-w-5xl overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
-            <div className="grid grid-cols-[1fr_160px_72px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
-              <span>Name</span>
-              <span>Last opened</span>
-              <span />
-            </div>
-            {bases.map((base) => (
-              <Link
-                key={base.href}
-                href={base.href}
-                className="grid grid-cols-[1fr_160px_72px] items-center border-b border-[#eeeeeb] px-4 py-3 text-[14px] last:border-0 hover:bg-[#f8f8f7]"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#ffba00] text-[20px] shadow-sm">
-                    {base.icon}
-                  </span>
-                  {base.title}
-                </span>
-                <span className="text-[12px] text-[#6b7075]">{base.meta}</span>
-                <span className="justify-self-end text-[#6b7075]">
-                  <MoreHorizontal size={17} />
-                </span>
-              </Link>
-            ))}
+      <main className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-7">
+        {error && (
+          <div className="flex items-center gap-3 rounded-[6px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+            <AlertTriangle size={17} />{error}<button onClick={load} className="ml-auto font-medium underline">Réessayer</button>
           </div>
         )}
-      </div>
+
+        {loading && !data ? <DashboardSkeleton /> : data?.status === "no_workspace" ? <NoWorkspace /> : (
+          <>
+            <section aria-labelledby="indicators-title">
+              <div className="mb-2.5 flex items-center justify-between">
+                <h2 id="indicators-title" className="text-[13px] font-semibold">Activité de l’agence</h2>
+                <span className="text-[11px] text-[#858b92]">Données en temps réel</span>
+              </div>
+              <div className="grid overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white sm:grid-cols-2 xl:grid-cols-4">
+                {(data?.resources || []).slice(0, 4).map((resource) => <ResourceMetric key={resource.key} resource={resource} />)}
+                {!data?.resources.length && <div className="col-span-full px-5 py-10 text-center text-[12px] text-[#858b92]">Aucun indicateur disponible.</div>}
+              </div>
+            </section>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
+              <section className="overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white" aria-labelledby="attention-title">
+                <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
+                  <Clock3 size={16} className="mr-2 text-[#646b73]" />
+                  <h2 id="attention-title" className="text-[13px] font-semibold">À traiter maintenant</h2>
+                  <span className="ml-2 rounded-full bg-[#f0f1f1] px-2 py-0.5 text-[10px] text-[#687079]">{data?.attention_items.length || 0}</span>
+                </div>
+                <div>
+                  {data?.attention_items.length ? data.attention_items.map((item) => <AttentionRow key={`${item.kind}-${item.id}`} item={item} />) : (
+                    <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
+                      <CheckCircle2 size={24} className="text-emerald-600" />
+                      <p className="mt-3 text-[13px] font-medium">Aucune urgence opérationnelle</p>
+                      <p className="mt-1 text-[11px] text-[#858b92]">Les retards, suivis et paiements à traiter apparaîtront ici.</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white" aria-labelledby="notifications-title">
+                <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
+                  <Bell size={16} className="mr-2 text-[#646b73]" />
+                  <h2 id="notifications-title" className="text-[13px] font-semibold">Notifications récentes</h2>
+                  {data?.unread_count ? <span className="ml-2 rounded-full bg-[#5550d8] px-2 py-0.5 text-[10px] text-white">{data.unread_count}</span> : null}
+                  <Link href="/app/notifications" className="ml-auto text-[11px] font-medium text-[#514bc5] hover:underline">Tout voir</Link>
+                </div>
+                <div>
+                  {data?.notifications.length ? data.notifications.slice(0, 6).map((item) => (
+                    <Link href="/app/notifications" key={item.id} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]">
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#5550d8]"}`} />
+                      <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-[#727981]">{item.message}</span></span>
+                    </Link>
+                  )) : <p className="px-5 py-12 text-center text-[12px] text-[#858b92]">Aucune notification récente.</p>}
+                </div>
+              </section>
+            </div>
+
+            <section aria-labelledby="modules-title">
+              <h2 id="modules-title" className="mb-2.5 text-[13px] font-semibold">Accès rapide</h2>
+              <div className="grid overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {(data?.resources || []).map((resource) => (
+                  <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[#eef1ff] text-[12px] font-semibold text-[#514bc5]">{resource.name.slice(0, 2).toUpperCase()}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium">{resource.name}</span><span className="block truncate text-[10px] text-[#858b92]">{resource.description}</span></span>
+                    <ArrowRight size={14} className="text-[#a1a6ac] opacity-0 transition group-hover:opacity-100" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </main>
     </div>
   );
 }
 
-function BaseCard({ title, href, icon, meta }: { title: string; href: string; icon: string; meta: string }) {
+function ResourceMetric({ resource }: { resource: HomeResource }) {
   return (
-    <Link
-      href={href}
-      className="group flex min-h-[94px] items-center gap-4 rounded-[6px] border border-[#d3d3d0] bg-white px-5 py-4 shadow-sm transition hover:shadow-md"
-    >
-      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[11px] bg-[#ffba00] text-[25px] shadow-sm ring-1 ring-black/10">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-medium text-[#202124]">{title}</span>
-        <span className="mt-1 block text-[12px] text-[#6b7075]">{meta}</span>
-      </span>
-      <span className="opacity-0 transition group-hover:opacity-100">
-        <MoreHorizontal size={18} />
-      </span>
+    <Link href={resource.href} className="group border-b border-r border-[#e5e7e8] px-5 py-4 hover:bg-[#fafafa]">
+      <div className="flex items-center justify-between"><span className="text-[11px] font-medium text-[#6d747c]">{resource.label || resource.name}</span><ArrowRight size={14} className="text-[#a0a5aa] opacity-0 transition group-hover:opacity-100" /></div>
+      <div className="mt-2 text-[25px] font-semibold text-[#25292e]">{resource.count ?? "—"}</div>
+      <div className="mt-1 truncate text-[10px] text-[#8a9097]">{resource.description}</div>
     </Link>
   );
 }
 
-export function StarredPreviewPage() {
+function AttentionRow({ item }: { item: HomeAttentionItem }) {
   return (
-    <div className="min-h-full bg-[#f8f8f7] px-12 py-9">
-      <h1 className="text-[28px] font-semibold tracking-[-0.02em]">Starred</h1>
-      <button className="mt-8 inline-flex h-8 items-center gap-1 text-[15px]">
-        Show all types <ChevronDown size={15} />
-      </button>
-      <div className="mt-[260px] text-center">
-        <h2 className="text-[22px] text-[#202124]">You haven&apos;t starred anything</h2>
-        <p className="mt-2 text-[13px] text-[#6b7075]">Click the star icon on any base, app, or workspace to add it here for quick access.</p>
-        <Link href="/app" className="mt-7 inline-flex h-9 items-center rounded-[5px] border border-[#d3d3d0] bg-white px-4 text-[13px] shadow-sm">
-          Go to all workspaces
-        </Link>
-      </div>
-    </div>
+    <Link href={item.href} className="grid min-h-16 grid-cols-[minmax(0,1fr)_100px_20px] items-center gap-3 border-b border-[#eceeef] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]">
+      <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-1 block text-[11px] text-[#737a82]">{item.message}</span></span>
+      <span className={`justify-self-start rounded-full px-2 py-1 text-[10px] font-medium ${item.priority === "HIGH" ? "bg-amber-50 text-amber-800" : "bg-[#f0f1f1] text-[#646b73]"}`}>{item.status}</span>
+      <ChevronMarker />
+    </Link>
   );
+}
+
+function ChevronMarker() { return <ArrowRight size={14} className="text-[#a1a6ac]" />; }
+
+function NoWorkspace() {
+  return <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[7px] border border-[#d9dcdf] bg-white px-6 text-center"><Building2 size={28} className="text-[#8a9097]" /><h2 className="mt-4 text-[15px] font-semibold">Aucune agence active</h2><p className="mt-1 max-w-md text-[12px] leading-5 text-[#737a82]">Sélectionnez ou configurez une agence pour accéder aux opérations.</p><Link href="/app/settings" className="mt-5 inline-flex h-8 items-center rounded-[5px] bg-[#5550d8] px-3 text-[12px] font-medium text-white">Configurer l’agence</Link></div>;
+}
+
+function DashboardSkeleton() {
+  return <div className="space-y-5"><div className="grid overflow-hidden rounded-[7px] border bg-white sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 animate-pulse border-r bg-[#f1f2f2]" />)}</div><div className="h-80 animate-pulse rounded-[7px] border bg-white" /></div>;
 }

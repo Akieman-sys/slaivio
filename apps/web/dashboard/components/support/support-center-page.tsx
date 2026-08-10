@@ -33,6 +33,12 @@ export function SupportCenterPage() {
   const [selected, setSelected] = useState<TicketDetail | null>(null);
   const [article, setArticle] = useState<Article | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setTab(params.get("view") === "tickets" ? "tickets" : "help");
+    if (params.get("new") === "1") setCreating(true);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       setError("");
@@ -62,25 +68,25 @@ export function SupportCenterPage() {
         <div className="flex min-h-[58px] items-center gap-4 px-6">
           <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[#202124]">Support et Centre d’aide</h1>
           <div className="ml-auto flex items-center gap-2">
-            <button className={button} onClick={load}>Refresh</button>
+            <button className={button} onClick={load}>Actualiser</button>
             <PermissionGuard permission="support.create">
               <button className={primary} onClick={() => setCreating(true)}>
                 <Plus size={15} />
-                New ticket
+                Nouveau ticket
               </button>
             </PermissionGuard>
           </div>
         </div>
         <div className="flex h-[48px] items-end gap-4 border-t border-[#eeeeeb] px-6">
-          <Tab active={tab === "help"} onClick={() => setTab("help")} icon={<BookOpen size={16} />} label="Help center" />
+          <Tab active={tab === "help"} onClick={() => setTab("help")} icon={<BookOpen size={16} />} label="Centre d’aide" />
           <Tab active={tab === "tickets"} onClick={() => setTab("tickets")} icon={<LifeBuoy size={16} />} label={`Tickets (${tickets.length})`} />
           <label className="ml-auto mb-2 flex h-8 w-[360px] max-w-[45vw] items-center gap-2 rounded-[4px] border border-[#d3d3d0] bg-white px-2 focus-within:border-[#1a73e8]">
             <Search size={15} className="text-[#6b7075]" />
-            <input value={q} onChange={(event) => setQ(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" placeholder="Search help and tickets" />
+            <input value={q} onChange={(event) => setQ(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" placeholder="Rechercher un article ou un ticket" />
           </label>
           {tab === "tickets" && (
             <select className={`${input} mb-2 max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="">All statuses</option>
+              <option value="">Tous les statuts</option>
               {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item}>{item}</option>)}
             </select>
           )}
@@ -116,12 +122,12 @@ function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () =>
 
 function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: Article) => void }) {
   if (!articles.length) {
-    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">No help articles in this view.</div>;
+    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun article d’aide dans cette vue.</div>;
   }
   return (
     <div className="overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
       <div className="grid grid-cols-[220px_1fr_80px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
-        <span>Category</span><span>Article</span><span />
+        <span>Catégorie</span><span>Article</span><span />
       </div>
       {articles.map((article) => (
         <button key={article.id} onClick={() => open(article)} className="grid w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-3 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
@@ -248,8 +254,8 @@ function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => 
           <form onSubmit={send} className="mt-4 grid gap-2 rounded-[6px] border border-[#d3d3d0] bg-white p-4">
             <textarea required name="message" rows={4} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Ajouter une réponse..." />
             <div className="flex justify-between">
-              <label className={button}><Paperclip size={14} />Attach<input hidden type="file" onChange={upload} /></label>
-              <button className={primary}><MessageSquare size={14} />Send</button>
+              <label className={button}><Paperclip size={14} />Joindre<input hidden type="file" onChange={upload} /></label>
+              <button className={primary}><MessageSquare size={14} />Envoyer</button>
             </div>
           </form>
         </PermissionGuard>

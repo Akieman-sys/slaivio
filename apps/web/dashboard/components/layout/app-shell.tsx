@@ -1,27 +1,23 @@
 "use client";
 
+import { useClerk, useUser } from "@clerk/nextjs";
 import {
   Bell,
   BookOpen,
-  ChevronLeft,
+  Building2,
+  CheckCheck,
   ChevronRight,
   CircleHelp,
-  Globe2,
-  Grid2X2,
+  FileQuestion,
   Home,
-  Languages,
   LogOut,
   Menu,
-  Moon,
-  Plus,
+  MessageSquareText,
   Search,
   Settings,
-  Star,
-  Sun,
-  Trash2,
-  Upload,
-  Users,
-  Wand2,
+  SlidersHorizontal,
+  TicketCheck,
+  UserRound,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -30,11 +26,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { usePermissions } from "@/components/permissions/permission-provider";
-import { appNavigation, canAccessRoute, searchableAppRoutes } from "@/config/app-navigation";
+import { OrganizationSwitcher } from "@/components/tenant/organization-switcher";
+import { appNavigation, canAccessRoute, searchableAppRoutes, type AppRoute } from "@/config/app-navigation";
 import { SESSION_EXPIRED_EVENT } from "@/services/api";
+import { listNotifications, notificationAction, type CenterItem } from "@/services/notification-center";
 
 type FloatingPanel = "account" | "notifications" | "help" | null;
-type AccountPanel = "main" | "notificationPrefs" | "language" | "appearance";
+
+const utilityRoutes: readonly AppRoute[] = [
+  { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["organisation", "équipe", "rôle", "sécurité", "paramètres"] },
+  { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "préférence"] },
+  { label: "Centre d’aide", href: "/app/support", icon: CircleHelp, permission: "support.read", keywords: ["aide", "support", "ticket", "documentation"] },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -46,26 +49,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [floatingPanel, setFloatingPanel] = useState<FloatingPanel>(null);
-  const [accountPanel, setAccountPanel] = useState<AccountPanel>("main");
 
   const groupedRoutes = useMemo(
-    () =>
-      appNavigation.map((group) => ({
-        ...group,
-        routes: group.routes.filter((route) => canAccessRoute(route, permissions, permissionsAvailable)),
-      })),
+    () => appNavigation.map((group) => ({
+      ...group,
+      routes: group.routes.filter((route) => canAccessRoute(route, permissions, permissionsAvailable)),
+    })).filter((group) => group.routes.length),
     [permissions, permissionsAvailable],
   );
 
-  const allRoutes = useMemo(() => groupedRoutes.flatMap((group) => group.routes), [groupedRoutes]);
-
   const results = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("fr");
-    const allowed = searchableAppRoutes.filter((route) =>
+    const routes = [...searchableAppRoutes, ...utilityRoutes].filter((route) =>
       canAccessRoute(route, permissions, permissionsAvailable),
     );
-    if (!normalized) return allowed;
-    return allowed.filter((route) =>
+    if (!normalized) return routes;
+    return routes.filter((route) =>
       [route.label, ...route.keywords].some((term) => term.toLocaleLowerCase("fr").includes(normalized)),
     );
   }, [query, permissions, permissionsAvailable]);
@@ -99,204 +98,106 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.push(href);
   }
 
+  function togglePanel(panel: Exclude<FloatingPanel, null>) {
+    setFloatingPanel((current) => current === panel ? null : panel);
+  }
+
   return (
-    <div className="flex h-dvh overflow-hidden bg-[#f8f8f7] text-[#1f2328]">
+    <div className="flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e]">
       <button
         aria-label="Fermer la navigation"
         onClick={() => setMobileOpen(false)}
         className={`fixed inset-0 z-40 bg-black/25 lg:hidden ${mobileOpen ? "block" : "hidden"}`}
       />
 
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[300px] flex-col border-r border-[#d9d9d6] bg-white transition-transform lg:relative lg:z-auto lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex h-[58px] shrink-0 items-center gap-3 border-b border-[#d9d9d6] px-4">
-          <Link href="/app" className="flex min-w-0 items-center gap-2" onClick={() => setMobileOpen(false)}>
-            <Image src="/slaivio-icon-official.png" width={30} height={30} alt="" className="rounded-[4px]" />
-            <Image
-              src="/slaivio-logo-official-dark.png"
-              width={104}
-              height={34}
-              alt="Slaivio"
-              className="h-auto w-[96px]"
-              priority
-            />
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-transform lg:relative lg:z-auto lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] px-4">
+          <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
+            <Image src="/slaivio-logo-official-dark.png" width={122} height={40} alt="Slaivio" className="h-auto w-[116px]" priority />
           </Link>
-          <button
-            onClick={() => setMobileOpen(false)}
-            aria-label="Fermer"
-            className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f0ef] lg:hidden"
-          >
+          <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
           </button>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label="Navigation Slaivio">
-          <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Home" />
-          <SidebarLink href="/app/starred" icon={<Star size={18} />} active={pathname === "/app/starred"} label="Starred" />
-          <SidebarLink href="/app/shared" icon={<Upload size={18} />} active={pathname === "/app/shared"} label="Shared" />
+        <OrganizationSwitcher />
 
-          <div className="mt-3">
-            <div className="flex h-9 items-center px-2 text-[15px] text-[#2f3437]">
-              <Users size={18} className="mr-2" />
-              <span className="font-medium">Workspaces</span>
-              <button aria-label="Ajouter un workspace" className="ml-auto rounded-[4px] p-1 text-[#666] hover:bg-[#f0f0ef]">
-                <Plus size={17} />
-              </button>
-              <button aria-label="Ouvrir les workspaces" className="rounded-[4px] p-1 text-[#666] hover:bg-[#f0f0ef]">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-            <div className="mt-1 space-y-0.5">
-              {groupedRoutes.map((group) => (
-                <div key={group.label}>
-                  <div className="mt-2 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b8f94]">
-                    {group.label}
-                  </div>
-                  {group.routes.map((route) => (
-                    <SidebarLink
-                      key={route.href}
-                      href={route.href}
-                      icon={<route.icon size={16} />}
-                      active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
-                      label={route.label}
-                      compact
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-3" aria-label="Navigation Slaivio">
+          <SidebarLink href="/app" icon={<Home size={17} />} active={pathname === "/app"} label="Accueil" />
+          {groupedRoutes.map((group) => (
+            <section key={group.label} className="mt-5">
+              <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase text-[#8a9097]">{group.label}</div>
+              <div className="space-y-0.5">
+                {group.routes.map((route) => (
+                  <SidebarLink
+                    key={route.href}
+                    href={route.href}
+                    icon={<route.icon size={16} />}
+                    active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
+                    label={route.label}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </nav>
 
-        <div className="shrink-0 border-t border-[#e6e6e3] px-3 py-3">
+        <div className="shrink-0 border-t border-[#e3e4e5] p-3">
           {!permissionsLoading && !permissionsAvailable && (
-            <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
-              Droits indisponibles. Les API restent l’autorité finale.
+            <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
+              Les droits n’ont pas pu être chargés. Les API continuent de protéger les actions.
             </div>
           )}
-          <SidebarLink href="/app/support" icon={<BookOpen size={16} />} active={pathname.startsWith("/app/support")} label="Templates and apps" compact />
-          <SidebarLink href="/app/reports" icon={<Globe2 size={16} />} active={pathname.startsWith("/app/reports")} label="Marketplace" compact />
-          <button className="flex min-h-[34px] w-full items-center gap-2 rounded-[4px] px-2 text-left text-[14px] text-[#2f3437] hover:bg-[#f0f0ef]">
-            <Upload size={16} />
-            Import
-          </button>
-          <Link
-            href={allRoutes[0]?.href ?? "/app/dossiers"}
-            className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-[5px] bg-[#1a73e8] px-3 text-[14px] font-medium text-white shadow-sm hover:bg-[#1768d1]"
-          >
-            <Plus size={17} />
-            Create
-          </Link>
+          <SidebarLink href="/app/settings" icon={<Building2 size={16} />} active={pathname.startsWith("/app/settings")} label="Organisation et équipe" />
         </div>
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex h-[58px] shrink-0 items-center border-b border-[#d9d9d6] bg-white px-3">
-          <button
-            onClick={() => setMobileOpen(true)}
-            aria-label="Ouvrir la navigation"
-            className="mr-2 rounded-[4px] p-2 text-[#5f6368] hover:bg-[#f0f0ef] lg:hidden"
-          >
+        <header className="relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4">
+          <button onClick={() => setMobileOpen(true)} aria-label="Ouvrir la navigation" className="mr-2 rounded-[5px] p-2 text-[#5f666e] hover:bg-[#f0f1f1] lg:hidden">
             <Menu size={19} />
           </button>
 
           <button
-            onClick={() => {
-              setSearchOpen(true);
-              requestAnimationFrame(() => searchRef.current?.focus());
-            }}
-            className="absolute left-1/2 flex h-[34px] w-[min(356px,45vw)] -translate-x-1/2 items-center rounded-full border border-[#d9d9d6] bg-white px-4 text-left shadow-sm hover:border-[#c6c6c3]"
+            onClick={() => { setSearchOpen(true); requestAnimationFrame(() => searchRef.current?.focus()); }}
+            className="absolute left-1/2 hidden h-9 w-[min(420px,42vw)] -translate-x-1/2 items-center rounded-[6px] border border-[#d7dade] bg-[#f8f8f7] px-3 text-left hover:border-[#bfc3c7] md:flex"
             aria-label="Ouvrir la recherche"
           >
-            <Search size={16} className="text-[#4f555a]" />
-            <span className="ml-2 min-w-0 flex-1 truncate text-[13px] text-[#6b7075]">Search...</span>
-            <kbd className="text-[12px] text-[#7a7f84]">ctrl K</kbd>
+            <Search size={15} className="text-[#656c74]" />
+            <span className="ml-2 min-w-0 flex-1 truncate text-[13px] text-[#777e86]">Rechercher dans Slaivio</span>
+            <kbd className="rounded border border-[#d8dade] bg-white px-1.5 py-0.5 text-[10px] text-[#737981]">Ctrl K</kbd>
           </button>
 
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <button
-                onClick={() => setFloatingPanel(floatingPanel === "help" ? null : "help")}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[14px] text-[#2f3437] hover:bg-[#f0f0ef]"
-              >
-                <CircleHelp size={16} />
-                Help
-              </button>
-              {floatingPanel === "help" && <HelpMenu />}
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => setFloatingPanel(floatingPanel === "notifications" ? null : "notifications")}
-                aria-label="Notifications"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d9d9d6] text-[#2f3437] shadow-sm hover:bg-[#f0f0ef]"
-              >
-                <Bell size={16} />
-              </button>
-              {floatingPanel === "notifications" && <NotificationsMenu />}
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setFloatingPanel(floatingPanel === "account" ? null : "account");
-                  setAccountPanel("main");
-                }}
-                aria-label="Compte"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0f9aaa] text-[14px] font-semibold text-white shadow-sm"
-              >
-                J
-              </button>
-              {floatingPanel === "account" && (
-                <AccountMenu panel={accountPanel} setPanel={setAccountPanel} />
-              )}
-            </div>
+          <div className="ml-auto flex items-center gap-1.5">
+            <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />
+            <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
+            <AccountTrigger onClick={() => togglePanel("account")} />
           </div>
+
+          {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
+          {floatingPanel === "help" && <div className="absolute right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
+          {floatingPanel === "notifications" && <div className="absolute right-[48px] top-[52px] z-50"><NotificationsMenu close={() => setFloatingPanel(null)} /></div>}
+          {floatingPanel === "account" && <div className="absolute right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
         </header>
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f8f8f7]">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
       </section>
 
       {searchOpen && (
-        <div
-          className="fixed inset-0 z-[70] flex items-start justify-center bg-black/25 px-4 pt-[12vh]"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Recherche Slaivio"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setSearchOpen(false);
-          }}
-        >
-          <div className="w-full max-w-xl overflow-hidden rounded-[7px] border border-[#cfd1d4] bg-white shadow-2xl">
-            <label className="flex h-12 items-center border-b border-[#e6e6e3] px-4">
-              <Search size={17} className="text-[#6b7075]" />
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && results[0]) openRoute(results[0].href);
-                }}
-                placeholder="Search..."
-                className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
-                autoComplete="off"
-              />
-              <kbd className="text-[12px] text-[#7a7f84]">Esc</kbd>
+        <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/25 px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="Recherche Slaivio" onMouseDown={(event) => { if (event.currentTarget === event.target) setSearchOpen(false); }}>
+          <div className="w-full max-w-xl overflow-hidden rounded-[8px] border border-[#cfd2d5] bg-white shadow-2xl">
+            <label className="flex h-12 items-center border-b border-[#e6e7e8] px-4">
+              <Search size={17} className="text-[#6b727a]" />
+              <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && results[0]) openRoute(results[0].href); }} placeholder="Clients, dossiers, colis, expéditions..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none" autoComplete="off" />
+              <kbd className="text-[11px] text-[#7a8087]">Esc</kbd>
             </label>
             <div className="max-h-80 overflow-y-auto p-2">
-              {results.length === 0 && (
-                <p className="px-3 py-8 text-center text-sm text-[#777]">Aucune section disponible.</p>
-              )}
+              {!results.length && <p className="px-3 py-8 text-center text-sm text-[#777]">Aucun résultat.</p>}
               {results.map((route) => (
-                <button
-                  key={route.href}
-                  onClick={() => openRoute(route.href)}
-                  className="flex w-full items-center gap-3 rounded-[4px] px-3 py-2.5 text-left text-sm text-[#2f3437] hover:bg-[#f0f0ef] focus:bg-[#f0f0ef] focus:outline-none"
-                >
-                  <route.icon size={16} className="text-[#5f6368]" />
+                <button key={route.href} onClick={() => openRoute(route.href)} className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left text-sm hover:bg-[#f0f1f1] focus:bg-[#f0f1f1] focus:outline-none">
+                  <route.icon size={16} className="text-[#606871]" />
                   <span>{route.label}</span>
-                  <span className="ml-auto text-xs text-[#8b8f94]">{route.href}</span>
+                  <ChevronRight size={14} className="ml-auto text-[#9aa0a6]" />
                 </button>
               ))}
             </div>
@@ -306,16 +207,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {sessionExpired && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4" role="alertdialog" aria-modal="true">
-          <section className="w-full max-w-sm rounded-[7px] border border-[#d0d0cc] bg-white p-6 shadow-2xl">
-            <h2 className="text-lg font-semibold text-[#222]">Votre session a expiré</h2>
-            <p className="mt-2 text-sm leading-6 text-[#666]">Reconnectez-vous avant de poursuivre.</p>
-            <button
-              onClick={() => {
-                const returnTo = `${window.location.pathname}${window.location.search}`;
-                window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`);
-              }}
-              className="mt-5 inline-flex h-9 w-full items-center justify-center rounded-[5px] bg-[#1f2328] px-4 text-sm font-semibold text-white hover:bg-black"
-            >
+          <section className="w-full max-w-sm rounded-[8px] border border-[#d0d3d6] bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold">Votre session a expiré</h2>
+            <p className="mt-2 text-sm leading-6 text-[#666d75]">Reconnectez-vous avant de poursuivre.</p>
+            <button onClick={() => { const returnTo = `${window.location.pathname}${window.location.search}`; window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`); }} className="mt-5 inline-flex h-9 w-full items-center justify-center rounded-[5px] bg-[#272a2f] px-4 text-sm font-semibold text-white hover:bg-black">
               Se reconnecter
             </button>
           </section>
@@ -325,230 +220,144 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarLink({
-  href,
-  icon,
-  active,
-  label,
-  compact = false,
-}: {
-  href: string;
-  icon: ReactNode;
-  active: boolean;
-  label: string;
-  compact?: boolean;
-}) {
+function SidebarLink({ href, icon, active, label }: { href: string; icon: ReactNode; active: boolean; label: string }) {
   return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`flex min-h-[39px] items-center gap-2 rounded-[2px] px-3 text-[15px] ${
-        compact ? "min-h-[34px] text-[14px]" : ""
-      } ${
-        active
-          ? "border border-[#9aa0a6] bg-[#f2f3f7] font-medium text-[#202124]"
-          : "text-[#2f3437] hover:bg-[#f5f5f3]"
-      }`}
-    >
-      {icon}
+    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center gap-2.5 rounded-[5px] px-2.5 text-[13px] ${active ? "bg-[#e9e9f7] font-medium text-[#34306f]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
+      <span className={active ? "text-[#514bc5]" : "text-[#656c74]"}>{icon}</span>
       <span className="truncate">{label}</span>
     </Link>
   );
 }
 
-function AccountMenu({
-  panel,
-  setPanel,
-}: {
-  panel: AccountPanel;
-  setPanel: (panel: AccountPanel) => void;
-}) {
-  if (panel === "notificationPrefs") return <AccountSubPanel title="Notification preferences" back={() => setPanel("main")} />;
-  if (panel === "language") {
-    return (
-      <AccountSubPanel title="Language preferences" back={() => setPanel("main")}>
-        {["Automatic", "English (United States)", "Français", "Deutsch", "Español"].map((language) => (
-          <button key={language} className="flex h-9 w-full items-center justify-between px-5 text-left text-[13px] hover:bg-[#f5f5f3]">
-            {language}
-            {language === "Français" && <span>✓</span>}
-          </button>
-        ))}
-      </AccountSubPanel>
-    );
-  }
-  if (panel === "appearance") {
-    return (
-      <AccountSubPanel title="Appearance" back={() => setPanel("main")} badge="Beta">
-        <p className="px-5 py-2 text-[12px] leading-5 text-[#6b7075]">
-          Choose if Slaivio should be light, dark, or sync with your system.
-        </p>
-        <button className="flex h-9 w-full items-center justify-between px-5 text-left text-[13px] hover:bg-[#f5f5f3]">
-          <span className="flex items-center gap-2"><Sun size={15} />Light</span>✓
-        </button>
-        <button className="flex h-9 w-full items-center gap-2 px-5 text-left text-[13px] hover:bg-[#f5f5f3]">
-          <Moon size={15} />Dark
-        </button>
-        <button className="flex h-9 w-full items-center gap-2 px-5 text-left text-[13px] hover:bg-[#f5f5f3]">
-          <Settings size={15} />Use system setting
-        </button>
-      </AccountSubPanel>
-    );
-  }
+function HeaderButton({ label, icon, onClick, active, showLabel = false }: { label: string; icon: ReactNode; onClick: () => void; active: boolean; showLabel?: boolean }) {
   return (
-    <div className="absolute right-0 top-10 z-50 w-[298px] overflow-hidden rounded-[5px] border border-[#d3d3d0] bg-white text-[#2f3437] shadow-2xl">
-      <div className="px-5 py-4 text-[13px]">
-        <div>Jérémie Bawaba</div>
-        <div className="mt-1">bawabajeremie@gmail.com</div>
-      </div>
-      <MenuDivider />
-      <MenuButton href="/app/settings" icon={<Users size={15} />} label="Account" />
-      <MenuButton icon={<Users size={15} />} label="Manage groups" right={<Badge>Business</Badge>} />
-      <MenuButton icon={<Bell size={15} />} label="Notification preferences" right={<ChevronRight size={15} />} onClick={() => setPanel("notificationPrefs")} />
-      <MenuButton icon={<Languages size={15} />} label="Language preferences" right={<ChevronRight size={15} />} onClick={() => setPanel("language")} />
-      <MenuButton icon={<Sun size={15} />} label="Appearance" right={<><Badge>Beta</Badge><ChevronRight size={15} /></>} onClick={() => setPanel("appearance")} />
-      <MenuDivider />
-      <MenuButton href="/app/support" icon={<BookOpen size={15} />} label="Contact sales" />
-      <MenuButton icon={<Wand2 size={15} />} label="Upgrade" />
-      <MenuButton icon={<Upload size={15} />} label="Tell a friend" />
-      <MenuDivider />
-      <MenuButton href="/app/settings" icon={<Settings size={15} />} label="Integrations" />
-      <MenuButton href="/app/reports" icon={<Grid2X2 size={15} />} label="Builder hub" />
-      <MenuDivider />
-      <MenuButton icon={<Trash2 size={15} />} label="Trash" />
-      <MenuButton href="/sign-in" icon={<LogOut size={15} />} label="Log out" />
-    </div>
-  );
-}
-
-function AccountSubPanel({
-  title,
-  badge,
-  back,
-  children,
-}: {
-  title: string;
-  badge?: string;
-  back: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="absolute right-0 top-10 z-50 w-[298px] overflow-hidden rounded-[5px] border border-[#d3d3d0] bg-white text-[#2f3437] shadow-2xl">
-      <div className="flex h-[60px] items-center gap-3 border-b border-[#eeeeeb] px-5 text-[13px]">
-        <button onClick={back} aria-label="Retour" className="rounded-[4px] p-1 hover:bg-[#f0f0ef]">
-          <ChevronLeft size={16} />
-        </button>
-        <span>{title}</span>
-        {badge && <Badge>{badge}</Badge>}
-      </div>
-      {children ?? (
-        <div className="p-5">
-          <label className="flex items-start gap-3 border-b border-[#eeeeeb] py-4 text-[13px]">
-            <input type="checkbox" defaultChecked className="mt-1 h-4 w-4 accent-[#1a73e8]" />
-            <span>
-              <span className="block font-medium">Mobile push notifications</span>
-              <span className="mt-1 block text-[12px] leading-5 text-[#6b7075]">
-                Receive mobile push notifications for comments, mentions and access requests.
-              </span>
-            </span>
-          </label>
-          <label className="flex items-start gap-3 py-4 text-[13px]">
-            <input type="checkbox" defaultChecked className="mt-1 h-4 w-4 accent-[#1a73e8]" />
-            <span>
-              <span className="block font-medium">Email</span>
-              <span className="mt-1 block text-[12px] leading-5 text-[#6b7075]">
-                Receive email notifications for operational updates.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NotificationsMenu() {
-  return (
-    <div className="absolute right-0 top-10 z-50 h-[535px] w-[360px] overflow-hidden rounded-[5px] border border-[#d3d3d0] bg-white shadow-2xl">
-      <div className="flex h-[52px] items-center gap-2 px-5">
-        <div className="text-[13px] font-medium">Notifications</div>
-        <button className="ml-auto rounded-[5px] bg-[#f0f0ef] px-3 py-1.5 text-[13px]">Unread</button>
-        <button className="rounded-[5px] px-3 py-1.5 text-[13px] hover:bg-[#f0f0ef]">Read</button>
-      </div>
-      <div className="px-5">
-        <label className="flex h-[34px] items-center gap-2 rounded-[3px] border-2 border-[#1a73e8] px-2">
-          <Search size={15} className="text-[#6b7075]" />
-          <input className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" placeholder="Search notifications" />
-        </label>
-      </div>
-      <div className="flex h-[420px] items-center justify-center text-[13px] text-[#9aa0a6]">
-        No unread notifications
-      </div>
-    </div>
-  );
-}
-
-function HelpMenu() {
-  return (
-    <div className="absolute right-0 top-10 z-50 w-[242px] overflow-hidden rounded-[5px] border border-[#d3d3d0] bg-white py-3 shadow-2xl">
-      <div className="px-5 pb-2 text-[12px] text-[#6b7075]">Support</div>
-      <MenuButton href="/app/support" icon={<BookOpen size={15} />} label="Help center" />
-      <MenuButton icon={<Globe2 size={15} />} label="Ask the community" />
-      <MenuButton href="/app/support" icon={<CircleHelp size={15} />} label="Message support" />
-      <MenuButton href="/app/support" icon={<Upload size={15} />} label="Contact sales" active />
-      <div className="px-5 pb-2 pt-3 text-[12px] text-[#6b7075]">Education</div>
-      <MenuButton icon={<Settings size={15} />} label="Keyboard shortcuts" />
-      <MenuButton icon={<ChevronRight size={15} />} label="Webinars" />
-      <MenuButton icon={<Wand2 size={15} />} label="What's new" />
-      <MenuButton icon={<Grid2X2 size={15} />} label="API documentation" />
-      <div className="px-5 pb-2 pt-3 text-[12px] text-[#6b7075]">Upgrade</div>
-      <MenuButton icon={<Wand2 size={15} />} label="Plans and pricing" />
-    </div>
-  );
-}
-
-function MenuButton({
-  href,
-  icon,
-  label,
-  right,
-  onClick,
-  active,
-}: {
-  href?: string;
-  icon: ReactNode;
-  label: string;
-  right?: ReactNode;
-  onClick?: () => void;
-  active?: boolean;
-}) {
-  const content = (
-    <>
-      {icon}
-      <span className="truncate">{label}</span>
-      {right && <span className="ml-auto flex items-center gap-1">{right}</span>}
-    </>
-  );
-  const className = `flex h-[34px] w-full items-center gap-3 px-5 text-left text-[13px] ${
-    active ? "bg-[#f0f0ef]" : "hover:bg-[#f5f5f3]"
-  }`;
-  if (href) {
-    return (
-      <Link href={href} className={className}>
-        {content}
-      </Link>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={className}>
-      {content}
+    <button type="button" onClick={onClick} aria-label={label} aria-expanded={active} className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-[5px] px-2 text-[13px] ${active ? "bg-[#eceeef]" : "hover:bg-[#f0f1f1]"}`}>
+      {icon}{showLabel && <span className="hidden sm:inline">{label}</span>}
     </button>
   );
 }
 
-function MenuDivider() {
-  return <div className="mx-5 my-2 h-px bg-[#eeeeeb]" />;
+function AccountTrigger({ onClick }: { onClick: () => void }) {
+  const { user } = useUser();
+  const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Compte";
+  return (
+    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#5450d6] text-[12px] font-semibold text-white ring-1 ring-black/5">
+      {user?.imageUrl ? <Image src={user.imageUrl} width={32} height={32} alt="" className="h-full w-full object-cover" /> : name.slice(0, 1).toUpperCase()}
+    </button>
+  );
 }
 
-function Badge({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-[#d6efff] px-2 py-0.5 text-[11px] text-[#1772a6]">{children}</span>;
+function AccountMenu({ close }: { close: () => void }) {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const name = user?.fullName || user?.firstName || "Utilisateur Slaivio";
+  const email = user?.primaryEmailAddress?.emailAddress || "";
+  return (
+    <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
+      <div className="flex items-center gap-3 px-4 py-4">
+        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#5450d6] text-sm font-semibold text-white">
+          {user?.imageUrl ? <Image src={user.imageUrl} width={40} height={40} alt="" className="h-full w-full object-cover" /> : name.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
+      </div>
+      <MenuDivider />
+      <MenuLink href="/app/settings" icon={<UserRound size={15} />} label="Organisation et équipe" close={close} />
+      <MenuLink href="/app/notifications?preferences=1" icon={<SlidersHorizontal size={15} />} label="Préférences de notifications" close={close} />
+      <MenuDivider />
+      <button type="button" onClick={async () => { close(); await signOut({ redirectUrl: "/sign-in" }); }} className={menuClass}>
+        <LogOut size={15} /> Se déconnecter
+      </button>
+    </div>
+  );
+}
+
+function HelpMenu({ close }: { close: () => void }) {
+  return (
+    <div className="w-[264px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white py-2 shadow-[0_16px_44px_rgba(15,23,42,.18)]">
+      <div className="px-4 pb-1.5 pt-1 text-[10px] font-semibold uppercase text-[#8a9097]">Aide et assistance</div>
+      <MenuLink href="/app/support?view=articles" icon={<BookOpen size={15} />} label="Centre d’aide" close={close} />
+      <MenuLink href="/app/support?new=1" icon={<MessageSquareText size={15} />} label="Contacter le support" close={close} />
+      <MenuLink href="/app/support?view=tickets" icon={<TicketCheck size={15} />} label="Mes tickets" close={close} />
+      <MenuDivider />
+      <div className="flex min-h-9 items-start gap-2.5 px-4 py-2 text-[12px] text-[#737a82]">
+        <FileQuestion size={15} className="mt-0.5 shrink-0" />
+        La documentation API sera proposée ici lorsqu’elle sera publiée.
+      </div>
+    </div>
+  );
+}
+
+function NotificationsMenu({ close }: { close: () => void }) {
+  const [items, setItems] = useState<CenterItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState<"unread" | "read">("unread");
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    listNotifications({ status: tab === "unread" ? "UNREAD" : "READ", page_size: 20 })
+      .then((result) => setItems(result.items))
+      .catch(() => setError("Notifications indisponibles."))
+      .finally(() => setLoading(false));
+  }, [tab]);
+
+  const filtered = items.filter((item) => `${item.title} ${item.message}`.toLocaleLowerCase("fr").includes(query.toLocaleLowerCase("fr")));
+
+  async function markRead(item: CenterItem) {
+    if (!item.read_at) {
+      await notificationAction(item, "read").catch(() => undefined);
+    }
+    close();
+  }
+
+  return (
+    <div className="flex h-[560px] w-[380px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
+      <div className="flex h-12 shrink-0 items-center border-b border-[#e5e6e7] px-4">
+        <div className="text-[13px] font-semibold">Notifications</div>
+        <div className="ml-auto flex rounded-[5px] bg-[#f0f1f1] p-0.5">
+          <button type="button" onClick={() => { setLoading(true); setTab("unread"); }} className={`h-7 rounded-[4px] px-2.5 text-[11px] ${tab === "unread" ? "bg-white shadow-sm" : ""}`}>Non lues</button>
+          <button type="button" onClick={() => { setLoading(true); setTab("read"); }} className={`h-7 rounded-[4px] px-2.5 text-[11px] ${tab === "read" ? "bg-white shadow-sm" : ""}`}>Lues</button>
+        </div>
+      </div>
+      <div className="border-b border-[#eceeef] p-3">
+        <label className="flex h-8 items-center gap-2 rounded-[5px] border border-[#d7dade] bg-[#f8f8f7] px-2 focus-within:border-[#7771ed]">
+          <Search size={14} className="text-[#737a82]" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[12px] outline-none" placeholder="Rechercher" />
+        </label>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {loading ? <p className="p-10 text-center text-[12px] text-[#858b92]">Chargement...</p> : error ? <p className="p-6 text-center text-[12px] text-red-600">{error}</p> : !filtered.length ? (
+          <div className="flex h-full flex-col items-center justify-center px-8 text-center"><CheckCheck size={24} className="text-[#a1a7ad]" /><p className="mt-3 text-[13px] font-medium">Aucune notification {tab === "unread" ? "non lue" : "lue"}</p><p className="mt-1 text-[11px] leading-5 text-[#858b92]">Les mises à jour opérationnelles apparaîtront ici.</p></div>
+        ) : filtered.map((item) => (
+          <Link key={`${item.source}-${item.id}`} href={notificationTarget(item)} onClick={() => markRead(item)} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
+            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "CRITICAL" ? "bg-red-500" : item.priority === "HIGH" ? "bg-amber-500" : "bg-[#5b55e7]"}`} />
+            <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{item.title}</span><span className="mt-1 line-clamp-2 block text-[11px] leading-4 text-[#666e77]">{item.message}</span><span className="mt-1.5 block text-[10px] text-[#959ba1]">{new Date(item.created_at).toLocaleString("fr-FR")}</span></span>
+          </Link>
+        ))}
+      </div>
+      <div className="grid shrink-0 grid-cols-2 border-t border-[#e5e6e7] p-2">
+        <Link href="/app/notifications" onClick={close} className="flex h-8 items-center justify-center rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]">Tout afficher</Link>
+        <Link href="/app/notifications?preferences=1" onClick={close} className="flex h-8 items-center justify-center gap-1.5 rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]"><Settings size={13} />Préférences</Link>
+      </div>
+    </div>
+  );
+}
+
+function notificationTarget(item: CenterItem) {
+  const category = item.category.toUpperCase();
+  if (category.includes("PACKAGE")) return "/app/packages";
+  if (category.includes("SHIPMENT")) return "/app/shipments";
+  if (category.includes("PAYMENT") || category.includes("FINANCE")) return "/app/finance";
+  if (category.includes("COMPLIANCE") || category.includes("DOCUMENT")) return "/app/documents";
+  return "/app/notifications";
+}
+
+const menuClass = "flex min-h-9 w-full items-center gap-2.5 px-4 text-left text-[12px] text-[#353b42] hover:bg-[#f2f3f3]";
+
+function MenuLink({ href, icon, label, close }: { href: string; icon: ReactNode; label: string; close: () => void }) {
+  return <Link href={href} onClick={close} className={menuClass}>{icon}<span className="truncate">{label}</span><ChevronRight size={13} className="ml-auto text-[#a0a5aa]" /></Link>;
+}
+
+function MenuDivider() {
+  return <div className="mx-4 my-2 h-px bg-[#eceeef]" />;
 }

@@ -16,10 +16,7 @@ export default function OnboardingWelcomePage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
       <section className="max-w-3xl rounded-[2rem] border border-white/10 bg-white/[0.06] p-8 shadow-2xl md:p-12">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
-          SLAIVIO Cargo OS
-        </p>
-        <h1 className="mt-4 text-4xl font-black tracking-tight md:text-6xl">
+        <h1 className="text-4xl font-black tracking-tight md:text-6xl">
           Bienvenue. Configurons votre agence cargo.
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">

@@ -9,10 +9,7 @@ import {
   HandCoins,
   ReceiptText,
   Route,
-  Settings,
-  Bell,
   BarChart3,
-  CircleHelp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,11 +31,6 @@ export type AppNavigationGroup = {
 // publiée ici que lorsqu'une page fonctionnelle existe réellement.
 export const appNavigation: readonly AppNavigationGroup[] = [
   {
-    label: "Réseau",
-    icon: Route,
-    routes: [{ label: "Routes et services", href: "/app/routes", icon: Route, permission: "routes.read", keywords: ["route", "service", "tarif", "pricing", "corridor"] }],
-  },
-  {
     label: "Opérations",
     icon: BriefcaseBusiness,
     routes: [
@@ -54,6 +46,11 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     ],
   },
   {
+    label: "Réseau",
+    icon: Route,
+    routes: [{ label: "Routes et services", href: "/app/routes", icon: Route, permission: "routes.read", keywords: ["route", "service", "tarif", "pricing", "corridor"] }],
+  },
+  {
     label: "Finance",
     icon: ReceiptText,
     routes: [
@@ -61,25 +58,10 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     ],
   },
   {
-    label: "Administration",
-    icon: Settings,
-    routes: [
-      { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "centre", "envoi", "échec"] },
-      { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["équipe", "organisation", "membre", "rôle", "permission", "paramètres", "sécurité", "audit"] },
-    ],
-  },
-  {
     label: "Pilotage",
     icon: BarChart3,
     routes: [
       { label: "Rapports et Analytics", href: "/app/reports", icon: BarChart3, permission: "analytics.read", keywords: ["rapport", "analytics", "kpi", "performance", "export", "statistique"] },
-    ],
-  },
-  {
-    label: "Assistance",
-    icon: CircleHelp,
-    routes: [
-      { label: "Support et Centre d’aide", href: "/app/support", icon: CircleHelp, permission: "support.read", keywords: ["support", "aide", "ticket", "documentation", "incident"] },
     ],
   },
 ];

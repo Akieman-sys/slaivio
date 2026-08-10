@@ -11,25 +11,25 @@ export function AuthShell({
   children: ReactNode;
 }) {
   return (
-    <main className="grid min-h-screen bg-white text-[#2c2c2f] lg:grid-cols-[50%_50%]">
+    <main className="grid min-h-screen bg-white text-[#25292e] lg:grid-cols-[46%_54%]">
       <section className="flex min-h-screen items-center justify-center px-6 py-10">
-        <div className="w-full max-w-[400px]">
-          <div className="mb-24">
+        <div className="w-full max-w-[420px]">
+          <div className="mb-16">
             <Image
               src="/slaivio-logo-official-dark.png"
               alt="Slaivio"
               width={232}
               height={76}
               priority
-              className="h-auto w-[220px]"
+              className="h-auto w-[176px]"
             />
           </div>
 
           <div className="mb-6">
-            <h1 className="text-[32px] font-semibold leading-tight tracking-[-0.02em] text-[#333]">
+            <h1 className="text-[30px] font-semibold leading-tight text-[#25292e]">
               {title}
             </h1>
-            <p className="mt-2 max-w-[320px] text-[16px] leading-6 text-[#333]">
+            <p className="mt-2 max-w-[380px] text-[14px] leading-6 text-[#69717a]">
               {description}
             </p>
           </div>
@@ -38,12 +38,16 @@ export function AuthShell({
         </div>
       </section>
 
-      <section className="relative hidden min-h-screen overflow-hidden bg-[#625df5] lg:block">
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.22))]" />
-        <div className="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_65%_20%,rgba(255,255,255,0.34),transparent_34%)]" />
-        <div className="absolute bottom-[-120px] right-[-80px] h-[360px] w-[360px] rounded-full bg-white/20 blur-3xl" />
-        <div className="absolute left-[18%] top-[18%] h-[180px] w-[280px] rounded-[18px] border border-white/20 bg-white/10 shadow-2xl backdrop-blur" />
-        <div className="absolute left-[28%] top-[42%] h-[140px] w-[420px] rounded-[18px] border border-white/20 bg-white/12 shadow-2xl backdrop-blur" />
+      <section className="relative hidden min-h-screen overflow-hidden bg-[#23262b] lg:block">
+        <Image
+          src="/landing/official/hero-dashboard.png"
+          alt="Tableau de bord opérationnel Slaivio"
+          fill
+          priority
+          sizes="54vw"
+          className="object-cover object-left"
+        />
+        <div className="absolute inset-0 bg-black/10" />
       </section>
     </main>
   );

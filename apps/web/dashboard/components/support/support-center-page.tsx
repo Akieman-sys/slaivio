@@ -1,9 +1,287 @@
-'use client';
-import {FormEvent,useCallback,useEffect,useState} from 'react';import {BookOpen,Download,LifeBuoy,MessageSquare,Paperclip,Plus,RefreshCcw,X} from 'lucide-react';import {addTicketMessage,createTicket,getTicket,listArticles,listTickets,ticketAttachmentUrl,transitionTicket,uploadTicketAttachment,type Article,type Ticket,type TicketDetail} from '@/services/support';import {PermissionGuard} from '@/components/permissions/permission-guard';
-const btn='inline-flex h-9 items-center gap-2 rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] font-medium',primary='inline-flex h-9 items-center gap-2 rounded-[5px] bg-[#635bff] px-3 text-[13px] font-semibold text-white',input='h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px]';
-export function SupportCenterPage(){const [tab,setTab]=useState<'help'|'tickets'>('help'),[articles,setArticles]=useState<Article[]>([]),[tickets,setTickets]=useState<Ticket[]>([]),[q,setQ]=useState(''),[status,setStatus]=useState(''),[error,setError]=useState(''),[creating,setCreating]=useState(false),[selected,setSelected]=useState<TicketDetail|null>(null),[article,setArticle]=useState<Article|null>(null);const load=useCallback(async()=>{try{setError('');const [a,t]=await Promise.all([listArticles(tab==='help'?q:undefined),listTickets({status:status||undefined,q:tab==='tickets'&&q?q:undefined})]);setArticles(a);setTickets(t)}catch{setError('Le centre de support est indisponible.')}},[q,status,tab]);useEffect(()=>{const timer=setTimeout(load,200);return()=>clearTimeout(timer)},[load]);async function open(id:string){setSelected(await getTicket(id))}return <div className="min-h-full bg-[#f7f7f6]"><header className="border-b bg-white px-6 py-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[12px] text-[#69707d]">Assistance › Agence</p><h1 className="text-[24px] font-semibold">Support et Centre d’aide</h1><p className="text-[13px] text-[#69707d]">Documentation pratique et suivi transparent de vos demandes.</p></div><div className="flex gap-2"><button className={btn} onClick={load}><RefreshCcw size={14}/>Actualiser</button><PermissionGuard permission="support.create"><button className={primary} onClick={()=>setCreating(true)}><Plus size={14}/>Nouveau ticket</button></PermissionGuard></div></div></header><nav className="flex gap-1 border-b bg-white px-5">{[['help','Centre d’aide',BookOpen],['tickets',`Mes tickets (${tickets.length})`,LifeBuoy]].map(([id,label,Icon])=><button key={String(id)} onClick={()=>setTab(id as 'help'|'tickets')} className={`flex h-12 items-center gap-2 border-b-2 px-3 text-[13px] ${tab===id?'border-[#635bff] font-semibold':'border-transparent'}`}><Icon size={15}/>{String(label)}</button>)}</nav><main className="mx-auto max-w-[1280px] p-5"><div className="mb-4 flex gap-2"><input className={`${input} max-w-lg`} value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher…"/>{tab==='tickets'&&<select className={`${input} max-w-[220px]`} value={status} onChange={e=>setStatus(e.target.value)}><option value="">Tous les statuts</option>{['OPEN','IN_PROGRESS','WAITING_CUSTOMER','RESOLVED','CLOSED','REOPENED'].map(x=><option key={x}>{x}</option>)}</select>}</div>{error&&<p className="mb-3 bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}{tab==='help'?<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{articles.map(a=><button key={a.id} onClick={()=>setArticle(a)} className="rounded-[7px] bg-white p-5 text-left shadow-sm"><small className="font-semibold text-[#635bff]">{a.category}</small><h2 className="mt-2 text-[15px] font-semibold">{a.title}</h2><p className="mt-2 text-[12px] leading-5 text-[#69707d]">{a.summary}</p></button>)}</div>:<TicketTable tickets={tickets} open={open}/>}</main>{creating&&<Create close={()=>setCreating(false)} done={async id=>{setCreating(false);setTab('tickets');await load();open(id)}}/>}{selected&&<Detail detail={selected} close={()=>setSelected(null)} reload={()=>open(selected.ticket.id)}/>} {article&&<Panel close={()=>setArticle(null)}><small className="font-semibold text-[#635bff]">{article.category}</small><h2 className="mt-2 text-2xl font-semibold">{article.title}</h2><p className="mt-6 whitespace-pre-wrap text-[14px] leading-7">{article.content}</p></Panel>}</div>}
-function TicketTable({tickets,open}:{tickets:Ticket[];open:(id:string)=>void}){if(!tickets.length)return <div className="rounded-[7px] bg-white p-12 text-center text-[13px] text-[#69707d]">Aucun ticket dans cette vue.</div>;return <div className="overflow-auto rounded-[7px] bg-white shadow-sm"><table className="w-full whitespace-nowrap text-left text-[12px]"><thead className="bg-[#f1f1ef]"><tr>{['Référence','Sujet','Priorité','Statut','SLA','Messages','Mise à jour'].map(x=><th className="px-4 py-3" key={x}>{x}</th>)}</tr></thead><tbody>{tickets.map(t=><tr key={t.id} className="cursor-pointer border-t hover:bg-[#fafafa]" onClick={()=>open(t.id)}><td className="px-4 py-3 font-semibold">{t.ticket_reference}</td><td>{t.subject}</td><td>{t.priority}</td><td>{t.status}</td><td className={t.first_response_overdue||t.resolution_overdue?'text-red-700':'text-emerald-700'}>{t.first_response_overdue||t.resolution_overdue?'Dépassé':'Dans le délai'}</td><td>{t.message_count}</td><td>{new Date(t.updated_at).toLocaleDateString('fr-FR')}</td></tr>)}</tbody></table></div>}
-function Create({close,done}:{close:()=>void;done:(id:string)=>void}){const [error,setError]=useState('');async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);try{const t=await createTicket({subject:String(f.get('subject')),description:String(f.get('description')),category:String(f.get('category')),priority:String(f.get('priority'))});done(t.id)}catch{setError('Création impossible.')}}return <Dialog title="Nouveau ticket" close={close}><form onSubmit={submit} className="grid gap-3"><input required minLength={5} name="subject" className={input} placeholder="Objet de la demande"/><div className="grid grid-cols-2 gap-2"><select name="category" className={input}>{['TECHNIQUE','FACTURATION','COMPTE','DONNÉES','FONCTIONNALITÉ','AUTRE'].map(x=><option key={x}>{x}</option>)}</select><select name="priority" className={input}><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select></div><textarea required minLength={10} name="description" rows={7} className="rounded-[5px] border p-3 text-[13px]" placeholder="Décrivez le problème et les étapes pour le reproduire."/>{error&&<p className="text-red-700">{error}</p>}<button className={primary}>Créer le ticket</button></form></Dialog>}
-function Detail({detail,close,reload}:{detail:TicketDetail;close:()=>void;reload:()=>void}){const t=detail.ticket,[error,setError]=useState('');async function send(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);try{await addTicketMessage(t.id,String(f.get('message')));e.currentTarget.reset();reload()}catch{setError('Message non envoyé.')}}async function upload(e:FormEvent<HTMLInputElement>){const file=e.currentTarget.files?.[0];if(!file)return;try{await uploadTicketAttachment(t.id,file);reload()}catch{setError('Pièce jointe refusée.')}finally{e.currentTarget.value=''}}return <Panel close={close}><small>{t.ticket_reference} · {t.status}</small><h2 className="text-lg font-semibold">{t.subject}</h2><p className="text-[12px] text-[#69707d]">{t.priority} · réponse avant {t.first_response_due_at?new Date(t.first_response_due_at).toLocaleString('fr-FR'):'—'}</p>{error&&<p className="mt-3 bg-red-50 p-3 text-red-700">{error}</p>}<div className="mt-5 space-y-3">{detail.messages.map(m=><div key={m.id} className="rounded-[7px] bg-white p-4 shadow-sm"><div className="flex justify-between text-[11px] text-[#69707d]"><b>{m.author_name||m.author_type}</b><span>{new Date(m.created_at).toLocaleString('fr-FR')}</span></div><p className="mt-2 whitespace-pre-wrap text-[13px]">{m.message}</p></div>)}</div>{detail.attachments.map(a=><button key={a.id} onClick={async()=>window.open(await ticketAttachmentUrl(t.id,a.id),'_blank','noopener')} className="mt-2 flex items-center gap-2 text-[12px]"><Download size={13}/>{a.file_name}</button>)}{!['CLOSED','RESOLVED'].includes(t.status)&&<PermissionGuard permission="support.create"><form onSubmit={send} className="mt-4 grid gap-2 rounded-[7px] bg-white p-4"><textarea required name="message" rows={4} className="border p-3 text-[13px]" placeholder="Ajouter une réponse…"/><div className="flex justify-between"><label className={btn}><Paperclip size={14}/>Joindre<input hidden type="file" onChange={upload}/></label><button className={primary}><MessageSquare size={14}/>Envoyer</button></div></form></PermissionGuard>}<PermissionGuard permission="support.close"><button className={`${btn} mt-4`} onClick={async()=>{await transitionTicket(t.id,t.status==='CLOSED'?'reopen':'close',t.row_version);reload()}}>{t.status==='CLOSED'?'Rouvrir':'Fermer le ticket'}</button></PermissionGuard></Panel>}
-function Panel({close,children}:{close:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-50 flex justify-end bg-black/25"><section className="h-full w-full max-w-2xl overflow-y-auto bg-[#f7f7f6] p-6"><button className="float-right" onClick={close}><X/></button>{children}</section></div>}
-function Dialog({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4"><section className="w-full max-w-xl rounded-[7px] bg-white p-5"><div className="mb-4 flex justify-between"><h2 className="text-lg font-semibold">{title}</h2><button onClick={close}><X/></button></div>{children}</section></div>}
+"use client";
+
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, Search, X } from "lucide-react";
+
+import { PermissionGuard } from "@/components/permissions/permission-guard";
+import {
+  addTicketMessage,
+  createTicket,
+  getTicket,
+  listArticles,
+  listTickets,
+  ticketAttachmentUrl,
+  transitionTicket,
+  uploadTicketAttachment,
+  type Article,
+  type Ticket,
+  type TicketDetail,
+} from "@/services/support";
+
+const button = "inline-flex h-8 items-center gap-1.5 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f5f3]";
+const primary = "inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-[#1a73e8] px-3 text-[13px] font-medium text-white hover:bg-[#1768d1]";
+const input = "h-8 w-full rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] outline-none focus:border-[#1a73e8]";
+
+export function SupportCenterPage() {
+  const [tab, setTab] = useState<"help" | "tickets">("help");
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<TicketDetail | null>(null);
+  const [article, setArticle] = useState<Article | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setError("");
+      const [nextArticles, nextTickets] = await Promise.all([
+        listArticles(tab === "help" ? q : undefined),
+        listTickets({ status: status || undefined, q: tab === "tickets" && q ? q : undefined }),
+      ]);
+      setArticles(nextArticles);
+      setTickets(nextTickets);
+    } catch {
+      setError("Le centre de support est indisponible.");
+    }
+  }, [q, status, tab]);
+
+  useEffect(() => {
+    const timer = setTimeout(load, 200);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  async function open(id: string) {
+    setSelected(await getTicket(id));
+  }
+
+  return (
+    <div className="min-h-full bg-[#f8f8f7]">
+      <header className="border-b border-[#d9d9d6] bg-white">
+        <div className="flex min-h-[58px] items-center gap-4 px-6">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[#202124]">Support et Centre d’aide</h1>
+          <div className="ml-auto flex items-center gap-2">
+            <button className={button} onClick={load}>Refresh</button>
+            <PermissionGuard permission="support.create">
+              <button className={primary} onClick={() => setCreating(true)}>
+                <Plus size={15} />
+                New ticket
+              </button>
+            </PermissionGuard>
+          </div>
+        </div>
+        <div className="flex h-[48px] items-end gap-4 border-t border-[#eeeeeb] px-6">
+          <Tab active={tab === "help"} onClick={() => setTab("help")} icon={<BookOpen size={16} />} label="Help center" />
+          <Tab active={tab === "tickets"} onClick={() => setTab("tickets")} icon={<LifeBuoy size={16} />} label={`Tickets (${tickets.length})`} />
+          <label className="ml-auto mb-2 flex h-8 w-[360px] max-w-[45vw] items-center gap-2 rounded-[4px] border border-[#d3d3d0] bg-white px-2 focus-within:border-[#1a73e8]">
+            <Search size={15} className="text-[#6b7075]" />
+            <input value={q} onChange={(event) => setQ(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" placeholder="Search help and tickets" />
+          </label>
+          {tab === "tickets" && (
+            <select className={`${input} mb-2 max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">All statuses</option>
+              {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item}>{item}</option>)}
+            </select>
+          )}
+        </div>
+      </header>
+
+      <main className="px-6 py-5">
+        {error && <p className="mb-3 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>}
+        {tab === "help" ? <ArticleGrid articles={articles} open={setArticle} /> : <TicketTable tickets={tickets} open={open} />}
+      </main>
+
+      {creating && <Create close={() => setCreating(false)} done={async (id) => { setCreating(false); setTab("tickets"); await load(); await open(id); }} />}
+      {selected && <Detail detail={selected} close={() => setSelected(null)} reload={() => open(selected.ticket.id)} />}
+      {article && (
+        <Panel close={() => setArticle(null)}>
+          <small className="font-semibold text-[#1a73e8]">{article.category}</small>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.02em]">{article.title}</h2>
+          <p className="mt-6 whitespace-pre-wrap text-[14px] leading-7 text-[#2f3437]">{article.content}</p>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button onClick={onClick} className={`flex h-[48px] items-center gap-2 border-b-2 px-1 text-[14px] ${active ? "border-[#1a73e8] font-medium text-[#202124]" : "border-transparent text-[#5f6368] hover:text-[#202124]"}`}>
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: Article) => void }) {
+  if (!articles.length) {
+    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">No help articles in this view.</div>;
+  }
+  return (
+    <div className="overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
+      <div className="grid grid-cols-[220px_1fr_80px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
+        <span>Category</span><span>Article</span><span />
+      </div>
+      {articles.map((article) => (
+        <button key={article.id} onClick={() => open(article)} className="grid w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-3 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
+          <span className="font-medium text-[#1a73e8]">{article.category}</span>
+          <span>
+            <span className="block font-medium text-[#202124]">{article.title}</span>
+            <span className="mt-1 line-clamp-1 text-[#6b7075]">{article.summary}</span>
+          </span>
+          <ChevronRight size={16} className="justify-self-end text-[#6b7075]" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) => void }) {
+  if (!tickets.length) {
+    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun ticket dans cette vue.</div>;
+  }
+  return (
+    <div className="overflow-auto rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
+      <table className="w-full whitespace-nowrap text-left text-[12px]">
+        <thead className="border-b border-[#d9d9d6] bg-[#f7f7f5] text-[#5f6368]">
+          <tr>{["Référence", "Sujet", "Priorité", "Statut", "SLA", "Messages", "Mise à jour"].map((item) => <th className="px-4 py-2 font-medium" key={item}>{item}</th>)}</tr>
+        </thead>
+        <tbody>
+          {tickets.map((ticket) => (
+            <tr key={ticket.id} className="cursor-pointer border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]" onClick={() => open(ticket.id)}>
+              <td className="px-4 py-3 font-semibold">{ticket.ticket_reference}</td>
+              <td className="px-4 py-3">{ticket.subject}</td>
+              <td className="px-4 py-3">{ticket.priority}</td>
+              <td className="px-4 py-3">{ticket.status}</td>
+              <td className={`px-4 py-3 ${ticket.first_response_overdue || ticket.resolution_overdue ? "text-red-700" : "text-emerald-700"}`}>{ticket.first_response_overdue || ticket.resolution_overdue ? "Dépassé" : "Dans le délai"}</td>
+              <td className="px-4 py-3">{ticket.message_count}</td>
+              <td className="px-4 py-3">{new Date(ticket.updated_at).toLocaleDateString("fr-FR")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Create({ close, done }: { close: () => void; done: (id: string) => void }) {
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      const ticket = await createTicket({
+        subject: String(form.get("subject")),
+        description: String(form.get("description")),
+        category: String(form.get("category")),
+        priority: String(form.get("priority")),
+      });
+      done(ticket.id);
+    } catch {
+      setError("Création impossible.");
+    }
+  }
+  return (
+    <Dialog title="New ticket" close={close}>
+      <form onSubmit={submit} className="grid gap-3">
+        <input required minLength={5} name="subject" className={input} placeholder="Objet de la demande" />
+        <div className="grid grid-cols-2 gap-2">
+          <select name="category" className={input}>{["TECHNIQUE", "FACTURATION", "COMPTE", "DONNÉES", "FONCTIONNALITÉ", "AUTRE"].map((item) => <option key={item}>{item}</option>)}</select>
+          <select name="priority" className={input}><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select>
+        </div>
+        <textarea required minLength={10} name="description" rows={7} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Décrivez le problème." />
+        {error && <p className="text-[13px] text-red-700">{error}</p>}
+        <button className={primary}>Create ticket</button>
+      </form>
+    </Dialog>
+  );
+}
+
+function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => void; reload: () => void }) {
+  const ticket = detail.ticket;
+  const [error, setError] = useState("");
+  async function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await addTicketMessage(ticket.id, String(form.get("message")));
+      event.currentTarget.reset();
+      reload();
+    } catch {
+      setError("Message non envoyé.");
+    }
+  }
+  async function upload(event: FormEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    try {
+      await uploadTicketAttachment(ticket.id, file);
+      reload();
+    } catch {
+      setError("Pièce jointe refusée.");
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+  return (
+    <Panel close={close}>
+      <small className="text-[#6b7075]">{ticket.ticket_reference} · {ticket.status}</small>
+      <h2 className="mt-1 text-[22px] font-semibold">{ticket.subject}</h2>
+      <p className="mt-1 text-[12px] text-[#6b7075]">{ticket.priority} · réponse avant {ticket.first_response_due_at ? new Date(ticket.first_response_due_at).toLocaleString("fr-FR") : "—"}</p>
+      {error && <p className="mt-3 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
+      <div className="mt-5 overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white">
+        {detail.messages.map((message) => (
+          <div key={message.id} className="border-b border-[#eeeeeb] p-4 last:border-0">
+            <div className="flex justify-between text-[11px] text-[#6b7075]"><b>{message.author_name || message.author_type}</b><span>{new Date(message.created_at).toLocaleString("fr-FR")}</span></div>
+            <p className="mt-2 whitespace-pre-wrap text-[13px]">{message.message}</p>
+          </div>
+        ))}
+      </div>
+      {detail.attachments.map((attachment) => (
+        <button key={attachment.id} onClick={async () => window.open(await ticketAttachmentUrl(ticket.id, attachment.id), "_blank", "noopener")} className="mt-2 flex items-center gap-2 text-[12px]">
+          <Download size={13} />{attachment.file_name}
+        </button>
+      ))}
+      {!["CLOSED", "RESOLVED"].includes(ticket.status) && (
+        <PermissionGuard permission="support.create">
+          <form onSubmit={send} className="mt-4 grid gap-2 rounded-[6px] border border-[#d3d3d0] bg-white p-4">
+            <textarea required name="message" rows={4} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Ajouter une réponse..." />
+            <div className="flex justify-between">
+              <label className={button}><Paperclip size={14} />Attach<input hidden type="file" onChange={upload} /></label>
+              <button className={primary}><MessageSquare size={14} />Send</button>
+            </div>
+          </form>
+        </PermissionGuard>
+      )}
+      <PermissionGuard permission="support.close">
+        <button className={`${button} mt-4`} onClick={async () => { await transitionTicket(ticket.id, ticket.status === "CLOSED" ? "reopen" : "close", ticket.row_version); reload(); }}>{ticket.status === "CLOSED" ? "Rouvrir" : "Fermer le ticket"}</button>
+      </PermissionGuard>
+    </Panel>
+  );
+}
+
+function Panel({ close, children }: { close: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/25">
+      <section className="h-full w-full max-w-2xl overflow-y-auto border-l border-[#d3d3d0] bg-white p-6 shadow-2xl">
+        <button className="float-right rounded-[4px] p-1 hover:bg-[#f0f0ef]" onClick={close}><X size={18} /></button>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function Dialog({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
+      <section className="w-full max-w-xl rounded-[6px] border border-[#d3d3d0] bg-white p-5 shadow-2xl">
+        <div className="mb-4 flex justify-between">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button onClick={close} className="rounded-[4px] p-1 hover:bg-[#f0f0ef]"><X size={18} /></button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}

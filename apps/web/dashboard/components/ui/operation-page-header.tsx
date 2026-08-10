@@ -13,17 +13,19 @@ export function OperationPageHeader({
 }) {
   return (
     <header className="border-b border-[#d9d9d6] bg-white">
-      <div className="flex min-h-[64px] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[12px] text-[#666]">
-            <span>Opérations</span><span aria-hidden="true">›</span><span className="font-medium text-[#1f2328]">{title}</span>
+      <div className="flex min-h-[58px] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#ffba00] text-[15px] font-semibold text-[#202124] shadow-sm ring-1 ring-black/10">
+            {title.slice(0, 2)}
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-[20px] font-semibold tracking-[-0.02em] text-[#202124]">{title}</h1>
+            <p className="mt-0.5 max-w-4xl truncate text-[13px] leading-5 text-[#6b7075]">{description}</p>
           </div>
-          <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.02em] text-[#2f2f32]">{title}</h1>
-          <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#666]">{description}</p>
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {tabs && <div className="flex items-center gap-1 overflow-x-auto border-t border-[#eeeeeb] px-5 py-2">{tabs}</div>}
+      {tabs && <div className="flex min-h-[36px] items-center gap-1 overflow-x-auto border-t border-[#eeeeeb] bg-[#fff7df] px-5 py-1">{tabs}</div>}
     </header>
   );
 }

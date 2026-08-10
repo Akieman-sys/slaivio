@@ -4,20 +4,29 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import {
   Bell,
   BookOpen,
-  Building2,
   CheckCheck,
   ChevronRight,
   CircleHelp,
+  Code2,
+  CreditCard,
   FileQuestion,
   Home,
+  Keyboard,
+  Languages,
   LogOut,
   Menu,
+  Megaphone,
   MessageSquareText,
+  Palette,
+  Plug,
   Search,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   TicketCheck,
+  Trash2,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -35,7 +44,7 @@ import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 type FloatingPanel = "account" | "notifications" | "help" | null;
 
 const utilityRoutes: readonly AppRoute[] = [
-  { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["organisation", "équipe", "rôle", "sécurité", "paramètres"] },
+  { label: "Paramètres", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["organisation", "équipe", "rôle", "sécurité", "paramètres"] },
   { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "préférence"] },
   { label: "Centre d’aide", href: "/app/support", icon: CircleHelp, permission: "support.read", keywords: ["aide", "support", "ticket", "documentation"] },
 ];
@@ -149,7 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               Les droits n’ont pas pu être chargés. Les API continuent de protéger les actions.
             </div>
           )}
-          <SidebarLink href="/app/settings" icon={<Building2 size={16} />} active={pathname.startsWith("/app/settings")} label="Organisation et équipe" />
+          <SidebarLink href="/app/settings" icon={<Settings size={16} />} active={pathname.startsWith("/app/settings")} label="Paramètres" />
         </div>
       </aside>
 
@@ -224,7 +233,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 function SidebarLink({ href, icon, active, label }: { href: string; icon: ReactNode; active: boolean; label: string }) {
   return (
     <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center gap-2.5 rounded-[5px] px-2.5 text-[13px] ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
-      <span className={active ? "text-[#514bc5]" : "text-[#656c74]"}>{icon}</span>
+      <span className={active ? "text-[#16855f]" : "text-[#656c74]"}>{icon}</span>
       <span className="truncate">{label}</span>
     </Link>
   );
@@ -260,9 +269,17 @@ function AccountMenu({ close }: { close: () => void }) {
         <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
       </div>
       <MenuDivider />
-      <MenuLink href="/app/settings" icon={<UserRound size={15} />} label="Organisation et équipe" close={close} />
+      <MenuLink href="/app/settings?section=profile" icon={<UserRound size={15} />} label="Compte et profil" close={close} />
+      <MenuLink href="/app/settings?section=team" icon={<Users size={15} />} label="Équipe et accès" close={close} />
       <MenuLink href="/app/notifications?preferences=1" icon={<SlidersHorizontal size={15} />} label="Préférences de notifications" close={close} />
+      <MenuLink href="/app/settings?section=preferences" icon={<Languages size={15} />} label="Langue et formats" close={close} />
+      <MenuDisabled icon={<Palette size={15} />} label="Apparence" status="Bientôt" />
       <MenuDivider />
+      <MenuDisabled icon={<Plug size={15} />} label="Intégrations" status="Indisponible" />
+      <MenuDisabled icon={<CreditCard size={15} />} label="Abonnement et facturation" status="Indisponible" />
+      <MenuLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" close={close} />
+      <MenuDivider />
+      <MenuDisabled icon={<Trash2 size={15} />} label="Corbeille" status="Bientôt" />
       <button type="button" onClick={async () => { close(); await signOut({ redirectUrl: "/sign-in" }); }} className={menuClass}>
         <LogOut size={15} /> Se déconnecter
       </button>
@@ -287,10 +304,10 @@ function HelpMenu({ close }: { close: () => void }) {
       <MenuLink href="/app/support?new=1" icon={<MessageSquareText size={15} />} label="Contacter le support" close={close} />
       <MenuLink href="/app/support?view=tickets" icon={<TicketCheck size={15} />} label="Mes tickets" close={close} />
       <MenuDivider />
-      <div className="flex min-h-9 items-start gap-2.5 px-4 py-2 text-[12px] text-[#737a82]">
-        <FileQuestion size={15} className="mt-0.5 shrink-0" />
-        La documentation API sera proposée ici lorsqu’elle sera publiée.
-      </div>
+      <MenuDisabled icon={<Keyboard size={15} />} label="Raccourcis clavier" status="Bientôt" />
+      <MenuDisabled icon={<Megaphone size={15} />} label="Nouveautés produit" status="Bientôt" />
+      <MenuDisabled icon={<Code2 size={15} />} label="Documentation API" status="Non publiée" />
+      <MenuDisabled icon={<FileQuestion size={15} />} label="Guides opérationnels" status="Bientôt" />
     </div>
   );
 }
@@ -364,6 +381,10 @@ const menuClass = "flex min-h-9 w-full items-center gap-2.5 px-4 text-left text-
 
 function MenuLink({ href, icon, label, close }: { href: string; icon: ReactNode; label: string; close: () => void }) {
   return <Link href={href} onClick={close} className={menuClass}>{icon}<span className="truncate">{label}</span><ChevronRight size={13} className="ml-auto text-[#a0a5aa]" /></Link>;
+}
+
+function MenuDisabled({ icon, label, status }: { icon: ReactNode; label: string; status: string }) {
+  return <button type="button" disabled title={`${label} : ${status}`} className="flex min-h-9 w-full cursor-not-allowed items-center gap-2.5 px-4 text-left text-[12px] text-[#a3a8ad]">{icon}<span className="truncate">{label}</span><span className="ml-auto rounded bg-[#f0f1f1] px-1.5 py-0.5 text-[9px] font-medium text-[#8a9096]">{status}</span></button>;
 }
 
 function MenuDivider() {

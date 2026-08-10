@@ -108,9 +108,9 @@ export function OrganizationSwitcher() {
             ))}
           </div>
           <div className="border-t border-[#eceeed] p-1.5">
-            <Link href="/app/settings" onClick={() => setOpen(false)} className="flex h-9 items-center gap-2 rounded-[5px] px-2 text-[13px] hover:bg-[#f3f4f4]">
+            <Link href="/app/settings?section=organization" onClick={() => setOpen(false)} className="flex h-9 items-center gap-2 rounded-[5px] px-2 text-[13px] hover:bg-[#f3f4f4]">
               <Settings size={15} />
-              Gérer les agences et l’équipe
+              Ouvrir les paramètres
             </Link>
           </div>
         </div>

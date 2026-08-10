@@ -12,6 +12,7 @@ import {
   Settings,
   Bell,
   BarChart3,
+  CircleHelp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -72,6 +73,13 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     icon: BarChart3,
     routes: [
       { label: "Rapports et Analytics", href: "/app/reports", icon: BarChart3, permission: "analytics.read", keywords: ["rapport", "analytics", "kpi", "performance", "export", "statistique"] },
+    ],
+  },
+  {
+    label: "Assistance",
+    icon: CircleHelp,
+    routes: [
+      { label: "Support et Centre d’aide", href: "/app/support", icon: CircleHelp, permission: "support.read", keywords: ["support", "aide", "ticket", "documentation", "incident"] },
     ],
   },
 ];

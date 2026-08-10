@@ -1,0 +1,1 @@
+import {RouteAccessGuard} from '@/components/permissions/route-access-guard';import {SupportCenterPage} from '@/components/support/support-center-page';export const dynamic='force-dynamic';export default function Page(){return <RouteAccessGuard permission="support.read"><SupportCenterPage/></RouteAccessGuard>}

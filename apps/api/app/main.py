@@ -90,6 +90,7 @@ from app.api.documents import router as documents_router
 from app.api.organization_admin import router as organization_admin_router
 from app.api.notification_center import router as notification_center_router
 from app.api.reports import router as reports_router
+from app.api.support import router as support_router
 
 
 app = FastAPI(title="Slaivio")
@@ -202,6 +203,7 @@ app.include_router(documents_router)
 app.include_router(organization_admin_router)
 app.include_router(notification_center_router)
 app.include_router(reports_router)
+app.include_router(support_router)
 app.include_router(warehouses_router)
 app.include_router(pickups_router)
 app.include_router(platform_quarantine_router)

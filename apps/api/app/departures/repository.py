@@ -28,6 +28,9 @@ def transition(o,d,a,n,status,version,reason=None):
  allowed={'OPEN':{'CLOSED','CANCELLED'},'CLOSED':{'LOADING','CANCELLED'},'LOADING':{'DEPARTED'},'DEPARTED':{'ARRIVED'}}
  with engine.begin() as c:
   cur=c.execute(text('select * from cargo_departures where id=:d and org_id=:o for update'),{'d':d,'o':o}).mappings().first()
+  if status in {'LOADING','DEPARTED'}:
+   blocked=c.execute(text("select count(*) from departure_allocations da left join compliance_checks cc on cc.org_id=da.org_id and cc.entity_type='SHIPMENT' and cc.entity_id=da.shipment_id where da.departure_id=:d and da.status<>'REMOVED' and coalesce(cc.status,'BLOCKED')<>'CLEAR'"),{'d':d}).scalar_one()
+   if blocked:raise HTTPException(409,'departure_compliance_blocked')
   if not cur or version!=cur['row_version'] or status not in allowed.get(cur['status'],set()):raise HTTPException(409,'departure_state_conflict')
   if status=='CANCELLED' and not reason:raise HTTPException(422,'cancellation_reason_required')
   row=dict(c.execute(text('update cargo_departures set status=:s,row_version=row_version+1,notes=concat_ws(E\'\\n\',notes,:r),updated_at=now() where id=:d returning *'),{'s':status,'r':reason,'d':d}).mappings().one());ev(c,o,d,status,a,n,{'reason':reason});return row

@@ -42,6 +42,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
       { label: "Dossiers", href: "/app/dossiers", icon: Folder, permission: "dossiers.read", keywords: ["dossier", "case"] },
       { label: "Colis", href: "/app/packages", icon: Package, keywords: ["colis", "package", "tracking"] },
       { label: "Tracking", href: "/app/tracking", icon: Radar, permission: "tracking.read", keywords: ["tracking", "suivi", "control tower", "retard"] },
+      { label: "Documents", href: "/app/documents", icon: Folder, permission: "documents.read", keywords: ["document", "conformité", "douane", "licence", "expiration"] },
       { label: "Calendrier des départs", href: "/app/departures", icon: Truck, permission: "departures.read", keywords: ["départ", "calendrier", "cutoff", "capacité"] },
       { label: "Expéditions", href: "/app/shipments", icon: Truck, permission: "shipments.read", keywords: ["expédition", "shipment", "transport"] },
       { label: "Entrepôts", href: "/app/warehouses", icon: Warehouse, permission: "warehouses.read", keywords: ["entrepôt", "warehouse", "stock", "inventaire", "emplacement"] },

@@ -1,0 +1,1 @@
+import{DocumentsPage}from'@/components/documents/documents-page';import{RouteAccessGuard}from'@/components/permissions/route-access-guard';export const dynamic='force-dynamic';export default function Page(){return <RouteAccessGuard permission="documents.read"><DocumentsPage/></RouteAccessGuard>}

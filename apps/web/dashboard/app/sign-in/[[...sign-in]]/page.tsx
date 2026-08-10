@@ -4,8 +4,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 export default function Page() {
   return (
     <AuthShell
-      title="Connexion"
-      description="Accédez à votre espace agence et reprenez le contrôle de vos opérations cargo."
+      title="Welcome to Slaivio"
+      description="Cargo management built for modern freight collaboration."
     >
       <ClerkAuthPanel mode="sign-in" />
     </AuthShell>

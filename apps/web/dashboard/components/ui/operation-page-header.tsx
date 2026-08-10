@@ -12,18 +12,18 @@ export function OperationPageHeader({
   tabs?: ReactNode;
 }) {
   return (
-    <header className="border-b border-[#d8dce2] bg-white">
-      <div className="flex min-h-[72px] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
+    <header className="border-b border-[#d9d9d6] bg-white">
+      <div className="flex min-h-[64px] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[13px] text-[#616b77]">
+          <div className="flex items-center gap-2 text-[12px] text-[#666]">
             <span>Opérations</span><span aria-hidden="true">›</span><span className="font-medium text-[#1f2328]">{title}</span>
           </div>
-          <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.025em] text-[#1f2328]">{title}</h1>
-          <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#616b77]">{description}</p>
+          <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.02em] text-[#2f2f32]">{title}</h1>
+          <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#666]">{description}</p>
         </div>
         {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
       </div>
-      {tabs && <div className="flex items-center gap-1 overflow-x-auto border-t border-[#eef0f3] px-5 py-2">{tabs}</div>}
+      {tabs && <div className="flex items-center gap-1 overflow-x-auto border-t border-[#eeeeeb] px-5 py-2">{tabs}</div>}
     </header>
   );
 }

@@ -8,8 +8,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 export default function LoginPage() {
   return (
     <AuthShell
-      title="Connexion sécurisée"
-      description="SLAIVIO utilise Clerk pour protéger l’accès des agences et managers."
+      title="Welcome to Slaivio"
+      description="Cargo management built for modern freight collaboration."
     >
       <div className="space-y-4">
         <Link

@@ -4,8 +4,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 export default function Page() {
   return (
     <AuthShell
-      title="Créer un compte"
-      description="Créez l’accès de votre agence et préparez votre environnement cargo international."
+      title="Create your Slaivio account"
+      description="Launch your cargo workspace and invite the team."
     >
       <ClerkAuthPanel mode="sign-up" />
     </AuthShell>

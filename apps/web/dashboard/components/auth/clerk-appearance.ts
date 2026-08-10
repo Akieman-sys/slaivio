@@ -1,13 +1,13 @@
 export const clerkAppearance = {
   variables: {
-    colorPrimary: "#10b981",
+    colorPrimary: "#625df5",
     colorBackground: "#ffffff",
     colorInputBackground: "#ffffff",
-    colorInputText: "#111827",
-    colorText: "#111827",
-    colorTextSecondary: "#6b7280",
-    colorNeutral: "#111827",
-    borderRadius: "1rem",
+    colorInputText: "#333333",
+    colorText: "#333333",
+    colorTextSecondary: "#666666",
+    colorNeutral: "#333333",
+    borderRadius: "0.375rem",
     fontFamily:
       "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
@@ -18,18 +18,18 @@ export const clerkAppearance = {
     headerTitle: "hidden",
     headerSubtitle: "hidden",
     socialButtonsBlockButton:
-      "rounded-2xl border border-slate-200 bg-white text-slate-700 font-semibold hover:bg-slate-50",
-    dividerLine: "bg-slate-200",
-    dividerText: "text-slate-400",
-    formFieldLabel: "text-slate-700 font-bold text-sm",
+      "rounded-[4px] border border-[#d1d1ce] bg-white text-[#333] font-medium hover:bg-[#f4f4f2]",
+    dividerLine: "bg-[#d9d9d6]",
+    dividerText: "text-[#666]",
+    formFieldLabel: "text-[#333] font-medium text-sm",
     formFieldInput:
-      "rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm shadow-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100",
+      "rounded-[4px] border-[#d1d1ce] bg-white px-3 py-2 text-sm shadow-none focus:border-[#625df5] focus:ring-2 focus:ring-[#625df5]/20",
     formButtonPrimary:
-      "rounded-2xl bg-slate-950 font-black text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800",
-    footerActionText: "text-slate-500",
-    footerActionLink: "text-emerald-700 font-bold hover:text-emerald-800",
-    identityPreviewEditButton: "text-emerald-700",
+      "rounded-[4px] bg-[#625df5] font-semibold text-white shadow-none hover:bg-[#514ce8]",
+    footerActionText: "text-[#666]",
+    footerActionLink: "text-[#514ce8] font-medium hover:text-[#343078]",
+    identityPreviewEditButton: "text-[#514ce8]",
     otpCodeFieldInput:
-      "rounded-2xl border-slate-200 focus:border-emerald-400 focus:ring-emerald-100",
+      "rounded-[4px] border-[#d1d1ce] focus:border-[#625df5] focus:ring-[#625df5]/20",
   },
 };

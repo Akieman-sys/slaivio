@@ -10,6 +10,7 @@ import {
   ReceiptText,
   Route,
   Settings,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -61,6 +62,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     label: "Administration",
     icon: Settings,
     routes: [
+      { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "centre", "envoi", "échec"] },
       { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["équipe", "organisation", "membre", "rôle", "permission", "paramètres", "sécurité", "audit"] },
     ],
   },

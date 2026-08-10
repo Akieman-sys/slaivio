@@ -9,6 +9,7 @@ import {
   HandCoins,
   ReceiptText,
   Route,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,13 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     icon: ReceiptText,
     routes: [
       { label: "Facturation", href: "/app/finance", icon: ReceiptText, permission: "finance.read", keywords: ["facture", "devis", "avoir", "paiement", "finance"] },
+    ],
+  },
+  {
+    label: "Administration",
+    icon: Settings,
+    routes: [
+      { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["équipe", "organisation", "membre", "rôle", "permission", "paramètres", "sécurité", "audit"] },
     ],
   },
 ];

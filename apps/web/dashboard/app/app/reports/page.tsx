@@ -1,0 +1,1 @@
+import {RouteAccessGuard} from '@/components/permissions/route-access-guard';import {ReportsAnalyticsPage} from '@/components/reports/reports-analytics-page';export const dynamic='force-dynamic';export default function Page(){return <RouteAccessGuard permission="analytics.read"><ReportsAnalyticsPage/></RouteAccessGuard>}

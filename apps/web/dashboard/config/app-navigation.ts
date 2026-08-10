@@ -11,6 +11,7 @@ import {
   Route,
   Settings,
   Bell,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -64,6 +65,13 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     routes: [
       { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "centre", "envoi", "échec"] },
       { label: "Organisation et équipe", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["équipe", "organisation", "membre", "rôle", "permission", "paramètres", "sécurité", "audit"] },
+    ],
+  },
+  {
+    label: "Pilotage",
+    icon: BarChart3,
+    routes: [
+      { label: "Rapports et Analytics", href: "/app/reports", icon: BarChart3, permission: "analytics.read", keywords: ["rapport", "analytics", "kpi", "performance", "export", "statistique"] },
     ],
   },
 ];

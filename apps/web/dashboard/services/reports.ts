@@ -1,0 +1,6 @@
+import {api} from './api';
+export type Analytics={period:{start:string;end:string;days:number};kpis:Record<string,number>;trend:Array<{day:string;clients:number;packages:number;shipments:number}>;statuses:Record<string,Array<{label:string;value:number}>>;routes:Array<{route:string;shipping_mode:string;shipments:number;weight_kg:number;average_days:number}>;finance:Array<{currency:string;invoices:number;invoiced:number;collected:number;outstanding:number}>;warehouses:Array<{warehouse:string;packages:number;weight_kg:number;volume_cbm:number;fragile:number}>};
+export async function getAnalytics(start:string,end:string){return (await api.get<Analytics>('/reports/analytics',{params:{start,end}})).data}
+export async function previewReport(key:string,start:string,end:string){return (await api.get<{rows:Array<Record<string,unknown>>}>(`/reports/${key}/preview`,{params:{start,end}})).data.rows}
+export async function exportReport(key:string,start:string,end:string){return (await api.get(`/reports/${key}/export`,{params:{start,end},responseType:'blob'})).data as Blob}
+export async function saveReportView(payload:{name:string;report_key:string;filters:Record<string,unknown>;is_shared:boolean}){return (await api.post('/reports/views',payload)).data}

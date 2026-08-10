@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
-import Image from "next/image";
+
+import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 
 export function AuthShell({
   title,
@@ -14,15 +15,8 @@ export function AuthShell({
     <main className="grid min-h-screen bg-white text-[#25292e] lg:grid-cols-[46%_54%]">
       <section className="flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-[420px]">
-          <div className="mb-16">
-            <Image
-              src="/slaivio-logo-official-dark.png"
-              alt="Slaivio"
-              width={232}
-              height={76}
-              priority
-              className="h-auto w-[176px]"
-            />
+          <div className="mb-14">
+            <SlaivioBrand />
           </div>
 
           <div className="mb-6">
@@ -38,16 +32,11 @@ export function AuthShell({
         </div>
       </section>
 
-      <section className="relative hidden min-h-screen overflow-hidden bg-[#23262b] lg:block">
-        <Image
-          src="/landing/official/hero-dashboard.png"
-          alt="Tableau de bord opérationnel Slaivio"
-          fill
-          priority
-          sizes="54vw"
-          className="object-cover object-left"
-        />
-        <div className="absolute inset-0 bg-black/10" />
+      <section className="slaivio-auth-visual relative hidden min-h-screen overflow-hidden lg:flex lg:items-center lg:justify-center">
+        <div className="slaivio-auth-grid absolute inset-0" />
+        <h2 className="relative z-10 max-w-[620px] px-14 text-center text-[46px] font-semibold leading-[1.12] text-white">
+          Pilotez chaque mouvement cargo avec clarté.
+        </h2>
       </section>
     </main>
   );

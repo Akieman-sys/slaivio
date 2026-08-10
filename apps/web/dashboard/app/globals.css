@@ -167,6 +167,62 @@ body {
   min-height: 46px !important;
 }
 
+.slaivio-auth-visual {
+  background: linear-gradient(125deg, #071f18 0%, #087a46 38%, #11b96a 68%, #0c4e38 100%);
+  background-size: 240% 240%;
+  animation: slaivioAuthFlow 16s ease-in-out infinite;
+}
+
+.slaivio-auth-grid {
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom right, transparent 5%, black 48%, transparent 96%);
+}
+
+/* Shared operational language: older modules inherit the flat Expéditions shell. */
+div.min-h-full.bg-\[\#f7f7f6\] > header {
+  min-height: 72px;
+  border-color: #dfe1e3;
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+}
+
+div.min-h-full.bg-\[\#f7f7f6\] > header h1 {
+  color: #25292e;
+  font-size: 20px;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+div.min-h-full.bg-\[\#f7f7f6\] > main > .grid:first-child {
+  gap: 0;
+  border-top: 1px solid #dfe1e3;
+  border-bottom: 1px solid #dfe1e3;
+  background: #fff;
+}
+
+div.min-h-full.bg-\[\#f7f7f6\] > main > .grid:first-child > :is(div, section) {
+  min-height: 76px;
+  border-right: 1px solid #eceeef;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
+  border-top: 1px solid #dfe1e3;
+  border-bottom: 1px solid #dfe1e3;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@keyframes slaivioAuthFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
 @keyframes slaivioReveal {
   from {
     opacity: 0;
@@ -426,6 +482,10 @@ body {
   .landing-cta,
   .landing-orbit,
   .landing-counter-orbit {
+    animation: none;
+  }
+
+  .slaivio-auth-visual {
     animation: none;
   }
 }

@@ -30,6 +30,7 @@ import { OrganizationSwitcher } from "@/components/tenant/organization-switcher"
 import { appNavigation, canAccessRoute, searchableAppRoutes, type AppRoute } from "@/config/app-navigation";
 import { SESSION_EXPIRED_EVENT } from "@/services/api";
 import { listNotifications, notificationAction, type CenterItem } from "@/services/notification-center";
+import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 
 type FloatingPanel = "account" | "notifications" | "help" | null;
 
@@ -113,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className={`fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-transform lg:relative lg:z-auto lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] px-4">
           <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
-            <Image src="/slaivio-logo-official-dark.png" width={122} height={40} alt="Slaivio" className="h-auto w-[116px]" priority />
+            <SlaivioBrand compact />
           </Link>
           <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
@@ -222,7 +223,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function SidebarLink({ href, icon, active, label }: { href: string; icon: ReactNode; active: boolean; label: string }) {
   return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center gap-2.5 rounded-[5px] px-2.5 text-[13px] ${active ? "bg-[#e9e9f7] font-medium text-[#34306f]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
+    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center gap-2.5 rounded-[5px] px-2.5 text-[13px] ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
       <span className={active ? "text-[#514bc5]" : "text-[#656c74]"}>{icon}</span>
       <span className="truncate">{label}</span>
     </Link>
@@ -241,8 +242,8 @@ function AccountTrigger({ onClick }: { onClick: () => void }) {
   const { user } = useUser();
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Compte";
   return (
-    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#5450d6] text-[12px] font-semibold text-white ring-1 ring-black/5">
-      {user?.imageUrl ? <Image src={user.imageUrl} width={32} height={32} alt="" className="h-full w-full object-cover" /> : name.slice(0, 1).toUpperCase()}
+    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5">
+      <UserAvatar imageUrl={user?.imageUrl} name={name} size={32} />
     </button>
   );
 }
@@ -255,9 +256,7 @@ function AccountMenu({ close }: { close: () => void }) {
   return (
     <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
       <div className="flex items-center gap-3 px-4 py-4">
-        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#5450d6] text-sm font-semibold text-white">
-          {user?.imageUrl ? <Image src={user.imageUrl} width={40} height={40} alt="" className="h-full w-full object-cover" /> : name.slice(0, 1).toUpperCase()}
-        </div>
+        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={user?.imageUrl} name={name} size={40} /></div>
         <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
       </div>
       <MenuDivider />
@@ -269,6 +268,15 @@ function AccountMenu({ close }: { close: () => void }) {
       </button>
     </div>
   );
+}
+
+function UserAvatar({ imageUrl, name, size }: { imageUrl?: string | null; name: string; size: number }) {
+  const [failed, setFailed] = useState(false);
+  if (imageUrl && !failed) {
+    return <Image src={imageUrl} width={size} height={size} alt="" className="h-full w-full object-cover" onError={() => setFailed(true)} />;
+  }
+  const initial = name.trim().slice(0, 1).toUpperCase();
+  return initial ? <span aria-hidden="true">{initial}</span> : <UserRound size={Math.round(size * 0.5)} aria-hidden="true" />;
 }
 
 function HelpMenu({ close }: { close: () => void }) {

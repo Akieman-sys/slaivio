@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock3, RefreshCcw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock3, MapPin, MessageCircleMore, RefreshCcw } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { getDashboardHome, type DashboardHome, type HomeAttentionItem, type HomeResource } from "@/services/dashboard";
 
@@ -26,15 +26,17 @@ export function DashboardOverviewPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="min-h-full bg-[#f5f6f6]">
-      <header className="border-b border-[#dfe1e3] bg-white px-5 py-5 sm:px-7">
-        <div className="mx-auto flex max-w-[1500px] items-end justify-between gap-4">
+    <div className="min-h-full bg-[#f7f7f6]">
+      <header className="border-b border-[#dfe1e3] bg-white px-5 py-3.5 sm:px-6">
+        <div className="flex min-h-[44px] items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase text-[#858b92]">Vue d’ensemble</p>
-            <h1 className="mt-1 text-[24px] font-semibold text-[#24282d]">
+            <h1 className="text-[20px] font-semibold text-[#24282d]">
               {data?.workspace.name ? `Bonjour, bienvenue chez ${data.workspace.name}` : "Bonjour, bienvenue sur Slaivio"}
             </h1>
-            <p className="mt-1 text-[13px] text-[#69717a]">Les priorités opérationnelles de votre agence, au même endroit.</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#69717a]">
+              <span>Les priorités opérationnelles de votre agence, au même endroit.</span>
+              {(data?.workspace.city || data?.workspace.country) && <span className="inline-flex items-center gap-1"><MapPin size={12} />{[data.workspace.city, data.workspace.country].filter(Boolean).join(", ")}</span>}
+            </div>
           </div>
           <button type="button" onClick={load} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-[#d2d5d8] bg-white px-3 text-[12px] hover:bg-[#f2f3f3] disabled:opacity-60">
             <RefreshCcw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
@@ -42,7 +44,7 @@ export function DashboardOverviewPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-7">
+      <main className="space-y-4 p-4 sm:p-5">
         {error && (
           <div className="flex items-center gap-3 rounded-[6px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
             <AlertTriangle size={17} />{error}<button onClick={load} className="ml-auto font-medium underline">Réessayer</button>
@@ -51,19 +53,25 @@ export function DashboardOverviewPage() {
 
         {loading && !data ? <DashboardSkeleton /> : data?.status === "no_workspace" ? <NoWorkspace /> : (
           <>
-            <section aria-labelledby="indicators-title">
-              <div className="mb-2.5 flex items-center justify-between">
+            <section className="overflow-hidden border-y border-[#dfe1e3] bg-white" aria-labelledby="indicators-title">
+              <div className="flex min-h-10 items-center justify-between border-b border-[#eceeef] px-4">
                 <h2 id="indicators-title" className="text-[13px] font-semibold">Activité de l’agence</h2>
                 <span className="text-[11px] text-[#858b92]">Données en temps réel</span>
               </div>
-              <div className="grid overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white sm:grid-cols-2 xl:grid-cols-4">
-                {(data?.resources || []).slice(0, 4).map((resource) => <ResourceMetric key={resource.key} resource={resource} />)}
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                {(data?.resources || []).slice(0, 6).map((resource) => <ResourceMetric key={resource.key} resource={resource} />)}
                 {!data?.resources.length && <div className="col-span-full px-5 py-10 text-center text-[12px] text-[#858b92]">Aucun indicateur disponible.</div>}
               </div>
             </section>
 
+            <section className="grid border-y border-[#dfe1e3] bg-white sm:grid-cols-3" aria-label="État opérationnel">
+              <OperationalStatus label="Points à traiter" value={data?.attention_items.length || 0} detail="Retards, suivis et paiements" tone={(data?.attention_items.length || 0) > 0 ? "warning" : "success"} />
+              <OperationalStatus label="Notifications non lues" value={data?.unread_count || 0} detail="Mises à jour de l’agence" tone={(data?.unread_count || 0) > 0 ? "info" : "success"} />
+              <OperationalStatus label="Canal WhatsApp" value={data?.whatsapp.configured ? "Connecté" : "À configurer"} detail={data?.whatsapp.phone || "Communication client"} tone={data?.whatsapp.configured ? "success" : "neutral"} icon={<MessageCircleMore size={16} />} />
+            </section>
+
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
-              <section className="overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white" aria-labelledby="attention-title">
+              <section className="overflow-hidden border-y border-[#d9dcdf] bg-white" aria-labelledby="attention-title">
                 <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
                   <Clock3 size={16} className="mr-2 text-[#646b73]" />
                   <h2 id="attention-title" className="text-[13px] font-semibold">À traiter maintenant</h2>
@@ -80,7 +88,7 @@ export function DashboardOverviewPage() {
                 </div>
               </section>
 
-              <section className="overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white" aria-labelledby="notifications-title">
+              <section className="overflow-hidden border-y border-[#d9dcdf] bg-white" aria-labelledby="notifications-title">
                 <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
                   <Bell size={16} className="mr-2 text-[#646b73]" />
                   <h2 id="notifications-title" className="text-[13px] font-semibold">Notifications récentes</h2>
@@ -100,7 +108,7 @@ export function DashboardOverviewPage() {
 
             <section aria-labelledby="modules-title">
               <h2 id="modules-title" className="mb-2.5 text-[13px] font-semibold">Accès rapide</h2>
-              <div className="grid overflow-hidden rounded-[7px] border border-[#d9dcdf] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid overflow-hidden border-y border-[#d9dcdf] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {(data?.resources || []).map((resource) => (
                   <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[#eef1ff] text-[12px] font-semibold text-[#514bc5]">{resource.name.slice(0, 2).toUpperCase()}</span>
@@ -124,6 +132,17 @@ function ResourceMetric({ resource }: { resource: HomeResource }) {
       <div className="mt-2 text-[25px] font-semibold text-[#25292e]">{resource.count ?? "—"}</div>
       <div className="mt-1 truncate text-[10px] text-[#8a9097]">{resource.description}</div>
     </Link>
+  );
+}
+
+function OperationalStatus({ label, value, detail, tone, icon }: { label: string; value: number | string; detail: string; tone: "success" | "warning" | "info" | "neutral"; icon?: ReactNode }) {
+  const colors = { success: "bg-emerald-500", warning: "bg-amber-500", info: "bg-sky-500", neutral: "bg-[#a4a9ae]" };
+  return (
+    <div className="flex min-h-[74px] items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 sm:border-b-0">
+      <span className={`h-8 w-1 shrink-0 rounded-full ${colors[tone]}`} />
+      <div className="min-w-0 flex-1"><p className="text-[11px] text-[#6d747c]">{label}</p><p className="mt-0.5 truncate text-[17px] font-semibold">{value}</p><p className="truncate text-[10px] text-[#8a9097]">{detail}</p></div>
+      {icon && <span className="text-[#767d84]">{icon}</span>}
+    </div>
   );
 }
 

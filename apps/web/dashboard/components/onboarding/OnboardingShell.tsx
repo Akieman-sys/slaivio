@@ -1,9 +1,9 @@
 import { ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { LifeBuoy, ShieldCheck } from "lucide-react";
 
 import { OnboardingStepper } from "@/components/onboarding/OnboardingStepper";
+import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 import type { OnboardingExperienceState } from "@/services/onboarding-experience";
 
 export function OnboardingShell({
@@ -18,13 +18,7 @@ export function OnboardingShell({
       <div className="grid min-h-screen lg:grid-cols-[360px_1fr]">
         <aside className="bg-[#07111f] p-6 text-white">
           <Link href="/landing" className="flex items-center gap-3">
-            <Image
-              src="/slaivio-logo-official-dark.png"
-              alt="SLAIVIO"
-              width={142}
-              height={44}
-              className="h-auto w-[136px] brightness-0 invert"
-            />
+            <SlaivioBrand inverse />
           </Link>
 
           <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.06] p-5">

@@ -1,6 +1,7 @@
 "use client";
 
 import axios from "axios";
+import Image from "next/image";
 import {
   AlertCircle,
   AlertTriangle,
@@ -485,7 +486,7 @@ export function PackagesPage() {
           </>}
         />
 
-        <section className="hidden">
+        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
           {statCards.map((card) => (
             <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
@@ -497,7 +498,7 @@ export function PackagesPage() {
           ))}
         </section>
 
-        <section>
+        <section className={selected ? "xl:pr-[380px]" : ""}>
           <div className="px-5 py-4"><label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100"><Search size={18} className="text-[#6b7280]"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Rechercher un colis..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none"/></label></div>
           {filtersOpen&&<div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={status} onChange={(value) => setStatus(value as PackageStatus | "")} label="Statut">
@@ -571,7 +572,7 @@ export function PackagesPage() {
               </button>
             </div>
           </div>
-          {layoutMode!=="analytics"&&<section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
+          {false&&layoutMode!=="analytics"&&<section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
             {statCards.map(card=><div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}><p className="text-[13px] font-medium">{card.label}</p><p className="mt-3 text-[27px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p></div>)}
           </section>}
         </section>
@@ -659,23 +660,15 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1320px] w-full border-collapse text-left text-[13px]">
+      <table className="min-w-[900px] w-full border-collapse text-left text-[13px]">
         <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
-            <th className="w-10 px-4 py-2"><input type="checkbox" className="rounded border-[#c9d0d8]" aria-label="Sélectionner tous les colis" /></th>
             <th className="px-3 py-2">Colis</th>
-            <th className="px-3 py-2">Client</th>
-            <th className="px-3 py-2">Dossier</th>
-            <th className="px-3 py-2">Route</th>
-            <th className="px-3 py-2">Type</th>
-            <th className="px-3 py-2">Marchandise</th>
-            <th className="px-3 py-2 text-right">Poids / CBM</th>
-            <th className="px-3 py-2">Entrepôt</th>
+            <th className="px-3 py-2">Dossier / Client</th>
+            <th className="px-3 py-2 text-right">Poids</th>
+            <th className="px-3 py-2">Origine</th>
             <th className="px-3 py-2">Statut</th>
-            <th className="px-3 py-2">Validation</th>
-            <th className="px-3 py-2">Paiement</th>
-            <th className="px-3 py-2">Expédition</th>
-            <th className="px-3 py-2">Mise à jour</th>
+            <th className="px-3 py-2">Dernière mise à jour</th>
             <th className="w-10 px-3 py-2" />
           </tr>
         </thead>
@@ -686,33 +679,16 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
               onClick={() => onSelect(item)}
               className={`cursor-pointer transition hover:bg-[#f6f8fb] ${selectedId === item.id ? "bg-[#edf2f8]" : ""}`}
             >
-              <td className="px-4 py-2" onClick={(event) => event.stopPropagation()}>
-                <input type="checkbox" className="rounded border-[#c9d0d8]" aria-label={`Sélectionner ${item.package_reference || item.id}`} />
+              <td className="px-3 py-2">
+                <div className="flex items-center gap-3"><PackageThumbnail item={item}/><div><p className="font-medium text-[#1f2328]">{item.package_reference || item.tracking_id || item.id.slice(0, 8)}</p><p className="text-[12px] text-[#687584]">{item.tracking_id || sourceLabels[item.source] || item.source}</p></div></div>
               </td>
               <td className="px-3 py-2">
-                <p className="font-medium text-[#1f2328]">{item.package_reference || item.tracking_id || item.id.slice(0, 8)}</p>
-                <p className="text-[12px] text-[#687584]">{item.tracking_id || sourceLabels[item.source] || item.source}</p>
-              </td>
-              <td className="px-3 py-2">
+                <p className="text-[12px] text-[#687584]">{item.dossier_reference || "-"}</p>
                 <p className="font-medium text-[#1f2328]">{item.client_name || "Client"}</p>
-                <p className="text-[12px] text-[#687584]">{item.client_phone || item.client_email || "-"}</p>
               </td>
-              <td className="px-3 py-2 text-[#334155]">{item.dossier_reference || "-"}</td>
-              <td className="px-3 py-2 text-[#334155]">{routeLabel(item)}</td>
-              <td className="px-3 py-2 text-[#334155]">{packageTypeLabels[item.package_type] || item.package_type}</td>
-              <td className="px-3 py-2 text-[#334155]">
-                <p>{item.description || item.category || "-"}</p>
-                <p className="text-[12px] text-[#687584]">{item.is_fragile ? "Fragile" : conditionLabels[item.package_condition] || item.package_condition}</p>
-              </td>
-              <td className="px-3 py-2 text-right text-[#334155]">{formatMeasure(item)}</td>
-              <td className="px-3 py-2">
-                <p className="text-[#334155]">{item.warehouse_name || inventoryLabels[item.inventory_status] || "-"}</p>
-                <p className="text-[12px] text-[#687584]">{warehouseLocationLabel(item)}</p>
-              </td>
+              <td className="px-3 py-2 text-right text-[#334155]">{item.weight_kg ? `${item.weight_kg} kg` : "-"}</td>
+              <td className="px-3 py-2 text-[#334155]"><p>{item.origin_city || "-"}</p><p className="text-[12px] text-[#687584]">{item.origin_country || "-"}</p></td>
               <td className="px-3 py-2"><StatusBadge status={item.status} /></td>
-              <td className="px-3 py-2"><ValidationBadge status={item.validation_status} /></td>
-              <td className="px-3 py-2"><PaymentBadge status={item.payment_clearance_status} /></td>
-              <td className="px-3 py-2 text-[#334155]">{item.shipment_reference || "-"}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(item.updated_at || item.created_at)}</td>
               <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
             </tr>
@@ -721,6 +697,12 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
       </table>
     </div>
   );
+}
+
+function PackageThumbnail({item}:{item:PackageRecord}) {
+  const media=item.media?.find(file=>file.media_type?.startsWith("image"));
+  if(media?.media_url)return <Image src={media.media_url} alt="" width={56} height={48} unoptimized className="h-12 w-14 shrink-0 rounded-md border border-[#d8dce2] object-cover"/>;
+  return <span className="flex h-12 w-14 shrink-0 items-center justify-center rounded-md border border-[#d8dce2] bg-[#f1f4f2] text-[#4f7c65]"><Box size={20}/></span>;
 }
 
 function PackageDetails({
@@ -777,9 +759,9 @@ function PackageDetails({
   }
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button aria-label="Fermer la fiche colis" onClick={close} className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`} />
-      <aside className={`absolute right-0 top-0 h-full w-full max-w-[600px] border-l border-[#cfd5dd] bg-white shadow-[-18px_0_42px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}>
+    <div className="fixed inset-0 z-50 xl:pointer-events-none xl:left-auto xl:top-[138px] xl:w-[380px]">
+      <button aria-label="Fermer la fiche colis" onClick={close} className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 xl:hidden ${visible ? "opacity-100" : "opacity-0"}`} />
+      <aside className={`pointer-events-auto absolute right-0 top-0 h-full w-full max-w-[600px] border-l border-[#cfd5dd] bg-white shadow-[-18px_0_42px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out xl:max-w-[380px] xl:shadow-none ${visible ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex h-full flex-col">
           <div className="border-b border-[#d8dce2] px-5 py-4">
             <div className="flex items-start justify-between gap-4">
@@ -1607,11 +1589,6 @@ function routeLabel(item: PackageRecord) {
   const destination = [item.destination_city, item.destination_country].filter(Boolean).join(", ");
   if (!origin && !destination) return "-";
   return `${origin || "Origine"} → ${destination || "Destination"}`;
-}
-
-function warehouseLocationLabel(item: PackageRecord) {
-  const parts = [item.warehouse_zone, item.warehouse_rack, item.warehouse_location].filter(Boolean);
-  return parts.length ? parts.join(" · ") : inventoryLabels[item.inventory_status] || "-";
 }
 
 function dimensionsLabel(item: PackageRecord) {

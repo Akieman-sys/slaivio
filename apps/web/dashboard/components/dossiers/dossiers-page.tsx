@@ -14,6 +14,7 @@ import {
   Package,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Upload,
   X,
   Trash2,
@@ -192,6 +193,7 @@ export function DossiersPage() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [error, setError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [formMode, setFormMode] = useState<DossierFormMode>("create");
   const [formDossier, setFormDossier] = useState<DossierRecord | null>(null);
   const [saving, setSaving] = useState(false);
@@ -425,6 +427,9 @@ export function DossiersPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Dossiers cargo" description="Chaque demande client devient un dossier traçable : route, colis, devis, paiement, messages et expéditions liés."
           actions={<>
+              <button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}>
+                <SlidersHorizontal size={16} /> Filtres
+              </button>
               <PermissionGuard permission="dossiers.export"><button onClick={handleExport} className={buttonClass}>
                 <Download size={16} />
                 Exporter
@@ -449,7 +454,7 @@ export function DossiersPage() {
           </>}
         />
 
-        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="hidden">
           {statCards.map((card) => (
             <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
@@ -462,8 +467,14 @@ export function DossiersPage() {
         </section>
 
         <section>
+          <div className="px-5 py-4">
+            <label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100">
+              <Search size={18} className="text-[#6b7280]" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un dossier..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
+            </label>
+          </div>
           {alerts.length > 0 && <div className="border-b border-[#d8dce2] bg-[#fffaf0] px-5 py-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[13px] font-semibold text-[#7a4300]">{alerts.length} alerte(s) opérationnelle(s)</p><p className="text-[12px] text-[#8a5a18]">Échéances, urgences, checklist et dossiers sans activité.</p></div></div><div className="mt-3 grid gap-2 lg:grid-cols-2">{alerts.slice(0, 4).map((alert) => <button key={alert.id} onClick={async () => { const dossier = dossiers.find((item) => item.id === alert.dossier_id); if (dossier) await selectDossier(dossier); }} className="flex items-center gap-3 rounded-md border border-amber-200 bg-white p-3 text-left"><AlertCircle size={16} className={alert.severity === "CRITICAL" ? "text-red-600" : "text-amber-600"} /><span className="min-w-0 flex-1"><strong className="block truncate text-[13px]">{alert.dossier_reference} · {alert.title}</strong><small className="block truncate text-[#687584]">{alert.message}</small></span>{alert.status === "OPEN" && <PermissionGuard permission="dossiers.update"><span onClick={async (event) => { event.stopPropagation(); await acknowledgeDossierAlert(alert.id); await loadAlerts(); }} className="rounded border px-2 py-1 text-[11px]">Prendre en charge</span></PermissionGuard>}</button>)}</div></div>}
-          <div className="flex flex-col gap-2 border-b border-[#d8dce2] px-5 py-3 xl:flex-row xl:items-center">
+          {filtersOpen && <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={caseType} onChange={(value) => setCaseType(value as DossierCaseType | "")} label="Type">
               <option value="">Type</option>
               {Object.entries(caseTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -488,7 +499,7 @@ export function DossiersPage() {
               <option value="client_asc">Client A-Z</option>
               <option value="amount_desc">Montant élevé</option>
             </SelectFilter>
-            <label className="ml-auto flex h-8 min-w-0 items-center rounded-md border border-[#cfd5dd] bg-white px-2 shadow-sm focus-within:border-[#2f7df6] xl:w-[330px]">
+            <label className="hidden">
               <Search size={16} className="text-[#6b7280]" />
               <input
                 value={query}
@@ -497,7 +508,7 @@ export function DossiersPage() {
                 className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
               />
             </label>
-          </div>
+          </div>}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -520,6 +531,14 @@ export function DossiersPage() {
               </button>
             </div>
           </div>
+          <section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+            {statCards.map((card) => (
+              <div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
+                <p className="text-[13px] font-medium">{card.label}</p>
+                <p className="mt-3 text-[30px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+              </div>
+            ))}
+          </section>
         </section>
       </div>
 
@@ -604,19 +623,16 @@ function DossiersTable({ dossiers, loading, selectedId, onSelect }: {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1280px] w-full border-collapse text-left text-[13px]">
+      <table className="min-w-[920px] w-full border-collapse text-left text-[13px]">
         <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
             <th className="w-10 px-4 py-2"><input type="checkbox" className="rounded border-[#c9d0d8]" aria-label="Sélectionner tous les dossiers" /></th>
             <th className="px-3 py-2">Dossier</th>
             <th className="px-3 py-2">Client</th>
             <th className="px-3 py-2">Route</th>
-            <th className="px-3 py-2">Marchandise</th>
-            <th className="px-3 py-2">Mode</th>
             <th className="px-3 py-2">Statut</th>
             <th className="px-3 py-2">Paiement</th>
             <th className="px-3 py-2 text-right">Colis/Exp.</th>
-            <th className="px-3 py-2 text-right">Montant</th>
             <th className="px-3 py-2">Mise à jour</th>
             <th className="w-10 px-3 py-2" />
           </tr>
@@ -640,12 +656,9 @@ function DossiersTable({ dossiers, loading, selectedId, onSelect }: {
                 <p className="text-[12px] text-[#687584]">{dossier.client_phone || dossier.client_email || "-"}</p>
               </td>
               <td className="px-3 py-2 text-[#334155]">{routeLabel(dossier)}</td>
-              <td className="px-3 py-2 text-[#334155]">{dossier.goods_type || "-"}</td>
-              <td className="px-3 py-2 text-[#334155]">{dossier.shipping_mode || "-"}</td>
               <td className="px-3 py-2"><StatusBadge status={dossier.status_global} /></td>
               <td className="px-3 py-2"><PaymentBadge status={dossier.payment_status} /></td>
               <td className="px-3 py-2 text-right font-medium">{dossier.shipment_count}</td>
-              <td className="px-3 py-2 text-right font-medium">{formatMoney(dossier.final_total ?? dossier.quoted_total, dossier.final_currency || dossier.quoted_currency)}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(dossier.updated_at || dossier.created_at)}</td>
               <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
             </tr>

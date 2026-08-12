@@ -213,9 +213,6 @@ def approve_operator_workflow(org_id: str, workflow_id: str):
         raise HTTPException(status_code=409, detail="workflow_already_decided")
     if workflow["workflow_type"] != "CREATE_SHIPMENT_DRAFT":
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
-    if str(workflow["client_phone"]).startswith("internal:"):
-        raise HTTPException(status_code=422, detail="client_phone_required")
-
     entities = workflow.get("entities") or {}
     missing = _missing_fields("CREATE_SHIPMENT_DRAFT", entities, workflow["client_phone"])
     if missing:
@@ -223,6 +220,8 @@ def approve_operator_workflow(org_id: str, workflow_id: str):
             status_code=422,
             detail={"code": "workflow_incomplete", "missing_fields": missing},
         )
+    if str(workflow["client_phone"]).startswith("internal:"):
+        raise HTTPException(status_code=422, detail="client_phone_required")
     draft = create_dossier_draft(
         org_id=org_id,
         client_phone=workflow["client_phone"],

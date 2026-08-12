@@ -10,6 +10,7 @@ import {
   ReceiptText,
   Route,
   BarChart3,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,13 @@ export type AppNavigationGroup = {
 // Cette liste est la source de vérité de la navigation. Une route ne doit être
 // publiée ici que lorsqu'une page fonctionnelle existe réellement.
 export const appNavigation: readonly AppNavigationGroup[] = [
+  {
+    label: "Intelligence",
+    icon: Sparkles,
+    routes: [
+      { label: "Assistant Slaivio", href: "/app/assistant", icon: Sparkles, keywords: ["assistant", "ia", "automatisation", "audio", "escalade"] },
+    ],
+  },
   {
     label: "Opérations",
     icon: BriefcaseBusiness,

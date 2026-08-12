@@ -65,10 +65,12 @@ def get_ai_dossier_drafts(
 def change_ai_dossier_draft_status(
     draft_id: str,
     body: UpdateDraftStatusRequest,
+    tenant=Depends(get_current_tenant),
 ):
     return {
         "status": "ok",
         "draft": update_dossier_draft_status(
+            org_id=tenant["org_id"],
             draft_id=draft_id,
             status=body.status,
         ),
@@ -76,8 +78,11 @@ def change_ai_dossier_draft_status(
 
 
 @router.post("/ai-dossier-drafts/{draft_id}/execute")
-def execute_draft(draft_id: str):
-    draft = get_dossier_draft(draft_id)
+def execute_draft(
+    draft_id: str,
+    tenant=Depends(get_current_tenant),
+):
+    draft = get_dossier_draft(tenant["org_id"], draft_id)
 
     if not draft:
         raise HTTPException(

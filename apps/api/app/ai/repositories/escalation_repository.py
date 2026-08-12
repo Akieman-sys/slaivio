@@ -3,6 +3,22 @@ from sqlalchemy import text
 from app.db.database import engine
 
 
+def list_ai_escalation_events(org_id: str, limit: int = 30):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                select *
+                from ai_escalation_events
+                where org_id = :org_id
+                order by created_at desc
+                limit :limit
+            """),
+            {"org_id": org_id, "limit": min(max(limit, 1), 100)},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]
+
+
 def log_escalation_event(
     org_id: str,
     client_phone: str | None,
@@ -52,4 +68,3 @@ def log_escalation_event(
 
         conn.commit()
         return dict(row._mapping)
-

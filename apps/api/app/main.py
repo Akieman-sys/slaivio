@@ -51,6 +51,7 @@ from app.api.ai_drafts import router as ai_drafts_router
 from app.api.ai_workflows import router as ai_workflows_router
 from app.api.ai_dossier_drafts import router as ai_dossier_drafts_router
 from app.api.ai_settings import router as ai_settings_router
+from app.api.ai_copilot import router as ai_copilot_router
 from app.api.accounting import router as accounting_router
 from app.api.billing import router as billing_router
 from app.api.financial_dashboard import router as financial_dashboard_router
@@ -170,6 +171,7 @@ app.include_router(ai_drafts_router)
 app.include_router(ai_workflows_router)
 app.include_router(ai_dossier_drafts_router)
 app.include_router(ai_settings_router)
+app.include_router(ai_copilot_router)
 app.include_router(accounting_router)
 app.include_router(billing_router)
 app.include_router(financial_dashboard_router)

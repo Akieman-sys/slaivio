@@ -92,16 +92,18 @@ def create_dossier_draft(
         return dict(row._mapping)
 
 
-def get_dossier_draft(draft_id: str):
+def get_dossier_draft(org_id: str, draft_id: str):
     with engine.connect() as conn:
         row = conn.execute(
             text("""
                 select *
                 from ai_dossier_drafts
                 where id = :draft_id
+                  and org_id = :org_id
                 limit 1
             """),
             {
+                "org_id": org_id,
                 "draft_id": draft_id,
             },
         ).fetchone()
@@ -133,6 +135,7 @@ def list_dossier_drafts(
 
 
 def update_dossier_draft_status(
+    org_id: str,
     draft_id: str,
     status: str,
     created_dossier_id: str | None = None,
@@ -154,9 +157,11 @@ def update_dossier_draft_status(
                     ),
                     updated_at = now()
                 where id = :draft_id
+                  and org_id = :org_id
                 returning *
             """),
             {
+                "org_id": org_id,
                 "draft_id": draft_id,
                 "status": status,
                 "created_dossier_id": created_dossier_id,
@@ -166,4 +171,3 @@ def update_dossier_draft_status(
 
         conn.commit()
         return dict(row._mapping) if row else None
-

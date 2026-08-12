@@ -60,10 +60,12 @@ def get_workflows(
 def change_workflow_status(
     workflow_id: str,
     body: UpdateWorkflowStatusRequest,
+    tenant=Depends(get_current_tenant),
 ):
     return {
         "status": "ok",
         "workflow": update_workflow_status(
+            org_id=tenant["org_id"],
             workflow_id=workflow_id,
             status=body.status,
             result_payload=body.result_payload,

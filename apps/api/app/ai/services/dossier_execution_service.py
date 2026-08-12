@@ -42,6 +42,7 @@ def execute_dossier_draft(draft: dict):
     )
 
     updated = update_dossier_draft_status(
+        org_id=str(draft["org_id"]),
         draft_id=str(draft["id"]),
         status="CREATED",
         created_dossier_id=str(dossier["id"]),

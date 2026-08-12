@@ -21,6 +21,7 @@ import {
   PackageSearch,
   Ruler,
   Search,
+  SlidersHorizontal,
   Truck,
   Upload,
   Warehouse,
@@ -193,6 +194,7 @@ export function PackagesPage() {
   const [activeTab, setActiveTab] = useState<DetailTab>("summary");
   const [activeView, setActiveView] = useState("all");
   const [layoutMode,setLayoutMode]=useState<"table"|"kanban"|"analytics">("table");
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [scanOpen,setScanOpen]=useState(false);
   const [analytics,setAnalytics]=useState<PackageAnalytics|null>(null);
   const [query, setQuery] = useState("");
@@ -451,6 +453,7 @@ export function PackagesPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Colis" description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
           actions={<>
+              <button onClick={()=>setFiltersOpen(value=>!value)} className={buttonClass} aria-expanded={filtersOpen}><SlidersHorizontal size={16}/>Filtres</button>
               <button onClick={()=>setScanOpen(true)} className={buttonClass}><Barcode size={16}/>Scanner</button>
               <button onClick={()=>setLayoutMode(layoutMode==="kanban"?"table":"kanban")} className={buttonClass}>{layoutMode==="kanban"?"Tableau":"Kanban"}</button>
               <button onClick={()=>layoutMode==="analytics"?setLayoutMode("table"):showAnalytics()} className={buttonClass}>Analytics</button>
@@ -482,7 +485,7 @@ export function PackagesPage() {
           </>}
         />
 
-        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
+        <section className="hidden">
           {statCards.map((card) => (
             <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
@@ -495,7 +498,8 @@ export function PackagesPage() {
         </section>
 
         <section>
-          <div className="flex flex-col gap-2 border-b border-[#d8dce2] px-5 py-3 xl:flex-row xl:items-center">
+          <div className="px-5 py-4"><label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100"><Search size={18} className="text-[#6b7280]"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Rechercher un colis..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none"/></label></div>
+          {filtersOpen&&<div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={status} onChange={(value) => setStatus(value as PackageStatus | "")} label="Statut">
               <option value="">Statut</option>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -532,7 +536,7 @@ export function PackagesPage() {
               <option value="client_asc">Client A-Z</option>
               <option value="weight_desc">Poids élevé</option>
             </SelectFilter>
-            <label className="ml-auto flex h-8 min-w-0 items-center rounded-md border border-[#cfd5dd] bg-white px-2 shadow-sm focus-within:border-[#2f7df6] xl:w-[330px]">
+            <label className="hidden">
               <Search size={16} className="text-[#6b7280]" />
               <input
                 value={query}
@@ -541,8 +545,8 @@ export function PackagesPage() {
                 className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
               />
             </label>
-          </div>
-          <div className="grid gap-2 border-b border-[#d8dce2] bg-[#fafafa] px-5 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"><input value={warehouseFilter} onChange={e=>setWarehouseFilter(e.target.value)} className={inputClass} placeholder="Entrepôt"/><input value={zoneFilter} onChange={e=>setZoneFilter(e.target.value)} className={inputClass} placeholder="Zone"/><input value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className={inputClass} placeholder="Pays"/><input value={cityFilter} onChange={e=>setCityFilter(e.target.value)} className={inputClass} placeholder="Ville"/><input value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className={inputClass} placeholder="Catégorie"/><select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} className={inputClass}><option value="">Priorité</option><option value="LOW">Basse</option><option value="NORMAL">Normale</option><option value="HIGH">Haute</option><option value="URGENT">Urgente</option></select><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={fragileOnly} onChange={e=>setFragileOnly(e.target.checked)}/>Fragiles uniquement</label></div>
+          </div>}
+          {filtersOpen&&<div className="grid gap-2 border-b border-[#d8dce2] bg-[#fafafa] px-5 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"><input value={warehouseFilter} onChange={e=>setWarehouseFilter(e.target.value)} className={inputClass} placeholder="Entrepôt"/><input value={zoneFilter} onChange={e=>setZoneFilter(e.target.value)} className={inputClass} placeholder="Zone"/><input value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className={inputClass} placeholder="Pays"/><input value={cityFilter} onChange={e=>setCityFilter(e.target.value)} className={inputClass} placeholder="Ville"/><input value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className={inputClass} placeholder="Catégorie"/><select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} className={inputClass}><option value="">Priorité</option><option value="LOW">Basse</option><option value="NORMAL">Normale</option><option value="HIGH">Haute</option><option value="URGENT">Urgente</option></select><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={fragileOnly} onChange={e=>setFragileOnly(e.target.checked)}/>Fragiles uniquement</label></div>}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -567,6 +571,9 @@ export function PackagesPage() {
               </button>
             </div>
           </div>
+          {layoutMode!=="analytics"&&<section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
+            {statCards.map(card=><div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}><p className="text-[13px] font-medium">{card.label}</p><p className="mt-3 text-[27px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p></div>)}
+          </section>}
         </section>
       </div>
 

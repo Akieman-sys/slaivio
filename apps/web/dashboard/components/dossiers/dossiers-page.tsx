@@ -18,6 +18,7 @@ import {
   Upload,
   X,
   Trash2,
+  Truck,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -156,8 +157,6 @@ const views: Array<{ key: string; label: string; status?: DossierStatus; archive
   { key: "lead", label: "Leads", status: "LEAD" },
   { key: "quoted", label: "Devis", status: "QUOTED" },
   { key: "waiting", label: "Attente colis", status: "WAITING_PACKAGES" },
-  { key: "transit", label: "En transit", status: "IN_TRANSIT" },
-  { key: "delivered", label: "Livrés", status: "DELIVERED" },
   { key: "archived", label: "Archivés", archived: true },
 ];
 
@@ -632,7 +631,8 @@ function DossiersTable({ dossiers, loading, selectedId, onSelect }: {
             <th className="px-3 py-2">Route</th>
             <th className="px-3 py-2">Statut</th>
             <th className="px-3 py-2">Paiement</th>
-            <th className="px-3 py-2 text-right">Colis/Exp.</th>
+            <th className="px-3 py-2 text-right">Colis</th>
+            <th className="px-3 py-2 text-right">Expéditions</th>
             <th className="px-3 py-2">Mise à jour</th>
             <th className="w-10 px-3 py-2" />
           </tr>
@@ -658,6 +658,7 @@ function DossiersTable({ dossiers, loading, selectedId, onSelect }: {
               <td className="px-3 py-2 text-[#334155]">{routeLabel(dossier)}</td>
               <td className="px-3 py-2"><StatusBadge status={dossier.status_global} /></td>
               <td className="px-3 py-2"><PaymentBadge status={dossier.payment_status} /></td>
+              <td className="px-3 py-2 text-right font-medium">{dossier.package_count}</td>
               <td className="px-3 py-2 text-right font-medium">{dossier.shipment_count}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(dossier.updated_at || dossier.created_at)}</td>
               <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
@@ -857,7 +858,8 @@ function SummaryTab({ dossier }: { dossier: DossierRecord }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <SmallMetric icon={Package} label="Colis/expéditions" value={dossier.shipment_count} />
+        <SmallMetric icon={Package} label="Colis" value={dossier.package_count} />
+        <SmallMetric icon={Truck} label="Expéditions" value={dossier.shipment_count} />
         <SmallMetric icon={MessageCircle} label="Messages" value={dossier.message_count} />
         <SmallMetric icon={History} label="Événements" value={dossier.event_count} />
       </div>

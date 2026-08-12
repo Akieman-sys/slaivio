@@ -257,6 +257,7 @@ def list_dossiers(
                     d.archived_by,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
+                    coalesce(p.package_count, 0)::int package_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
                 from dossiers d
                 left join clients c on c.id = d.client_id and c.org_id = d.org_id
@@ -272,6 +273,12 @@ def list_dossiers(
                     where org_id = :org_id
                     group by dossier_id
                 ) e on e.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) package_count
+                    from cargo_packages
+                    where org_id = :org_id and dossier_id is not null and deleted_at is null
+                    group by dossier_id
+                ) p on p.dossier_id = d.id
                 left join (
                     select dossier_id, count(*) shipment_count
                     from shipments
@@ -378,6 +385,7 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
                     d.archived_by,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
+                    coalesce(p.package_count, 0)::int package_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
                 from dossiers d
                 left join clients c on c.id = d.client_id and c.org_id = d.org_id
@@ -393,6 +401,12 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
                     where org_id = :org_id and dossier_id = :dossier_id
                     group by dossier_id
                 ) e on e.dossier_id = d.id
+                left join (
+                    select dossier_id, count(*) package_count
+                    from cargo_packages
+                    where org_id = :org_id and dossier_id = :dossier_id and deleted_at is null
+                    group by dossier_id
+                ) p on p.dossier_id = d.id
                 left join (
                     select dossier_id, count(*) shipment_count
                     from shipments

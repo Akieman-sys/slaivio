@@ -18,6 +18,7 @@ import {
   Package,
   Phone,
   Search,
+  SlidersHorizontal,
   RotateCcw,
   ShieldAlert,
   Truck,
@@ -157,6 +158,7 @@ export function ClientsPage() {
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [clientAction, setClientAction] = useState<"archive" | "restore" | null>(null);
   const listRequestId = useRef(0);
 
@@ -428,6 +430,9 @@ export function ClientsPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Clients" description="Répertoire opérationnel des leads, clients et partenaires. Les lignes affichées proviennent uniquement de l’organisation active."
           actions={<>
+              <button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}>
+                <SlidersHorizontal size={16} /> Filtres
+              </button>
               <PermissionGuard permission="clients.import"><button onClick={() => setImportOpen(true)} className={buttonClass}>
                 <Upload size={16} />
                 Importer
@@ -458,7 +463,7 @@ export function ClientsPage() {
           </>}
         />
 
-        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="hidden">
           {statCards.map((card) => (
             <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
               <div className="flex items-start justify-between gap-4">
@@ -471,7 +476,13 @@ export function ClientsPage() {
         </section>
 
         <section>
-          <div className="flex flex-col gap-2 border-b border-[#d8dce2] px-5 py-3 xl:flex-row xl:items-center">
+          <div className="px-5 py-4">
+            <label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100">
+              <Search size={18} className="text-[#6b7280]" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un client..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
+            </label>
+          </div>
+          {filtersOpen && <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={customerType} onChange={(value) => setCustomerType(value as ClientCustomerType | "")} label="Type">
               <option value="">Type</option>
               {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -491,7 +502,7 @@ export function ClientsPage() {
               <option value="name_desc">Nom Z-A</option>
               <option value="activity_desc">Activité récente</option>
             </SelectFilter>
-            <label className="ml-auto flex h-8 min-w-0 items-center rounded-md border border-[#cfd5dd] bg-white px-2 shadow-sm focus-within:border-[#2f7df6] xl:w-[330px]">
+            <label className="hidden">
               <Search size={16} className="text-[#6b7280]" />
               <input
                 value={query}
@@ -500,7 +511,7 @@ export function ClientsPage() {
                 className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
               />
             </label>
-          </div>
+          </div>}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -529,6 +540,14 @@ export function ClientsPage() {
               </button>
             </div>
           </div>
+          <section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+            {statCards.map((card) => (
+              <div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
+                <p className="text-[13px] font-medium">{card.label}</p>
+                <p className="mt-3 text-[30px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+              </div>
+            ))}
+          </section>
         </section>
       </div>
 
@@ -617,17 +636,13 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1120px] w-full border-collapse text-left text-[13px]">
+      <table className="min-w-[760px] w-full border-collapse text-left text-[13px]">
         <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
             <th className="px-3 py-2">Client</th>
             <th className="px-3 py-2">Téléphone</th>
-            <th className="px-3 py-2">Email</th>
-            <th className="px-3 py-2">Pays</th>
-            <th className="px-3 py-2">Type</th>
+            <th className="px-3 py-2">Pays / ville</th>
             <th className="px-3 py-2">Statut</th>
-            <th className="px-3 py-2 text-right">Dossiers</th>
-            <th className="px-3 py-2 text-right">Colis</th>
             <th className="px-3 py-2">Activité</th>
             <th className="w-10 px-3 py-2" />
           </tr>
@@ -640,18 +655,17 @@ function ClientsTable({ clients, loading, selectedId, onSelect }: {
               className={`cursor-pointer transition hover:bg-[#f6f8fb] ${selectedId === client.id ? "bg-[#edf2f8]" : ""}`}
             >
               <td className="px-3 py-2">
-                <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Initials name={client.display_name || client.name || client.company_name || "Client"} />
+                  <div className="min-w-0">
                   <p className="truncate font-medium text-[#1f2328]">{client.display_name || client.name || client.company_name || "Sans nom"}</p>
                   <p className="truncate text-[12px] text-[#687584]">{client.company_name || client.source}</p>
+                  </div>
                 </div>
               </td>
               <td className="px-3 py-2 text-[#334155]">{client.phone || client.whatsapp_phone || "-"}</td>
-              <td className="px-3 py-2 text-[#334155]">{client.email || "-"}</td>
               <td className="px-3 py-2 text-[#334155]">{[client.city, client.country].filter(Boolean).join(", ") || "-"}</td>
-              <td className="px-3 py-2 text-[#334155]">{typeLabels[client.customer_type]}</td>
               <td className="px-3 py-2"><StatusBadge status={client.lifecycle_status} /></td>
-              <td className="px-3 py-2 text-right font-medium">{client.dossiers_count}</td>
-              <td className="px-3 py-2 text-right font-medium">{client.shipments_count}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(client.last_activity_at || client.updated_at)}</td>
               <td className="px-3 py-2"><ChevronRight size={16} className="text-[#687584]" aria-hidden="true" /></td>
             </tr>

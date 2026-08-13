@@ -10,6 +10,7 @@ def test_followup_api_is_permissioned_and_mutations_versioned():
  assert 'row_version=:v' in repo and 'for update of f' in repo and 'business_condition_resolved' in repo and 'skip locked' in repo
  assert "followup_type ilike" in repo and "record_response" in repo and "followup_analytics" in repo
  assert 'detect_candidates' in repo and 'link_whatsapp_response' in repo and 'advance_sequences' in repo and 'followup_stop_list' in repo
+ for feature in ('record_promise','save_template','save_view','bulk_action','export_all','QUOTE_FOLLOWUP','DOCUMENT_MISSING','CLIENT_INACTIVE','CONVERSATION_ABANDONED'):assert feature in repo
 def test_followup_workspace_is_real():
  ui=text('apps/web/dashboard/components/followups/followups-page.tsx');service=text('apps/web/dashboard/services/followups.ts')
  for label in ('Aujourd’hui','En retard','Règles & séquences','Envoyer maintenant','Escalader'):assert label in ui

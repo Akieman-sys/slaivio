@@ -11,3 +11,9 @@ export async function saveFollowupRule(payload:Record<string,unknown>){return(aw
 export async function saveFollowupSequence(payload:Record<string,unknown>){return(await api.post('/followups/sequences',payload)).data}
 export async function detectFollowups(){return(await api.post('/followups/detect')).data}
 export async function addFollowupNote(id:string,body:string){return(await api.post(`/followups/${id}/notes`,{body})).data}
+export async function followupAnalytics(){return(await api.get('/followups/analytics')).data.analytics}
+export async function recordPromise(id:string,due_at:string,note?:string){return(await api.post(`/followups/${id}/promise`,{due_at,note})).data}
+export async function saveFollowupTemplate(payload:Record<string,unknown>){return(await api.post('/followups/templates',payload)).data}
+export async function saveFollowupView(name:string,filters:Record<string,unknown>){return(await api.post('/followups/views',{name,filters})).data}
+export async function bulkFollowups(ids:string[],action:string){return(await api.post('/followups/bulk',{ids,action})).data}
+export async function updateFollowupSettings(payload:Record<string,unknown>){return(await api.patch('/followups/settings',payload)).data}

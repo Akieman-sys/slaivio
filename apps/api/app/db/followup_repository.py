@@ -277,15 +277,19 @@ def _condition_still_true(conn,item):
 
 def queue_followup(org_id,item_id,actor):
     with engine.begin() as c:
-        item=c.execute(text("select f.*,c.phone client_phone from followup_tasks f left join clients c on c.id=f.client_id and c.org_id=f.org_id where f.org_id=:o and f.id=:id for update of f"),{'o':org_id,'id':item_id}).mappings().first()
+        item=c.execute(text("select f.*,coalesce(c.whatsapp_phone,c.phone) client_phone,c.email client_email,s.fallback_enabled,s.quiet_hours_start,s.quiet_hours_end,s.min_interval_minutes from followup_tasks f left join clients c on c.id=f.client_id and c.org_id=f.org_id left join followup_settings s on s.org_id=f.org_id where f.org_id=:o and f.id=:id for update of f"),{'o':org_id,'id':item_id}).mappings().first()
         if not item:return 'missing'
         if item['status'] not in ('SCHEDULED','DUE','FAILED'):return 'closed'
         if not _condition_still_true(c,item):
             c.execute(text("update followup_tasks set status='COMPLETED',completed_at=now(),row_version=row_version+1,updated_at=now() where id=:id"),{'id':item_id});_event(c,org_id,item_id,'AUTO_COMPLETED',actor,{'reason':'business_condition_resolved'});return 'resolved'
-        if not item.get('client_phone') and item.get('channel') in ('WHATSAPP','SMS'):return 'recipient_missing'
+        channel=item.get('channel') or 'WHATSAPP';recipient=item.get('client_phone') if channel in ('WHATSAPP','SMS') else item.get('client_email')
+        if not recipient and channel=='WHATSAPP' and item.get('fallback_enabled') and item.get('client_email'):channel='EMAIL';recipient=item['client_email']
+        if not recipient:return 'recipient_missing'
+        recent=c.execute(text("select 1 from followup_attempts where org_id=:o and followup_id=:id and sent_at>now()-(:minutes||' minutes')::interval"),{'o':org_id,'id':item_id,'minutes':item.get('min_interval_minutes') or 1440}).first()
+        if recent:return 'frequency_limited'
         attempt=max(1,int(item.get('attempt_count') or 0)+1);idem=f"followup:{item_id}:step:{item.get('current_step') or 1}:attempt:{attempt}"
         row=c.execute(text("""insert into followup_attempts(org_id,followup_id,step_number,channel,idempotency_key,status,recipient,message)
-          values(:o,:id,:step,:channel,:idem,'QUEUED',:recipient,:message) on conflict(org_id,idempotency_key) do update set idempotency_key=excluded.idempotency_key returning *"""),{'o':org_id,'id':item_id,'step':item.get('current_step') or 1,'channel':item.get('channel') or 'WHATSAPP','idem':idem,'recipient':item.get('client_phone'),'message':item['message']}).mappings().one()
+          values(:o,:id,:step,:channel,:idem,'QUEUED',:recipient,:message) on conflict(org_id,idempotency_key) do update set idempotency_key=excluded.idempotency_key returning *"""),{'o':org_id,'id':item_id,'step':item.get('current_step') or 1,'channel':channel,'idem':idem,'recipient':recipient,'message':item['message']}).mappings().one()
         c.execute(text("update followup_tasks set status='WAITING_RESPONSE',attempt_count=:attempt,row_version=row_version+1,updated_at=now() where id=:id"),{'attempt':attempt,'id':item_id});_event(c,org_id,item_id,'QUEUED',actor,{'attempt_id':str(row['id']),'idempotency_key':idem});return dict(row)
 
 def record_response(org_id,item_id,actor,body,channel='WHATSAPP',message_id=None,classification=None,confidence=None,requires_review=False):
@@ -338,6 +342,10 @@ def detect_candidates(org_id):
           from pickup_orders p join clients cl on cl.id=p.client_id and cl.org_id=p.org_id where p.org_id=:o and p.status in('READY','NOTIFIED') and p.ready_at<now()-interval '2 days'"""),{'o':org_id}))
         candidates+=_rows(c.execute(text("""select d.client_id,d.id dossier_id,d.id subject_id,coalesce(d.dossier_reference,d.tracking_id) subject_reference,'PACKAGE_DROP_REMINDER' followup_type,'DOSSIER' subject_type,
           'Dossier créé mais colis non déposé' reason,null amount_context,null currency,coalesce(cl.display_name,cl.name,'Client') client_name from dossiers d join clients cl on cl.id=d.client_id and cl.org_id=d.org_id where d.org_id=:o and d.status_global in('LEAD','ACTIVE','WAITING_PACKAGE') and d.created_at<now()-interval '2 days' and not exists(select 1 from cargo_packages p where p.org_id=d.org_id and p.dossier_id=d.id and p.deleted_at is null)"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select f.client_id,f.dossier_id,f.id subject_id,f.document_number subject_reference,'QUOTE_FOLLOWUP' followup_type,'QUOTE' subject_type,'Devis envoyé sans réponse' reason,null amount_context,f.currency,coalesce(cl.display_name,cl.name,'Client') client_name from finance_documents f join clients cl on cl.id=f.client_id and cl.org_id=f.org_id where f.org_id=:o and f.document_type='QUOTE' and f.status='ISSUED' and f.issued_at<now()-interval '48 hours'"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select d.client_id,d.id dossier_id,d.id subject_id,d.dossier_reference subject_reference,'DOCUMENT_MISSING' followup_type,'DOSSIER' subject_type,'Document obligatoire manquant' reason,null amount_context,null currency,coalesce(cl.display_name,cl.name,'Client') client_name from dossiers d join clients cl on cl.id=d.client_id and cl.org_id=d.org_id where d.org_id=:o and exists(select 1 from dossier_checklist_items i where i.dossier_id=d.id and i.required and i.status='PENDING')"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select c.id client_id,null::uuid dossier_id,c.id subject_id,coalesce(c.phone,c.email) subject_reference,'CLIENT_INACTIVE' followup_type,'CLIENT' subject_type,'Client inactif depuis 45 jours' reason,null amount_context,null currency,coalesce(c.display_name,c.name,'Client') client_name from clients c where c.org_id=:o and c.deleted_at is null and coalesce(c.last_activity_at,c.created_at)<now()-interval '45 days'"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select m.client_id,m.dossier_id,m.id subject_id,m.id::text subject_reference,'CONVERSATION_ABANDONED' followup_type,'CONVERSATION' subject_type,'Conversation WhatsApp sans reprise agent' reason,null amount_context,null currency,coalesce(c.display_name,c.name,'Client') client_name from messages_raw m join clients c on c.id=m.client_id and c.org_id=m.org_id where m.org_id=:o and m.created_at<now()-interval '30 minutes' and not exists(select 1 from messages_raw newer where newer.org_id=m.org_id and newer.client_id=m.client_id and newer.created_at>m.created_at)"""),{'o':org_id}))
         org=c.execute(text('select name from organizations where id=:o'),{'o':org_id}).scalar() or 'Notre agence'
         for x in candidates:
             idem=f"auto:{x['followup_type']}:{x['subject_id']}"
@@ -360,6 +368,37 @@ def advance_sequences(org_id=None):
 def add_note(org_id,item_id,actor,body):
     with engine.begin() as c:return dict(c.execute(text("insert into followup_notes(org_id,followup_id,body,author_id) select :o,id,:body,:a from followup_tasks where org_id=:o and id=:id returning *"),{'o':org_id,'id':item_id,'body':body,'a':actor}).mappings().one())
 
+def record_promise(org_id,item_id,actor,due_at,note=None):
+    with engine.begin() as c:
+        row=c.execute(text("update followup_tasks set promise_due_at=:due,status='PAUSED',pause_reason='PROMISE_TO_PAY',due_at=:due,row_version=row_version+1,updated_at=now() where org_id=:o and id=:id returning *"),{'due':due_at,'o':org_id,'id':item_id}).mappings().first()
+        if row:_event(c,org_id,item_id,'PROMISE_RECORDED',actor,{'due_at':due_at,'note':note})
+        return dict(row) if row else None
+
+def save_template(org_id,data,actor):
+    with engine.begin() as c:return dict(c.execute(text("""insert into followup_templates(org_id,name,category,channel,language,body,meta_template_name,meta_status,consent_type,variables) values(:o,:name,:category,:channel,:language,:body,:meta_template_name,:meta_status,:consent_type,:variables) on conflict(org_id,name,language) do update set body=excluded.body,meta_template_name=excluded.meta_template_name,meta_status=excluded.meta_status,variables=excluded.variables,row_version=followup_templates.row_version+1,updated_at=now() returning *"""),{'o':org_id,**data}).mappings().one())
+
+def save_view(org_id,user_id,name,filters):
+    with engine.begin() as c:return dict(c.execute(text("insert into followup_saved_views(org_id,user_id,name,filters) values(:o,:u,:name,cast(:filters as jsonb)) on conflict(org_id,user_id,name) do update set filters=excluded.filters,updated_at=now() returning *"),{'o':org_id,'u':user_id,'name':name,'filters':json.dumps(filters)}).mappings().one())
+def list_views(org_id,user_id):
+    with engine.connect() as c:return _rows(c.execute(text('select * from followup_saved_views where org_id=:o and user_id=:u order by name'),{'o':org_id,'u':user_id}))
+def update_settings(org_id,data):
+    allowed={'quiet_hours_start','quiet_hours_end','excluded_weekdays','max_automatic_attempts','min_interval_minutes','default_tone','fallback_enabled','promise_grace_hours','abandoned_conversation_minutes','inactive_client_days','quote_followup_hours'};pairs=[f'{k}=:{k}' for k in data if k in allowed]
+    if not pairs:return None
+    with engine.begin() as c:return dict(c.execute(text('update followup_settings set '+','.join(pairs)+',updated_at=now() where org_id=:o returning *'),{'o':org_id,**data}).mappings().one())
+def bulk_action(org_id,actor,ids,action):
+    results=[]
+    for item_id in ids:
+        with engine.connect() as c:v=c.execute(text('select row_version from followup_tasks where org_id=:o and id=:id'),{'o':org_id,'id':item_id}).scalar()
+        if v:results.append(mutate_followup(org_id,item_id,actor,action,v))
+    return [x for x in results if x]
+def export_all(org_id,filters):
+    data=followup_dashboard(org_id,**filters,page=1,page_size=100)['items'];page=2
+    while len(data)%100==0:
+        batch=followup_dashboard(org_id,**filters,page=page,page_size=100)['items']
+        if not batch:break
+        data+=batch;page+=1
+    return data
+
 def followup_analytics(org_id):
     with engine.connect() as c:
         summary=dict(c.execute(text("""select count(*)::int total,count(*) filter(where status='RESPONDED')::int responded,
@@ -381,7 +420,10 @@ def process_attempt_queue(limit=100):
             try:
                 if c.execute(text("select 1 from followup_stop_list where org_id=:o and client_id=:client and channel=:channel"),{'o':a['org_id'],'client':a['client_id'],'channel':a['channel']}).first():raise ValueError('stop_list')
                 n=create_notification_outbox(org_id=a['org_id'],client_id=a['client_id'],dossier_id=a.get('dossier_id'),recipient_phone=a['recipient'],notification_type=f"FOLLOWUP:{a['followup_type']}",message=a['message'],channel=(a['channel'] or 'WHATSAPP').lower())
-                c.execute(text("update followup_attempts set status='SENT',notification_id=:notification,sent_at=now() where id=:id and status='QUEUED'"),{'notification':n['id'],'id':a['id']});_event(c,a['org_id'],a['followup_id'],'SENT',None,{'attempt_id':str(a['id'])});processed+=1
+                c.execute(text("update followup_attempts set status='SENT',notification_id=:notification,sent_at=now() where id=:id and status='QUEUED'"),{'notification':n['id'],'id':a['id']})
+                next_step=c.execute(text("select delay_minutes from followup_sequence_steps s join followup_tasks f on f.sequence_id=s.sequence_id where f.id=:id and s.step_number=f.current_step+1"),{'id':a['followup_id']}).scalar()
+                if next_step is not None:c.execute(text("update followup_tasks set current_step=current_step+1,status='SCHEDULED',due_at=now()+(:delay||' minutes')::interval,updated_at=now() where id=:id"),{'delay':next_step,'id':a['followup_id']})
+                _event(c,a['org_id'],a['followup_id'],'SENT',None,{'attempt_id':str(a['id'])});processed+=1
             except Exception as exc:
                 retries=int(a.get('retry_count') or 0)+1;permanent=retries>=3
                 c.execute(text("update followup_attempts set status=:s,retry_count=:r,error_message=:e,failed_at=case when :s='FAILED' then now() end where id=:id"),{'s':'FAILED' if permanent else 'QUEUED','r':retries,'e':type(exc).__name__,'id':a['id']})

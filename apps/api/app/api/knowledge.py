@@ -16,6 +16,9 @@ from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 from app.knowledge import repository as repo
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
+from app.services.knowledge_security import scan_bytes
+from app.services.knowledge_ai import ocr_document
+from app.knowledge.live_sources import catalog as live_catalog,resolve as resolve_live
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 BUCKET = "knowledge-files"
@@ -87,6 +90,7 @@ class Playground(BaseModel):
     language: str = "FR"
     workspace_id: str | None = None
     limit: int = Field(default=8, ge=1, le=20)
+    context: dict = {}
 
 
 class Settings(BaseModel):
@@ -130,6 +134,9 @@ class Feedback(BaseModel):
     response_log_id: str | None = None
     rating: str
     comment: str | None = None
+class SavedView(BaseModel):name:str=Field(min_length=2,max_length=80);filters:dict={}
+class Translation(BaseModel):target_language:str=Field(pattern="^(FR|EN)$")
+class Connector(BaseModel):provider:str=Field(pattern="^(GOOGLE_DRIVE|NOTION|SHAREPOINT)$");display_name:str;credentials:dict;configuration:dict={};workspace_id:str|None=None
 
 
 @router.get("")
@@ -148,6 +155,25 @@ def knowledge_analytics(tenant=Depends(get_current_tenant), _=Depends(require_pe
 @router.get("/settings")
 def get_settings(tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.read"))): return repo.settings(tenant["org_id"])
 
+@router.get("/views")
+def views(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return {"items":repo.saved_views(tenant["org_id"],aid(tenant))}
+@router.post("/views")
+def view_create(body:SavedView,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return repo.save_view(tenant["org_id"],aid(tenant),body.name,body.filters)
+@router.delete("/views/{view_id}")
+def view_delete(view_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return {"deleted":repo.delete_view(tenant["org_id"],aid(tenant),view_id)}
+
+@router.get("/suggestions")
+def suggestion_list(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return {"items":repo.suggestions(tenant["org_id"])}
+@router.post("/suggestions/generate")
+def suggestion_generate(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.manage"))):return repo.generate_suggestions(tenant["org_id"])
+
+@router.get("/connectors")
+def connector_list(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return {"items":repo.connectors(tenant["org_id"])}
+@router.post("/connectors")
+def connector_create(body:Connector,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return repo.create_connector(tenant["org_id"],aid(tenant),body.model_dump())
+@router.post("/connectors/{connector_id}/sync")
+def connector_sync(connector_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return repo.sync_connector(tenant["org_id"],connector_id)
+
 
 @router.patch("/settings")
 def patch_settings(body: Settings, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.manage"))): return repo.update_settings(tenant["org_id"], aid(tenant), body.model_dump(exclude_none=True))
@@ -156,6 +182,10 @@ def patch_settings(body: Settings, tenant=Depends(get_current_tenant), _=Depends
 @router.post("/playground")
 def playground(body: Playground, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.read"))):
     settings = repo.settings(tenant["org_id"])
+    live=resolve_live(tenant["org_id"],body.question,body.context,aid(tenant))
+    if live:
+        log=repo.log_structured_response(tenant["org_id"],aid(tenant),body.model_dump(),live)
+        return {**live,"sources":[],"log_id":log["id"]}
     items = repo.search(tenant["org_id"], body.question, body.channel, body.language, body.workspace_id, body.limit)
     log = repo.log_response(tenant["org_id"], aid(tenant), body.model_dump(), items)
     if not items:
@@ -175,10 +205,16 @@ async def upload_file(workspace_id: str | None = Form(None), file: UploadFile = 
     content = await file.read(); mime = (file.content_type or "").lower()
     if mime not in MIMES or not content or len(content) > MAX_FILE_SIZE: raise HTTPException(422, "invalid_knowledge_file")
     suffix = Path(file.filename or "file").suffix.lower()
-    extracted, extraction_status = _extract(content, mime)
+    try: scan=scan_bytes(content)
+    except RuntimeError as exc: raise HTTPException(503,str(exc)) from exc
+    if scan["status"]!="CLEAN":raise HTTPException(422,"knowledge_file_malware_detected")
+    if mime=="application/pdf" or mime.startswith("image/"):
+        try: ocr=ocr_document(content,mime);extracted,extraction_status=ocr["text"],"NEEDS_REVIEW"
+        except RuntimeError as exc: raise HTTPException(503,str(exc)) from exc
+    else: extracted, extraction_status = _extract(content, mime);ocr={"confidence":1}
     object_path = f"{tenant['org_id']}/{datetime.utcnow():%Y/%m}/{uuid4().hex}{suffix}"
     upload_private_document(object_path, content, mime, BUCKET)
-    item = repo.add_file(tenant["org_id"], workspace_id, aid(tenant), {"file_name": file.filename or "file", "object_path": object_path, "mime_type": mime, "size_bytes": len(content), "checksum_sha256": hashlib.sha256(content).hexdigest(), "scan_status": "CLEAN", "extraction_status": extraction_status, "extracted_text": extracted, "detected_data": {}, "confidence": 1 if extraction_status == "EXTRACTED" else None})
+    item = repo.add_file(tenant["org_id"], workspace_id, aid(tenant), {"file_name": file.filename or "file", "object_path": object_path, "mime_type": mime, "size_bytes": len(content), "checksum_sha256": hashlib.sha256(content).hexdigest(), "scan_status": "CLEAN", "scan_engine":scan["engine"],"scan_signature":scan.get("signature"),"extraction_status": extraction_status, "extracted_text": extracted, "detected_data": {}, "confidence": ocr.get("confidence")})
     return item
 
 
@@ -212,6 +248,9 @@ def create_feedback(body: Feedback, tenant=Depends(get_current_tenant), _=Depend
 @router.post("")
 def create(body: CreateKnowledge, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.create"))): return repo.create(tenant["org_id"], aid(tenant), aname(tenant), body.model_dump())
 
+@router.get("/live/catalog")
+def get_live_catalog(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return live_catalog(tenant["org_id"])
+
 
 @router.get("/{entry_id}")
 def detail(entry_id: str, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.read"))): return repo.detail(tenant["org_id"], entry_id)
@@ -223,6 +262,11 @@ def update(entry_id: str, body: UpdateKnowledge, tenant=Depends(get_current_tena
 
 @router.post("/{entry_id}/relations")
 def add_relation(entry_id: str, body: Relation, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.update"))): return repo.add_relation(tenant["org_id"], entry_id, body.entity_type, body.entity_id, body.relation_type)
+
+@router.post("/{entry_id}/embed")
+def embed(entry_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.manage"))):return repo.embed_entry(tenant["org_id"],entry_id)
+@router.post("/{entry_id}/translate")
+def translate(entry_id:str,body:Translation,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.translate"))):return repo.translate(tenant["org_id"],entry_id,body.target_language,aid(tenant),aname(tenant))
 
 
 @router.post("/{entry_id}/submit")

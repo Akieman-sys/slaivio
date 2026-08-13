@@ -14,3 +14,15 @@ export async function uploadKnowledgeFile(file:File){const form=new FormData();f
 export async function listKnowledgeFiles(){return(await api.get<{items:KnowledgeFile[]}>("/knowledge/files")).data.items}
 export async function testKnowledge(question:string,channel="PLAYGROUND",language="FR"){return(await api.post<{decision:string;answer:string;sources:Array<{id:string;reference:string;title:string;source_type:string;updated_at:string}>;log_id:string}>("/knowledge/playground",{question,channel,language})).data}
 export async function knowledgeAnalytics(){return(await api.get<{stats:KnowledgeStats;decisions:Array<{decision:string;count:number}>;top:Array<{id:string;title:string;usage_count:number}>;unanswered:Array<{question:string;occurrences:number}>}>("/knowledge/analytics")).data}
+export async function translateKnowledge(id:string,target_language:string){return(await api.post<KnowledgeEntry>(`/knowledge/${id}/translate`,{target_language})).data}
+export async function embedKnowledge(id:string){return(await api.post<{embedded:number}>(`/knowledge/${id}/embed`)).data}
+export async function getKnowledgeConflicts(){return(await api.get<{items:Array<Record<string,unknown>>}>("/knowledge/conflicts/all")).data.items}
+export async function detectKnowledgeConflicts(){return(await api.post("/knowledge/conflicts/detect")).data}
+export async function resolveKnowledgeConflict(id:string,resolution:string){return(await api.post(`/knowledge/conflicts/${id}/resolve`,{resolution,status:"RESOLVED"})).data}
+export async function getKnowledgeSuggestions(){return(await api.get<{items:Array<Record<string,unknown>>}>("/knowledge/suggestions")).data.items}
+export async function generateKnowledgeSuggestions(){return(await api.post("/knowledge/suggestions/generate")).data}
+export async function getKnowledgeConnectors(){return(await api.get<{items:Array<Record<string,unknown>>}>("/knowledge/connectors")).data.items}
+export async function createKnowledgeConnector(body:Record<string,unknown>){return(await api.post("/knowledge/connectors",body)).data}
+export async function syncKnowledgeConnector(id:string){return(await api.post(`/knowledge/connectors/${id}/sync`)).data}
+export async function getKnowledgeSettings(){return(await api.get<Record<string,unknown>>("/knowledge/settings")).data}
+export async function updateKnowledgeSettings(body:Record<string,unknown>){return(await api.patch("/knowledge/settings",body)).data}

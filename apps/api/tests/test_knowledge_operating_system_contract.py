@@ -42,3 +42,35 @@ def test_knowledge_worker_and_private_storage_are_explicit():
     assert 'BUCKET = "knowledge-files"' in api
     assert "MAX_FILE_SIZE" in api and "MIMES" in api
     assert "NEEDS_REVIEW" in api and "Aucun import n’est publié automatiquement" not in api
+
+
+def test_completion_has_ocr_antivirus_vectors_live_sources_and_connectors():
+    migration=(ROOT/"infra/sql/075_knowledge_completion.sql").read_text(encoding="utf-8")
+    api=(ROOT/"apps/api/app/api/knowledge.py").read_text(encoding="utf-8")
+    repository=(ROOT/"apps/api/app/knowledge/repository.py").read_text(encoding="utf-8")
+    for feature in ("create extension if not exists vector","vector(1024)","knowledge_connectors","knowledge_suggestions","translation_group_id","scan_engine"):
+        assert feature in migration
+    for service in ("scan_bytes","ocr_document","resolve_live","live/catalog","/translate","/embed","/connectors","/suggestions"):
+        assert service in api
+    for capability in ("embed_texts","vector_cosine_ops","translation_status","sync_connector","generate_suggestions","saved_views"):
+        assert capability in migration+repository
+
+
+def test_completion_rbac_matches_real_agency_roles():
+    api=(ROOT/"apps/api/app/api/knowledge.py").read_text(encoding="utf-8")
+    migration=(ROOT/"infra/sql/074_knowledge_operating_system.sql").read_text(encoding="utf-8")+(ROOT/"infra/sql/075_knowledge_completion.sql").read_text(encoding="utf-8")
+    assert 'require_permission("knowledge.read")' in api
+    assert 'require_permission("knowledge.manage")' in api
+    assert 'require_permission("knowledge.translate")' in api
+    assert 'require_permission("knowledge.connectors")' in api
+    assert "r.role_code='OWNER'" in migration
+    assert "r.role_code='MANAGER'" in migration
+    assert "r.role_code in ('OPERATOR','WAREHOUSE','FINANCE')" in migration
+    assert "knowledge.publish" in migration and "knowledge.publish" not in migration.split("r.role_code in ('OPERATOR','WAREHOUSE','FINANCE')",1)[1].split("on conflict",1)[0]
+
+
+def test_antivirus_is_fail_closed_in_production():
+    source=(ROOT/"apps/api/app/services/knowledge_security.py").read_text(encoding="utf-8")
+    assert "knowledge_antivirus_not_configured" in source
+    assert '"REJECTED"' in source and '"clamav"' in source
+    assert "development-bypass" in source

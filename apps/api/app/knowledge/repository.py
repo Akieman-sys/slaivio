@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.db.database import engine
+from app.services.knowledge_ai import embed_texts,translate_text
+from app.services.knowledge_connectors import encrypt_credentials,decrypt_credentials,discover
 
 EDITABLE = ("title", "knowledge_type", "category", "content", "structured_data", "question_variants", "tags", "language", "audiences", "ai_scope", "source_type", "source_entity_type", "source_entity_id", "effective_at", "expires_at", "review_due_at", "review_interval_days", "owner_id", "owner_name", "sensitive", "workspace_id")
 SUSPICIOUS = re.compile(r"(?i)(ignore (all|previous)|system prompt|reveal (the )?(secret|instructions)|jailbreak|developer message)")
@@ -153,7 +155,14 @@ def search(org_id, query, channel, language="FR", workspace_id=None, limit=8):
     audience = "PUBLIC" if channel in ("CLIENT","WHATSAPP") else None
     params={"o":org_id,"q":query,"lang":language.upper(),"w":workspace_id,"limit":min(limit,20),"aud":audience}
     sql=f"""select e.id,e.reference,e.title,e.category,e.content,e.source_type,e.source_entity_type,e.source_entity_id,e.updated_at,ts_rank(to_tsvector('simple',coalesce(e.title,'')||' '||coalesce(e.content,'')),websearch_to_tsquery('simple',:q)) rank from knowledge_entries e where e.org_id=:o and e.status='PUBLISHED' and e.ai_scope in {scope} and e.sensitive=false and e.language=:lang and (e.workspace_id is null or e.workspace_id=:w) and (e.effective_at is null or e.effective_at<=now()) and (e.expires_at is null or e.expires_at>now()) and (:aud is null or :aud=any(e.audiences)) and (to_tsvector('simple',coalesce(e.title,'')||' '||coalesce(e.content,'')) @@ websearch_to_tsquery('simple',:q) or exists(select 1 from unnest(e.tags||e.question_variants) term where term ilike '%'||:q||'%')) order by case e.source_type when 'ROUTE' then 1 when 'SERVICE' then 2 when 'PRICING' then 3 when 'WAREHOUSE' then 4 else 5 end,rank desc,e.updated_at desc limit :limit"""
-    with engine.connect() as conn: return [_dict(r) for r in conn.execute(text(sql),params).fetchall()]
+    lexical=[]
+    with engine.connect() as conn: lexical=[_dict(r) for r in conn.execute(text(sql),params).fetchall()]
+    try: vector=embed_texts([query])[0]
+    except RuntimeError:return lexical
+    vector_literal="["+",".join(str(float(x)) for x in vector)+"]"
+    with engine.connect() as conn:
+        semantic=[_dict(r) for r in conn.execute(text(f"select e.id,e.reference,e.title,e.category,e.content,e.source_type,e.source_entity_type,e.source_entity_id,e.updated_at,1-(e.embedding<=>cast(:embedding as vector)) rank from knowledge_entries e where e.org_id=:o and e.status='PUBLISHED' and e.ai_scope in {scope} and e.sensitive=false and e.language=:lang and e.embedding is not null and (e.workspace_id is null or e.workspace_id=:w) and (:aud is null or :aud=any(e.audiences)) order by e.embedding<=>cast(:embedding as vector) limit :limit"),{**params,"embedding":vector_literal}).fetchall()]
+    merged={str(x["id"]):x for x in semantic};merged.update({str(x["id"]):x for x in lexical});return sorted(merged.values(),key=lambda x:float(x.get("rank") or 0),reverse=True)[:limit]
 
 
 def log_response(org_id, actor_id, data, items):
@@ -162,6 +171,9 @@ def log_response(org_id, actor_id, data, items):
     with engine.begin() as conn:
         row=conn.execute(text("insert into knowledge_response_logs(org_id,workspace_id,channel,language,question,answer,decision,source_ids,actor_id) values(:o,:w,:c,:l,:q,:a,:d,:s,:u) returning *"),{"o":org_id,"w":data.get("workspace_id"),"c":data["channel"],"l":data.get("language","FR"),"q":data["question"],"a":answer,"d":decision,"s":[x["id"] for x in items],"u":actor_id}).fetchone()
         return _dict(row)
+
+def log_structured_response(org_id,actor_id,data,result):
+    with engine.begin() as conn:return _dict(conn.execute(text("insert into knowledge_response_logs(org_id,workspace_id,channel,language,question,answer,decision,structured_sources,actor_id) values(:o,:w,:c,:l,:q,:a,:d,cast(:s as jsonb),:u) returning *"),{"o":org_id,"w":data.get("workspace_id"),"c":data["channel"],"l":data.get("language","FR"),"q":data["question"],"a":result.get("answer"),"d":result["decision"] if result["decision"] in("ANSWERED","NO_RESULT","ESCALATED","BLOCKED") else "ESCALATED","s":json.dumps(result.get("structured_sources",[]),default=str),"u":actor_id}).fetchone())
 
 
 def settings(org_id):
@@ -192,7 +204,7 @@ def add_file(org_id, workspace_id, actor_id, meta):
         existing=conn.execute(text("select * from knowledge_files where org_id=:o and checksum_sha256=:h"),{"o":org_id,"h":meta["checksum_sha256"]}).fetchone()
         if existing: raise HTTPException(409,"knowledge_file_duplicate")
         meta["prompt_injection_detected"] = bool(SUSPICIOUS.search(meta.get("extracted_text") or ""))
-        row=conn.execute(text("""insert into knowledge_files(org_id,workspace_id,file_name,object_path,mime_type,size_bytes,checksum_sha256,scan_status,extraction_status,extracted_text,detected_data,confidence,prompt_injection_detected,created_by) values(:org,:workspace_id,:file_name,:object_path,:mime_type,:size_bytes,:checksum_sha256,:scan_status,:extraction_status,:extracted_text,cast(:detected_data as jsonb),:confidence,:prompt_injection_detected,:actor) returning *"""),{"org":org_id,"workspace_id":workspace_id,"actor":actor_id,**meta,"detected_data":json.dumps(meta.get("detected_data") or {})}).fetchone()
+        row=conn.execute(text("""insert into knowledge_files(org_id,workspace_id,file_name,object_path,mime_type,size_bytes,checksum_sha256,scan_status,scan_engine,scan_signature,scanned_at,extraction_status,extracted_text,detected_data,confidence,prompt_injection_detected,created_by) values(:org,:workspace_id,:file_name,:object_path,:mime_type,:size_bytes,:checksum_sha256,:scan_status,:scan_engine,:scan_signature,now(),:extraction_status,:extracted_text,cast(:detected_data as jsonb),:confidence,:prompt_injection_detected,:actor) returning *"""),{"org":org_id,"workspace_id":workspace_id,"actor":actor_id,**meta,"detected_data":json.dumps(meta.get("detected_data") or {})}).fetchone()
         return _dict(row)
 
 
@@ -244,6 +256,61 @@ def resolve_conflict(org_id, conflict_id, actor_id, resolution, status="RESOLVED
 def feedback(org_id, actor_id, data):
     with engine.begin() as conn:
         row=conn.execute(text("insert into knowledge_feedback(org_id,knowledge_id,response_log_id,rating,comment,created_by) values(:o,:k,:l,:r,:c,:a) returning *"),{"o":org_id,"k":data.get("knowledge_id"),"l":data.get("response_log_id"),"r":data["rating"],"c":data.get("comment"),"a":actor_id}).fetchone(); return _dict(row)
+
+def embed_entry(org_id,entry_id):
+    with engine.begin() as conn:item=_entry(conn,org_id,entry_id);chunks=[_dict(r) for r in conn.execute(text("select * from knowledge_chunks where org_id=:o and knowledge_id=:k order by chunk_index"),{"o":org_id,"k":entry_id}).fetchall()]
+    values=embed_texts([item["title"]+"\n"+item["content"]]+[x["content"] for x in chunks])
+    def literal(v):return "["+",".join(str(float(x)) for x in v)+"]"
+    from app.core.config import settings as cfg
+    with engine.begin() as conn:
+        conn.execute(text("update knowledge_entries set embedding=cast(:v as vector),embedding_model=:m,embedded_at=now() where org_id=:o and id=:k"),{"v":literal(values[0]),"m":cfg.knowledge_embedding_model,"o":org_id,"k":entry_id})
+        for chunk,value in zip(chunks,values[1:]):conn.execute(text("update knowledge_chunks set embedding=cast(:v as vector),embedding_model=:m where org_id=:o and id=:id"),{"v":literal(value),"m":cfg.knowledge_embedding_model,"o":org_id,"id":chunk["id"]})
+    return {"embedded":1+len(chunks)}
+
+def translate(org_id,entry_id,target,actor_id,actor_name):
+    with engine.connect() as conn:source=_entry(conn,org_id,entry_id)
+    if target.upper()==source["language"]:raise HTTPException(422,"translation_language_must_differ")
+    generated=translate_text(source["title"],source["content"],target.upper());group=source.get("translation_group_id") or source["id"]
+    data={k:source.get(k) for k in EDITABLE};data.update(generated);data.update({"language":target.upper(),"ai_scope":"NONE","source_type":"MANUAL"})
+    item=create(org_id,actor_id,actor_name,data)
+    with engine.begin() as conn:conn.execute(text("update knowledge_entries set translation_group_id=:g,translated_from_id=:s,translation_status='PENDING_REVIEW' where org_id=:o and id=:id"),{"g":group,"s":entry_id,"o":org_id,"id":item["id"]});conn.execute(text("update knowledge_entries set translation_group_id=:g where org_id=:o and id=:s and translation_group_id is null"),{"g":group,"o":org_id,"s":entry_id})
+    return detail(org_id,str(item["id"]))
+
+def saved_views(org_id,user_id):
+    with engine.connect() as conn:return [_dict(r) for r in conn.execute(text("select * from knowledge_saved_views where org_id=:o and user_id=:u order by name"),{"o":org_id,"u":user_id}).fetchall()]
+def save_view(org_id,user_id,name,filters):
+    with engine.begin() as conn:return _dict(conn.execute(text("insert into knowledge_saved_views(org_id,user_id,name,filters) values(:o,:u,:n,cast(:f as jsonb)) on conflict(org_id,user_id,name) do update set filters=excluded.filters returning *"),{"o":org_id,"u":user_id,"n":name,"f":json.dumps(filters)}).fetchone())
+def delete_view(org_id,user_id,view_id):
+    with engine.begin() as conn:return bool(conn.execute(text("delete from knowledge_saved_views where org_id=:o and user_id=:u and id=:id returning id"),{"o":org_id,"u":user_id,"id":view_id}).fetchone())
+
+def generate_suggestions(org_id):
+    with engine.begin() as conn:
+        rows=conn.execute(text("select question,count(*) occurrences from knowledge_response_logs where org_id=:o and decision='NO_RESULT' and created_at>now()-interval '30 days' group by question having count(*)>=2"),{"o":org_id}).fetchall();created=0
+        for row in rows:
+            exists=conn.execute(text("select 1 from knowledge_suggestions where org_id=:o and suggestion_type='UNANSWERED_QUESTION' and evidence->>'question'=:q and status='OPEN'"),{"o":org_id,"q":row.question}).first()
+            if not exists:conn.execute(text("insert into knowledge_suggestions(org_id,suggestion_type,title,description,evidence,priority) values(:o,'UNANSWERED_QUESTION',:t,:d,cast(:e as jsonb),:p)"),{"o":org_id,"t":"Créer une réponse officielle","d":row.question,"e":json.dumps({"question":row.question,"occurrences":row.occurrences}),"p":"HIGH" if row.occurrences>=10 else "MEDIUM"});created+=1
+        return {"created":created}
+def suggestions(org_id):
+    with engine.connect() as conn:return [_dict(r) for r in conn.execute(text("select * from knowledge_suggestions where org_id=:o order by (status='OPEN') desc,case priority when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end,created_at desc"),{"o":org_id}).fetchall()]
+
+def connectors(org_id):
+    with engine.connect() as conn:return [_dict(r) for r in conn.execute(text("select id,workspace_id,provider,display_name,configuration,status,last_sync_at,last_sync_status,last_error,created_at,updated_at from knowledge_connectors where org_id=:o order by provider,display_name"),{"o":org_id}).fetchall()]
+def create_connector(org_id,actor_id,data):
+    encrypted=encrypt_credentials(data["credentials"])
+    with engine.begin() as conn:return _dict(conn.execute(text("insert into knowledge_connectors(org_id,workspace_id,provider,display_name,encrypted_credentials,configuration,status,created_by) values(:o,:w,:p,:n,:c,cast(:cfg as jsonb),'CONNECTED',:a) returning id,workspace_id,provider,display_name,configuration,status,last_sync_at,last_sync_status,last_error,created_at,updated_at"),{"o":org_id,"w":data.get("workspace_id"),"p":data["provider"],"n":data["display_name"],"c":encrypted,"cfg":json.dumps(data.get("configuration",{})),"a":actor_id}).fetchone())
+def sync_connector(org_id,connector_id):
+    with engine.begin() as conn:
+        row=conn.execute(text("select * from knowledge_connectors where org_id=:o and id=:id for update"),{"o":org_id,"id":connector_id}).fetchone()
+        if not row:raise HTTPException(404,"knowledge_connector_not_found")
+        connector=_dict(row);conn.execute(text("update knowledge_connectors set status='SYNCING',updated_at=now() where id=:id"),{"id":connector_id})
+    try:items=discover(connector["provider"],decrypt_credentials(connector["encrypted_credentials"]),connector["configuration"])
+    except Exception as exc:
+        with engine.begin() as conn:conn.execute(text("update knowledge_connectors set status='ERROR',last_sync_status='ERROR',last_error=:e,updated_at=now() where org_id=:o and id=:id"),{"e":str(exc)[:500],"o":org_id,"id":connector_id})
+        raise HTTPException(502,"knowledge_connector_sync_failed") from exc
+    with engine.begin() as conn:
+        for item in items:conn.execute(text("insert into knowledge_connector_documents(org_id,connector_id,external_id,external_url,title,mime_type,external_modified_at,content_hash) values(:o,:c,:external_id,:external_url,:title,:mime_type,:external_modified_at,:content_hash) on conflict(connector_id,external_id) do update set sync_status=case when knowledge_connector_documents.content_hash is distinct from excluded.content_hash and knowledge_connector_documents.knowledge_id is not null then 'CONFLICT' else 'UPDATED' end,external_url=excluded.external_url,title=excluded.title,mime_type=excluded.mime_type,external_modified_at=excluded.external_modified_at,content_hash=excluded.content_hash,updated_at=now()"),{"o":org_id,"c":connector_id,**item})
+        conn.execute(text("update knowledge_connectors set status='CONNECTED',last_sync_at=now(),last_sync_status='SUCCESS',last_error=null,updated_at=now() where org_id=:o and id=:id"),{"o":org_id,"id":connector_id})
+    return {"discovered":len(items)}
 
 
 def maintenance(org_id=None):

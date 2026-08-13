@@ -232,6 +232,10 @@ def add_relation(org_id, entry_id, entity_type, entity_id, relation_type):
         _entry(conn,org_id,entry_id)
         row=conn.execute(text("insert into knowledge_relations(org_id,knowledge_id,entity_type,entity_id,relation_type) values(:o,:k,:t,:e,:r) on conflict(knowledge_id,entity_type,entity_id,relation_type) do update set entity_id=excluded.entity_id returning *"),{"o":org_id,"k":entry_id,"t":entity_type.upper(),"e":entity_id,"r":relation_type.upper()}).fetchone(); return _dict(row)
 
+def remove_relation(org_id,entry_id,relation_id):
+    with engine.begin() as conn:
+        return bool(conn.execute(text("delete from knowledge_relations where org_id=:o and knowledge_id=:k and id=:id returning id"),{"o":org_id,"k":entry_id,"id":relation_id}).fetchone())
+
 
 def detect_conflicts(org_id):
     with engine.begin() as conn:
@@ -292,6 +296,11 @@ def generate_suggestions(org_id):
         return {"created":created}
 def suggestions(org_id):
     with engine.connect() as conn:return [_dict(r) for r in conn.execute(text("select * from knowledge_suggestions where org_id=:o order by (status='OPEN') desc,case priority when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end,created_at desc"),{"o":org_id}).fetchall()]
+def update_suggestion(org_id,suggestion_id,status,knowledge_id=None):
+    with engine.begin() as conn:
+        row=conn.execute(text("update knowledge_suggestions set status=:s,knowledge_id=coalesce(:k,knowledge_id),updated_at=now() where org_id=:o and id=:id returning *"),{"s":status,"k":knowledge_id,"o":org_id,"id":suggestion_id}).fetchone()
+        if not row:raise HTTPException(404,"knowledge_suggestion_not_found")
+        return _dict(row)
 
 def connectors(org_id):
     with engine.connect() as conn:return [_dict(r) for r in conn.execute(text("select id,workspace_id,provider,display_name,configuration,status,last_sync_at,last_sync_status,last_error,created_at,updated_at from knowledge_connectors where org_id=:o order by provider,display_name"),{"o":org_id}).fetchall()]
@@ -311,6 +320,10 @@ def sync_connector(org_id,connector_id):
         for item in items:conn.execute(text("insert into knowledge_connector_documents(org_id,connector_id,external_id,external_url,title,mime_type,external_modified_at,content_hash) values(:o,:c,:external_id,:external_url,:title,:mime_type,:external_modified_at,:content_hash) on conflict(connector_id,external_id) do update set sync_status=case when knowledge_connector_documents.content_hash is distinct from excluded.content_hash and knowledge_connector_documents.knowledge_id is not null then 'CONFLICT' else 'UPDATED' end,external_url=excluded.external_url,title=excluded.title,mime_type=excluded.mime_type,external_modified_at=excluded.external_modified_at,content_hash=excluded.content_hash,updated_at=now()"),{"o":org_id,"c":connector_id,**item})
         conn.execute(text("update knowledge_connectors set status='CONNECTED',last_sync_at=now(),last_sync_status='SUCCESS',last_error=null,updated_at=now() where org_id=:o and id=:id"),{"o":org_id,"id":connector_id})
     return {"discovered":len(items)}
+
+def delete_connector(org_id,connector_id):
+    with engine.begin() as conn:
+        return bool(conn.execute(text("delete from knowledge_connectors where org_id=:o and id=:id returning id"),{"o":org_id,"id":connector_id}).fetchone())
 
 
 def maintenance(org_id=None):

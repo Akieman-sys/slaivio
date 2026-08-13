@@ -74,3 +74,40 @@ def test_antivirus_is_fail_closed_in_production():
     assert "knowledge_antivirus_not_configured" in source
     assert '"REJECTED"' in source and '"clamav"' in source
     assert "development-bypass" in source
+
+
+def test_knowledge_completion_exposes_full_governance_mutations():
+    api = (ROOT / "apps/api/app/api/knowledge.py").read_text(encoding="utf-8")
+    repository = (ROOT / "apps/api/app/knowledge/repository.py").read_text(encoding="utf-8")
+    for route in (
+        '"/suggestions/{suggestion_id}"',
+        '"/connectors/{connector_id}"',
+        '"/{entry_id}/relations/{relation_id}"',
+    ):
+        assert route in api
+    for operation in ("update_suggestion", "delete_connector", "remove_relation"):
+        assert f"def {operation}" in repository
+
+
+def test_knowledge_completion_ui_exposes_agency_workflows():
+    page = (ROOT / "apps/web/dashboard/components/knowledge/knowledge-page.tsx").read_text(encoding="utf-8")
+    service = (ROOT / "apps/web/dashboard/services/knowledge.ts").read_text(encoding="utf-8")
+    for feature in (
+        "Valider et mapper la source",
+        "Enregistrer une nouvelle version",
+        "Traduction créée en brouillon",
+        "Restaurer cette version",
+        "Relations métier",
+        "Vues enregistrées",
+        "Sources métier live",
+    ):
+        assert feature in page
+    for endpoint in (
+        "/knowledge/views",
+        "/knowledge/live/catalog",
+        "/relations/",
+        "/versions/",
+        "/translate",
+        "/embed",
+    ):
+        assert endpoint in service

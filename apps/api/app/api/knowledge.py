@@ -137,6 +137,9 @@ class Feedback(BaseModel):
 class SavedView(BaseModel):name:str=Field(min_length=2,max_length=80);filters:dict={}
 class Translation(BaseModel):target_language:str=Field(pattern="^(FR|EN)$")
 class Connector(BaseModel):provider:str=Field(pattern="^(GOOGLE_DRIVE|NOTION|SHAREPOINT)$");display_name:str;credentials:dict;configuration:dict={};workspace_id:str|None=None
+class SuggestionDecision(BaseModel):
+    status: str = Field(pattern="^(ACCEPTED|DISMISSED|COMPLETED)$")
+    knowledge_id: str | None = None
 
 
 @router.get("")
@@ -166,6 +169,8 @@ def view_delete(view_id:str,tenant=Depends(get_current_tenant),_=Depends(require
 def suggestion_list(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.read"))):return {"items":repo.suggestions(tenant["org_id"])}
 @router.post("/suggestions/generate")
 def suggestion_generate(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.manage"))):return repo.generate_suggestions(tenant["org_id"])
+@router.patch("/suggestions/{suggestion_id}")
+def suggestion_decide(suggestion_id:str,body:SuggestionDecision,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.manage"))):return repo.update_suggestion(tenant["org_id"],suggestion_id,body.status,body.knowledge_id)
 
 @router.get("/connectors")
 def connector_list(tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return {"items":repo.connectors(tenant["org_id"])}
@@ -173,6 +178,8 @@ def connector_list(tenant=Depends(get_current_tenant),_=Depends(require_permissi
 def connector_create(body:Connector,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return repo.create_connector(tenant["org_id"],aid(tenant),body.model_dump())
 @router.post("/connectors/{connector_id}/sync")
 def connector_sync(connector_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return repo.sync_connector(tenant["org_id"],connector_id)
+@router.delete("/connectors/{connector_id}")
+def connector_delete(connector_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.connectors"))):return {"deleted":repo.delete_connector(tenant["org_id"],connector_id)}
 
 
 @router.patch("/settings")
@@ -262,6 +269,8 @@ def update(entry_id: str, body: UpdateKnowledge, tenant=Depends(get_current_tena
 
 @router.post("/{entry_id}/relations")
 def add_relation(entry_id: str, body: Relation, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.update"))): return repo.add_relation(tenant["org_id"], entry_id, body.entity_type, body.entity_id, body.relation_type)
+@router.delete("/{entry_id}/relations/{relation_id}")
+def remove_relation(entry_id:str,relation_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.update"))):return {"deleted":repo.remove_relation(tenant["org_id"],entry_id,relation_id)}
 
 @router.post("/{entry_id}/embed")
 def embed(entry_id:str,tenant=Depends(get_current_tenant),_=Depends(require_permission("knowledge.manage"))):return repo.embed_entry(tenant["org_id"],entry_id)

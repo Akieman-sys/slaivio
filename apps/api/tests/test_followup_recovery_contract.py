@@ -1,0 +1,15 @@
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[3]
+def text(path):return (ROOT/path).read_text(encoding='utf-8')
+def test_followup_migration_has_reliable_queue_and_rbac():
+ sql=text('infra/sql/078_followup_recovery_engine.sql')
+ for token in ('followup_rules','followup_sequences','followup_attempts','followup_responses','followup_templates','idempotency_key','followups.execute','revoke all') : assert token in sql
+def test_followup_api_is_permissioned_and_mutations_versioned():
+ api=text('apps/api/app/api/followups.py');repo=text('apps/api/app/db/followup_repository.py')
+ for permission in ('followups.read','followups.create','followups.update','followups.execute','followups.rules'):assert permission in api
+ assert 'row_version=:v' in repo and 'for update of f' in repo and 'business_condition_resolved' in repo and 'skip locked' in repo
+ assert "followup_type ilike" in repo and "record_response" in repo and "followup_analytics" in repo
+def test_followup_workspace_is_real():
+ ui=text('apps/web/dashboard/components/followups/followups-page.tsx');service=text('apps/web/dashboard/services/followups.ts')
+ for label in ('Aujourd’hui','En retard','Règles & séquences','Envoyer maintenant','Escalader'):assert label in ui
+ for endpoint in ("'/followups'","`/followups/${id}/execute`",'/followups/rules'):assert endpoint in service

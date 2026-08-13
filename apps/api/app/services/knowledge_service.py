@@ -1,4 +1,4 @@
-from app.db.knowledge_repository import search_knowledge_items
+from app.knowledge.repository import search
 
 
 def find_best_knowledge_answer(
@@ -13,11 +13,7 @@ def find_best_knowledge_answer(
             "best_item": None,
         }
 
-    items = search_knowledge_items(
-        org_id=org_id,
-        query=text,
-        limit=5,
-    )
+    items = search(org_id, text, "WHATSAPP", limit=5)
 
     if not items:
         return {

@@ -1,7 +1,4 @@
-from app.ai.repositories.knowledge_repository import (
-    get_documents,
-    search_documents,
-)
+from app.knowledge.repository import search
 
 
 def retrieve_relevant_knowledge(
@@ -9,15 +6,7 @@ def retrieve_relevant_knowledge(
     user_message: str,
     limit: int = 5,
 ):
-    results = search_documents(
-        org_id=org_id,
-        query=user_message,
-        limit=limit,
-    )
-
-    if results:
-        return results
-
-    fallback_docs = get_documents(org_id)
-    return fallback_docs[:limit]
+    # No fallback to unrelated documents: an empty result must escalate rather
+    # than encourage a plausible but unsupported answer.
+    return search(org_id, user_message, "INTERNAL", limit=limit)
 

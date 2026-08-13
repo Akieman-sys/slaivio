@@ -28,7 +28,6 @@ from app.api.organization_whatsapp import router as organization_whatsapp_router
 from app.api.meta_templates import router as meta_templates_router
 from app.api.auth import router as auth_router
 from app.api.inbox import router as inbox_router
-from app.api.knowledge_settings import router as knowledge_settings_router
 from app.api.goods_settings import router as goods_settings_router
 from app.api.pricing_settings import router as pricing_settings_router
 from app.api.whatsapp_enterprise import router as whatsapp_enterprise_router
@@ -155,7 +154,6 @@ app.include_router(organization_whatsapp_router)
 app.include_router(meta_templates_router)
 app.include_router(auth_router)
 app.include_router(inbox_router)
-app.include_router(knowledge_settings_router)
 app.include_router(goods_settings_router)
 app.include_router(pricing_settings_router)
 app.include_router(whatsapp_enterprise_router)

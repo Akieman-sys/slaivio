@@ -11,6 +11,7 @@ import {
   Route,
   BarChart3,
   Sparkles,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     icon: Sparkles,
     routes: [
       { label: "Assistant Slaivio", href: "/app/assistant", icon: Sparkles, keywords: ["assistant", "ia", "automatisation", "audio", "escalade"] },
+      { label: "Base de connaissances", href: "/app/knowledge", icon: BookOpen, permission: "knowledge.read", keywords: ["connaissance", "faq", "procédure", "politique", "rag", "knowledge"] },
     ],
   },
   {

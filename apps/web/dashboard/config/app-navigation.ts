@@ -68,7 +68,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
   {
     label: "Réseau",
     icon: Route,
-    routes: [{ label: "Routes et services", href: "/app/routes", icon: Route, permission: "routes.read", keywords: ["route", "service", "tarif", "pricing", "corridor"] }],
+    routes: [{ label: "Routes", href: "/app/routes", icon: Route, permission: "routes.read", keywords: ["route", "réseau", "corridor", "destination"] },{ label: "Services", href: "/app/services", icon: Route, permission: "routes.read", keywords: ["service", "air", "sea", "express", "groupage"] }],
   },
   {
     label: "Finance",

@@ -93,7 +93,7 @@ def transition_group(org_id,group_id,actor,action,version):
  with engine.begin() as c:
   row=c.execute(text("update warehouse_groups set status=:t,row_version=row_version+1,updated_at=now() where id=:id and org_id=:o and status=:s and row_version=:v returning *"),{"t":target,"id":group_id,"o":org_id,"s":source,"v":version}).mappings().first()
   if not row:raise HTTPException(409,"group_state_conflict")
-  if target=='DISPATCHED':c.execute(text("update cargo_packages p set inventory_status='DISPATCHED',status='DISPATCHED',dispatched_at=now(),updated_at=now() from warehouse_group_items i where i.group_id=:g and i.package_id=p.id and p.org_id=:o"),{"g":group_id,"o":org_id})
+  if target=='DISPATCHED':c.execute(text("update cargo_packages p set inventory_status='DISPATCHED',status='SHIPPED',dispatched_at=now(),updated_at=now(),row_version=row_version+1 from warehouse_group_items i where i.group_id=:g and i.package_id=p.id and p.org_id=:o"),{"g":group_id,"o":org_id})
   _audit(c,org_id,row["warehouse_id"],"group",group_id,target,actor);return dict(row)
 def list_groups(org_id,warehouse_id):
  with engine.connect() as c:return _rows(c.execute(text("select g.*,(select count(*) from warehouse_group_items i where i.group_id=g.id)::int package_count from warehouse_groups g where org_id=:o and warehouse_id=:w order by created_at desc"),{"o":org_id,"w":warehouse_id}))

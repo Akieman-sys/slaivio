@@ -39,6 +39,8 @@ from app.packages.repository import (
     create_package_document, get_package_document, archive_package,
     add_private_package_media, get_package_media,
     package_analytics,
+    transition_package,quality_control,expectations,create_expectation,price_package,compatible_departures,delivery_proof,detect_package_alerts,
+    package_saved_views,save_package_view,delete_package_view,package_alerts,resolve_package_alert,bulk_package_operation,
 )
 
 
@@ -95,6 +97,17 @@ class PackagePayload(BaseModel):
     priority: str = Field(default="NORMAL",pattern="^(LOW|NORMAL|HIGH|URGENT)$")
     assigned_to: str|None=Field(default=None,max_length=200)
     supplier_name: str|None=Field(default=None,max_length=180)
+    supplier_tracking: str|None=Field(default=None,max_length=180)
+    shipping_mark: str|None=Field(default=None,max_length=180)
+    order_number: str|None=Field(default=None,max_length=180)
+    external_reference: str|None=Field(default=None,max_length=180)
+    subcategory: str|None=Field(default=None,max_length=120)
+    goods_classification: str=Field(default="ORDINARY_GOODS",pattern="^(ORDINARY_GOODS|SENSITIVE_GOODS|DANGEROUS_GOODS|FRAGILE|ELECTRONICS|BATTERY|LIQUID|FOOD|PHARMACEUTICAL|HIGH_VALUE)$")
+    declared_weight_kg: float|None=Field(default=None,ge=0)
+    receiving_mode: str|None=Field(default=None,pattern="^(MANUAL|BARCODE|QR|OCR|IMPORT|API)$")
+    route_id: str|None=None
+    shipping_service_id: str|None=None
+    expected_at: str|None=None
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -156,6 +169,17 @@ class PackagePatchPayload(BaseModel):
     priority: str|None=Field(default=None,pattern="^(LOW|NORMAL|HIGH|URGENT)$")
     assigned_to: str|None=Field(default=None,max_length=200)
     supplier_name: str|None=Field(default=None,max_length=180)
+    supplier_tracking: str|None=Field(default=None,max_length=180)
+    shipping_mark: str|None=Field(default=None,max_length=180)
+    order_number: str|None=Field(default=None,max_length=180)
+    external_reference: str|None=Field(default=None,max_length=180)
+    subcategory: str|None=Field(default=None,max_length=120)
+    goods_classification: str|None=Field(default=None,pattern="^(ORDINARY_GOODS|SENSITIVE_GOODS|DANGEROUS_GOODS|FRAGILE|ELECTRONICS|BATTERY|LIQUID|FOOD|PHARMACEUTICAL|HIGH_VALUE)$")
+    declared_weight_kg: float|None=Field(default=None,ge=0)
+    receiving_mode: str|None=Field(default=None,pattern="^(MANUAL|BARCODE|QR|OCR|IMPORT|API)$")
+    route_id: str|None=None
+    shipping_service_id: str|None=None
+    expected_at: str|None=None
 
     @model_validator(mode="after")
     def validate_patch(self):
@@ -229,6 +253,14 @@ class PackageChecklistPayload(BaseModel):
     def validate_status(self):
         _assert_allowed(self.status,{"PENDING","COMPLETED","NOT_APPLICABLE"},"invalid_checklist_status")
         return self
+class PackageTransitionPayload(BaseModel):new_status:str;expected_version:int=Field(ge=1);reason:str|None=Field(default=None,max_length=500)
+class PackageQualityPayload(BaseModel):packaging_intact:bool|None=None;label_readable:bool|None=None;product_compliant:bool|None=None;quantity_compliant:bool|None=None;no_damage:bool|None=None;no_moisture:bool|None=None;result:str=Field(pattern="^(COMPLIANT|REVIEW|NON_COMPLIANT)$");notes:str|None=Field(default=None,max_length=1000)
+class PackageExpectationPayload(BaseModel):client_id:str;dossier_id:str|None=None;supplier_tracking:str=Field(min_length=3,max_length=160);shipping_mark:str|None=None;order_number:str|None=None;description:str|None=None;expected_warehouse_id:str|None=None;expected_at:str|None=None
+class PackagePricingPayload(BaseModel):service_id:str
+class PackageDeliveryPayload(BaseModel):recipient_name:str=Field(min_length=2,max_length=180);recipient_document:str|None=None;signature_path:str|None=None;photo_path:str|None=None;otp_verified:bool=False
+class PackageSavedViewPayload(BaseModel):name:str=Field(min_length=2,max_length=80);filters:dict=Field(default_factory=dict)
+class PackageAlertResolvePayload(BaseModel):resolution:str=Field(min_length=2,max_length=1000)
+class PackageBulkPayload(BaseModel):idempotency_key:str=Field(min_length=8,max_length=120);operation_type:str;package_ids:list[str]=Field(min_length=1,max_length=500);payload:dict=Field(default_factory=dict)
 
 
 def _user_id(tenant: dict) -> str:
@@ -305,6 +337,25 @@ def packages_stats(tenant=Depends(get_current_tenant)):
 @router.get("/packages/analytics", dependencies=[Depends(require_permission("packages.read"))])
 def packages_analytics(tenant=Depends(get_current_tenant)):
     return {"status":"ok","analytics":package_analytics(tenant["org_id"])}
+
+@router.get("/packages/expected",dependencies=[Depends(require_permission("packages.read"))])
+def packages_expected(status:str|None=None,tenant=Depends(get_current_tenant)):return {"status":"ok","items":expectations(tenant["org_id"],status)}
+@router.post("/packages/expected",dependencies=[Depends(require_permission("packages.create"))])
+def packages_expected_create(body:PackageExpectationPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","expectation":create_expectation(tenant["org_id"],_user_id(tenant),body.model_dump())}
+@router.post("/packages/alerts/detect",dependencies=[Depends(require_permission("packages.anomalies"))])
+def packages_alert_detect(tenant=Depends(get_current_tenant)):return {"status":"ok","created":detect_package_alerts(tenant["org_id"])}
+@router.get("/packages/alerts",dependencies=[Depends(require_permission("packages.read"))])
+def packages_alerts(status:str|None=None,tenant=Depends(get_current_tenant)):return {"status":"ok","items":package_alerts(tenant["org_id"],status)}
+@router.patch("/packages/alerts/{alert_id}",dependencies=[Depends(require_permission("packages.anomalies"))])
+def packages_alert_resolve(alert_id:str,body:PackageAlertResolvePayload,tenant=Depends(get_current_tenant)):return {"status":"ok","alert":resolve_package_alert(tenant["org_id"],alert_id,_user_id(tenant),body.resolution)}
+@router.get("/packages/views",dependencies=[Depends(require_permission("packages.read"))])
+def packages_views(tenant=Depends(get_current_tenant)):return {"status":"ok","items":package_saved_views(tenant["org_id"],_user_id(tenant))}
+@router.post("/packages/views",dependencies=[Depends(require_permission("packages.read"))])
+def packages_view_save(body:PackageSavedViewPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","view":save_package_view(tenant["org_id"],_user_id(tenant),body.name,body.filters)}
+@router.delete("/packages/views/{view_id}",dependencies=[Depends(require_permission("packages.read"))])
+def packages_view_delete(view_id:str,tenant=Depends(get_current_tenant)):return {"status":"ok","deleted":delete_package_view(tenant["org_id"],_user_id(tenant),view_id)}
+@router.post("/packages/bulk",dependencies=[Depends(require_permission("packages.bulk"))])
+def packages_bulk(body:PackageBulkPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","operation":bulk_package_operation(tenant["org_id"],_user_id(tenant),body.idempotency_key,body.operation_type,body.package_ids,body.payload)}
 
 @router.get("/packages/archived", dependencies=[Depends(require_permission("packages.archive"))])
 def packages_archived(q:str|None=Query(default=None,max_length=120),page:int=Query(default=1,ge=1),page_size:int=Query(default=30,ge=1,le=100),tenant=Depends(get_current_tenant)):
@@ -480,6 +531,17 @@ def packages_notification_create(package_id: str, body: PackageNotificationPaylo
     if not package:
         raise HTTPException(status_code=404, detail="package_not_found")
     return {"status": "ok", "package": package}
+
+@router.post("/packages/{package_id}/transition",dependencies=[Depends(require_permission("packages.update"))])
+def packages_transition(package_id:str,body:PackageTransitionPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","package":transition_package(tenant["org_id"],package_id,_user_id(tenant),body.new_status,body.expected_version,body.reason)}
+@router.post("/packages/{package_id}/quality-control",dependencies=[Depends(require_permission("packages.quality"))])
+def packages_quality(package_id:str,body:PackageQualityPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","package":quality_control(tenant["org_id"],package_id,_user_id(tenant),body.model_dump())}
+@router.post("/packages/{package_id}/pricing",dependencies=[Depends(require_permission("packages.pricing"))])
+def packages_pricing(package_id:str,body:PackagePricingPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","package":price_package(tenant["org_id"],package_id,_user_id(tenant),body.service_id)}
+@router.get("/packages/{package_id}/compatible-departures",dependencies=[Depends(require_permission("packages.read"))])
+def packages_compatible(package_id:str,tenant=Depends(get_current_tenant)):return {"status":"ok","items":compatible_departures(tenant["org_id"],package_id)}
+@router.post("/packages/{package_id}/delivery-proof",dependencies=[Depends(require_permission("packages.delivery"))])
+def packages_delivery(package_id:str,body:PackageDeliveryPayload,tenant=Depends(get_current_tenant)):return {"status":"ok","package":delivery_proof(tenant["org_id"],package_id,_user_id(tenant),body.model_dump())}
 
 @router.post("/packages/{package_id}/move", dependencies=[Depends(require_permission("packages.update"))])
 def packages_move(package_id: str, body: PackageMovePayload, tenant=Depends(get_current_tenant)):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from math import ceil
@@ -9,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import text
+from fastapi import HTTPException
 
 from app.db.database import engine
 
@@ -27,6 +29,17 @@ PACKAGE_STATUSES = {
     "ISSUE",
     "CANCELLED",
 }
+PACKAGE_STATUSES.update({"PENDING_VALIDATION","CONFIRMED","RECEIVED","WAREHOUSED","READY_FOR_BATCH","BATCHED","SHIPPED","ARRIVED","CLEARED","RETURNED"})
+
+OFFICIAL_TRANSITIONS={"CREATED":{"PENDING_VALIDATION","CONFIRMED","CANCELLED"},"PENDING_VALIDATION":{"CONFIRMED","BLOCKED","CANCELLED"},"CONFIRMED":{"RECEIVED","CANCELLED"},"RECEIVED":{"WAREHOUSED","BLOCKED"},"WAREHOUSED":{"READY_FOR_BATCH","BLOCKED"},"READY_FOR_BATCH":{"BATCHED","BLOCKED"},"BATCHED":{"SHIPPED","READY_FOR_BATCH"},"SHIPPED":{"IN_TRANSIT"},"IN_TRANSIT":{"ARRIVED","BLOCKED"},"ARRIVED":{"CLEARED","BLOCKED"},"CLEARED":{"READY_FOR_PICKUP"},"READY_FOR_PICKUP":{"DELIVERED"},"BLOCKED":{"CONFIRMED","WAREHOUSED","READY_FOR_BATCH","CANCELLED","RETURNED"}}
+OFFICIAL_TRANSITIONS.update({
+    "RECEIVED_AT_ORIGIN": {"WAREHOUSED", "BLOCKED"},
+    "WAREHOUSE_PROCESSING": {"WAREHOUSED", "READY_FOR_BATCH", "BLOCKED"},
+    "READY_FOR_DISPATCH": {"BATCHED", "SHIPPED", "BLOCKED"},
+    "CUSTOMS": {"CLEARED", "BLOCKED"},
+    "ARRIVED_DESTINATION": {"CLEARED", "READY_FOR_PICKUP", "BLOCKED"},
+    "ISSUE": {"CONFIRMED", "WAREHOUSED", "BLOCKED", "CANCELLED"},
+})
 PACKAGE_CONDITIONS = {"UNKNOWN", "GOOD", "DAMAGED", "FRAGILE", "MISSING_INFO", "REPACK_REQUIRED"}
 INVENTORY_STATUSES = {"NOT_STORED", "IN_STOCK", "RESERVED", "GROUPED", "DISPATCHED", "RELEASED"}
 PACKAGE_TYPES = {"carton", "sac", "caisse", "palette", "document", "lot", "other"}
@@ -296,6 +309,13 @@ def _build_filters(
                 or coalesce(p.tracking_id, '') ilike :q
                 or coalesce(p.description, '') ilike :q
                 or coalesce(p.category, '') ilike :q
+                or coalesce(p.supplier_tracking, '') ilike :q
+                or coalesce(p.shipping_mark, '') ilike :q
+                or coalesce(p.order_number, '') ilike :q
+                or coalesce(p.external_reference, '') ilike :q
+                or coalesce(p.shipment_reference, '') ilike :q
+                or coalesce(p.barcode, '') ilike :q
+                or coalesce(p.qr_code_value, '') ilike :q
                 or coalesce(p.warehouse_name, '') ilike :q
                 or coalesce(p.warehouse_location, '') ilike :q
                 or {_client_display_sql()} ilike :q
@@ -361,6 +381,9 @@ def _select_package_sql() -> str:
             p.priority,
             p.assigned_to,
             p.supplier_name,
+            p.supplier_tracking,p.shipping_mark,p.order_number,p.external_reference,p.subcategory,p.goods_classification,
+            p.declared_weight_kg,p.chargeable_weight_kg,p.receiving_mode,p.received_by,p.route_id::text,p.shipping_service_id::text,p.pricing_snapshot,
+            p.expected_at,p.expectation_status,p.return_status,p.return_reason,p.delivered_to_name,p.delivery_otp_verified,
             p.row_version,
             p.origin_country,
             p.origin_city,
@@ -534,17 +557,21 @@ def package_stats(org_id: str) -> dict:
                 select
                     count(*)::int total,
                     count(*) filter (where received_at::date = current_date)::int received_today,
-                    count(*) filter (where status = 'RECEIVED_AT_ORIGIN')::int received,
-                    count(*) filter (where status in ('CREATED','RECEIVED_AT_ORIGIN','WAREHOUSE_PROCESSING'))::int waiting,
-                    count(*) filter (where status = 'READY_FOR_DISPATCH')::int ready_for_dispatch,
-                    count(*) filter (where inventory_status = 'IN_STOCK')::int in_stock,
-                    count(*) filter (where status = 'IN_TRANSIT')::int in_transit,
+                    count(*) filter (where status in ('RECEIVED','RECEIVED_AT_ORIGIN'))::int received,
+                    count(*) filter (where status in ('CREATED','PENDING_VALIDATION','CONFIRMED'))::int waiting,
+                    count(*) filter (where status in ('READY_FOR_BATCH','READY_FOR_DISPATCH'))::int ready_for_dispatch,
+                    count(*) filter (where status in ('RECEIVED','WAREHOUSED','WAREHOUSE_PROCESSING') or inventory_status = 'IN_STOCK')::int in_stock,
+                    count(*) filter (where status in ('SHIPPED','IN_TRANSIT'))::int in_transit,
+                    count(*) filter (where status in ('ARRIVED','ARRIVED_DESTINATION','CLEARED'))::int arrived,
+                    count(*) filter (where status = 'READY_FOR_PICKUP')::int ready_for_pickup,
                     count(*) filter (where status in ('BLOCKED', 'ISSUE') or validation_status in ('BLOCKED', 'REJECTED'))::int issues,
                     count(*) filter (where status = 'DELIVERED')::int delivered,
                     count(*) filter (where priority in ('HIGH','URGENT'))::int priority_count,
                     count(*) filter (where is_fragile)::int fragile_count,
                     coalesce(sum(coalesce(weight_kg, 0)), 0) total_weight_kg,
                     coalesce(sum(coalesce(volume_cbm, 0)), 0) total_volume_cbm,
+                    coalesce(sum(coalesce(declared_value, 0)), 0) total_declared_value,
+                    round(avg(extract(epoch from (coalesce(dispatched_at, delivered_at, now()) - received_at))/3600) filter (where received_at is not null)::numeric, 2) average_processing_hours,
                     coalesce(sum(coalesce(pieces_count, 0)), 0)::int total_pieces
                 from cargo_packages
                 where org_id = :org_id and deleted_at is null
@@ -661,6 +688,8 @@ def get_package(org_id: str, package_id: str) -> dict | None:
             select id::text, code, label, status, sort_order, completed_at, completed_by
             from package_checklist_items where org_id=:org_id and package_id=:package_id order by sort_order
         """), {"org_id": org_id, "package_id": package_id}).fetchall()]
+        package["quality_controls"]=[_safe(dict(r._mapping)) for r in conn.execute(text("select * from package_quality_controls where org_id=:org_id and package_id=:package_id order by checked_at desc"),{"org_id":org_id,"package_id":package_id}).fetchall()]
+        package["operational_alerts"]=[_safe(dict(r._mapping)) for r in conn.execute(text("select * from package_operational_alerts where org_id=:org_id and package_id=:package_id order by created_at desc"),{"org_id":org_id,"package_id":package_id}).fetchall()]
     package["receipt_count"] = 0
     return package
 
@@ -810,7 +839,10 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     dispatched_at, delivered_at, weight_kg, volumetric_weight_kg, length_cm, width_cm,
                     height_cm, volume_cbm, pieces_count, declared_value, declared_currency, is_fragile,
                     notes, fees_total, fees_paid, currency, barcode, qr_code_value, last_scan_location,
-                    last_scan_at, created_by, updated_by, priority, assigned_to, supplier_name
+                    last_scan_at, created_by, updated_by, priority, assigned_to, supplier_name,
+                    supplier_tracking, shipping_mark, order_number, external_reference, subcategory,
+                    goods_classification, declared_weight_kg, receiving_mode, received_by, route_id,
+                    shipping_service_id, expected_at, expectation_status
                 )
                 values (
                     :org_id, :client_id, :dossier_id, :shipment_id, :package_reference, :tracking_id, :source,
@@ -822,7 +854,10 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     :height_cm, :volume_cbm, :pieces_count, :declared_value, :declared_currency, :is_fragile,
                     :notes, :fees_total, :fees_paid, :currency, :barcode, :qr_code_value, :last_scan_location,
                     case when :last_scan_location is not null then now() else null end, :created_by, :updated_by,
-                    :priority, :assigned_to, :supplier_name
+                    :priority, :assigned_to, :supplier_name, :supplier_tracking, :shipping_mark,
+                    :order_number, :external_reference, :subcategory, :goods_classification,
+                    :declared_weight_kg, :receiving_mode, :received_by, :route_id,
+                    :shipping_service_id, :expected_at, :expectation_status
                 )
                 returning id::text
             """),
@@ -877,9 +912,27 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 "created_by": user_id,
                 "updated_by": user_id,
                 "priority":payload.get("priority") or "NORMAL","assigned_to":payload.get("assigned_to"),"supplier_name":payload.get("supplier_name"),
+                "supplier_tracking": payload.get("supplier_tracking"), "shipping_mark": payload.get("shipping_mark"),
+                "order_number": payload.get("order_number"), "external_reference": payload.get("external_reference"),
+                "subcategory": payload.get("subcategory"), "goods_classification": payload.get("goods_classification") or "ORDINARY_GOODS",
+                "declared_weight_kg": payload.get("declared_weight_kg"), "receiving_mode": payload.get("receiving_mode"),
+                "received_by": user_id if payload.get("received_at") else None, "route_id": payload.get("route_id"),
+                "shipping_service_id": payload.get("shipping_service_id"), "expected_at": payload.get("expected_at"),
+                "expectation_status": "MATCHED" if payload.get("expected_at") else None,
             },
         ).fetchone()
         package_id = row[0]
+        if payload.get("supplier_tracking"):
+            expectation=conn.execute(text("""update package_expectations set status='MATCHED',matched_package_id=:package_id,matched_at=now()
+                where id=(select id from package_expectations where org_id=:org_id and status='EXPECTED' and lower(supplier_tracking)=lower(:tracking)
+                and (client_id=:client_id or :client_id is null) order by created_at limit 1) returning id"""),{"package_id":package_id,"org_id":org_id,"tracking":payload["supplier_tracking"],"client_id":dossier["client_id"]}).first()
+            if expectation:
+                conn.execute(text("update cargo_packages set expectation_status='MATCHED' where org_id=:org_id and id=:package_id"),{"org_id":org_id,"package_id":package_id})
+        if (payload.get("status") or "CREATED") in ("RECEIVED","RECEIVED_AT_ORIGIN"):
+            conn.execute(text("""insert into package_notifications(org_id,package_id,channel,notification_type,recipient,message,status,created_by)
+                select :org_id,:package_id,'whatsapp','PACKAGE_RECEIVED',c.phone,
+                concat('Nous confirmons la réception de votre colis ',:reference,'. Poids : ',coalesce(cast(:weight as text),'à confirmer'),' kg. Statut : Reçu.'),'PENDING',:user_id
+                from clients c where c.org_id=:org_id and c.id=:client_id and c.phone is not null"""),{"org_id":org_id,"package_id":package_id,"reference":reference,"weight":payload.get("weight_kg"),"user_id":user_id,"client_id":dossier["client_id"]})
         _insert_package_event(
             conn,
             org_id=org_id,
@@ -907,7 +960,9 @@ def update_package(org_id: str, package_id: str, user_id: str, payload: dict) ->
         "dispatched_at", "delivered_at", "weight_kg", "volumetric_weight_kg", "length_cm", "width_cm",
         "height_cm", "volume_cbm", "pieces_count", "declared_value", "declared_currency", "is_fragile",
         "notes", "fees_total", "fees_paid", "currency", "barcode", "qr_code_value", "last_scan_location",
-        "priority","assigned_to","supplier_name",
+        "priority","assigned_to","supplier_name","supplier_tracking","shipping_mark","order_number",
+        "external_reference","subcategory","goods_classification","declared_weight_kg","receiving_mode",
+        "route_id","shipping_service_id","expected_at",
     }
     data = {key: payload.get(key, existing.get(key)) for key in allowed}
     data["payment_status"] = payload.get("payment_status") or payload.get("payment_clearance_status") or existing.get("payment_status")
@@ -964,6 +1019,11 @@ def update_package(org_id: str, package_id: str, user_id: str, payload: dict) ->
                     qr_code_value = :qr_code_value,
                     last_scan_location = :last_scan_location,
                     priority=:priority, assigned_to=:assigned_to, supplier_name=:supplier_name,
+                    supplier_tracking=:supplier_tracking, shipping_mark=:shipping_mark,
+                    order_number=:order_number, external_reference=:external_reference,
+                    subcategory=:subcategory, goods_classification=:goods_classification,
+                    declared_weight_kg=:declared_weight_kg, receiving_mode=:receiving_mode,
+                    route_id=:route_id, shipping_service_id=:shipping_service_id, expected_at=:expected_at,
                     last_scan_at = case when :last_scan_location is not null then now() else last_scan_at end,
                     updated_by = :updated_by,
                     updated_at = now(), row_version=row_version+1
@@ -1402,3 +1462,102 @@ def package_timeline(org_id: str, package_id: str, *, limit: int = 80) -> list[d
         key=lambda event: str(event.get("occurred_at")),
         reverse=True,
     )[:limit]
+
+def transition_package(org_id,package_id,user_id,new_status,expected_version,reason=None):
+    with engine.begin() as conn:
+        row=conn.execute(text("select * from cargo_packages where org_id=:o and id=:id and deleted_at is null for update"),{"o":org_id,"id":package_id}).mappings().first()
+        if not row:raise HTTPException(404,"package_not_found")
+        if row["row_version"]!=expected_version:raise HTTPException(409,"package_version_conflict")
+        allowed=OFFICIAL_TRANSITIONS.get(row["status"],set())
+        if new_status not in allowed:raise HTTPException(409,"invalid_package_transition")
+        if new_status in("WAREHOUSED","READY_FOR_BATCH") and not row.get("weight_kg"):raise HTTPException(409,"package_weight_required")
+        item=conn.execute(text("update cargo_packages set status=:s,row_version=row_version+1,updated_by=:u,updated_at=now(),received_at=case when :s='RECEIVED' then coalesce(received_at,now()) else received_at end,dispatched_at=case when :s='SHIPPED' then coalesce(dispatched_at,now()) else dispatched_at end,delivered_at=case when :s='DELIVERED' then coalesce(delivered_at,now()) else delivered_at end where org_id=:o and id=:id returning *"),{"s":new_status,"u":user_id,"o":org_id,"id":package_id}).mappings().one()
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="STATUS_CHANGED",title=f"Statut : {new_status}",description=reason,previous_status=row["status"],new_status=new_status,actor_id=user_id,metadata={"version":item["row_version"]})
+    return get_package(org_id,package_id)
+
+def quality_control(org_id,package_id,user_id,payload):
+    with engine.begin() as conn:
+        if not conn.execute(text("select 1 from cargo_packages where org_id=:o and id=:id and deleted_at is null"),{"o":org_id,"id":package_id}).first():raise HTTPException(404,"package_not_found")
+        row=conn.execute(text("insert into package_quality_controls(org_id,package_id,packaging_intact,label_readable,product_compliant,quantity_compliant,no_damage,no_moisture,result,notes,checked_by) values(:o,:id,:packaging_intact,:label_readable,:product_compliant,:quantity_compliant,:no_damage,:no_moisture,:result,:notes,:u) returning *"),{"o":org_id,"id":package_id,"u":user_id,**payload}).mappings().one()
+        conn.execute(text("update cargo_packages set validation_status=case when :r='COMPLIANT' then 'VALIDATED' when :r='REVIEW' then 'NEEDS_REVIEW' else 'BLOCKED' end,package_condition=case when :r='NON_COMPLIANT' then 'DAMAGED' else package_condition end,row_version=row_version+1,updated_at=now() where org_id=:o and id=:id"),{"r":payload["result"],"o":org_id,"id":package_id})
+        _insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="QUALITY_CONTROL",title="Contrôle qualité",description=payload.get("notes"),actor_id=user_id,metadata=dict(row))
+    return get_package(org_id,package_id)
+
+def expectations(org_id,status=None):
+    with engine.connect() as conn:return [_safe(dict(r._mapping)) for r in conn.execute(text(f"select e.*,{_client_display_sql()} client_name,{_dossier_reference_sql()} dossier_reference,w.warehouse_name from package_expectations e join clients c on c.id=e.client_id and c.org_id=e.org_id left join dossiers d on d.id=e.dossier_id and d.org_id=e.org_id left join warehouses w on w.id=e.expected_warehouse_id and w.org_id=e.org_id where e.org_id=:o and (:s is null or e.status=:s) order by e.created_at desc"),{"o":org_id,"s":status}).fetchall()]
+def create_expectation(org_id,user_id,payload):
+    with engine.begin() as conn:
+        row=conn.execute(text("insert into package_expectations(org_id,client_id,dossier_id,supplier_tracking,shipping_mark,order_number,description,expected_warehouse_id,expected_at,created_by) values(:o,:client_id,:dossier_id,:supplier_tracking,:shipping_mark,:order_number,:description,:expected_warehouse_id,:expected_at,:u) returning *"),{"o":org_id,"u":user_id,**payload}).mappings().one();return _safe(dict(row))
+
+def package_saved_views(org_id,user_id):
+    with engine.connect() as conn:return [_safe(dict(r._mapping)) for r in conn.execute(text("select id::text,name,filters,created_at from package_saved_views where org_id=:o and user_id=:u order by name"),{"o":org_id,"u":user_id}).fetchall()]
+
+def save_package_view(org_id,user_id,name,filters):
+    with engine.begin() as conn:return _safe(dict(conn.execute(text("insert into package_saved_views(org_id,user_id,name,filters) values(:o,:u,:n,cast(:f as jsonb)) on conflict(org_id,user_id,name) do update set filters=excluded.filters returning *"),{"o":org_id,"u":user_id,"n":name,"f":json.dumps(filters)}).mappings().one()))
+
+def delete_package_view(org_id,user_id,view_id):
+    with engine.begin() as conn:return bool(conn.execute(text("delete from package_saved_views where org_id=:o and user_id=:u and id=:id returning id"),{"o":org_id,"u":user_id,"id":view_id}).first())
+
+def package_alerts(org_id,status=None):
+    with engine.connect() as conn:return [_safe(dict(r._mapping)) for r in conn.execute(text("select a.*,p.package_reference,p.tracking_id from package_operational_alerts a join cargo_packages p on p.id=a.package_id and p.org_id=a.org_id where a.org_id=:o and (:s is null or a.status=:s) order by case a.severity when 'CRITICAL' then 0 when 'HIGH' then 1 else 2 end,a.created_at desc"),{"o":org_id,"s":status}).fetchall()]
+
+def resolve_package_alert(org_id,alert_id,user_id,resolution):
+    with engine.begin() as conn:
+        row=conn.execute(text("update package_operational_alerts set status='RESOLVED',resolved_by=:u,resolved_at=now(),resolution=:r where org_id=:o and id=:id and status<>'RESOLVED' returning *"),{"o":org_id,"id":alert_id,"u":user_id,"r":resolution}).mappings().first()
+        if not row:raise HTTPException(404,"package_alert_not_found")
+        return _safe(dict(row))
+
+def bulk_package_operation(org_id,user_id,idempotency_key,operation_type,package_ids,payload):
+    if not package_ids or len(package_ids)>500:raise HTTPException(422,"invalid_package_selection")
+    allowed={"STATUS","MOVE","ASSIGN","NOTIFY","ARCHIVE"}
+    if operation_type not in allowed:raise HTTPException(422,"invalid_bulk_operation")
+    with engine.begin() as conn:
+        previous=conn.execute(text("select * from package_bulk_operations where org_id=:o and idempotency_key=:k"),{"o":org_id,"k":idempotency_key}).mappings().first()
+        if previous:return _safe(dict(previous))
+        valid=[str(r[0]) for r in conn.execute(text("select id from cargo_packages where org_id=:o and id=any(cast(:ids as uuid[])) and deleted_at is null for update"),{"o":org_id,"ids":package_ids}).fetchall()]
+        if len(valid)!=len(set(package_ids)):raise HTTPException(404,"package_selection_contains_unknown_item")
+        if operation_type=="STATUS":
+            target=payload.get("status")
+            if target not in PACKAGE_STATUSES:raise HTTPException(422,"invalid_status")
+            conn.execute(text("update cargo_packages set status=:s,row_version=row_version+1,updated_by=:u,updated_at=now() where org_id=:o and id=any(cast(:ids as uuid[]))"),{"s":target,"u":user_id,"o":org_id,"ids":valid})
+        elif operation_type=="MOVE":
+            if not payload.get("warehouse_name"):raise HTTPException(422,"warehouse_required")
+            conn.execute(text("update cargo_packages set warehouse_name=:w,warehouse_zone=:z,warehouse_rack=:r,warehouse_location=:l,inventory_status='IN_STOCK',row_version=row_version+1,updated_by=:u,updated_at=now() where org_id=:o and id=any(cast(:ids as uuid[]))"),{"w":payload["warehouse_name"],"z":payload.get("zone"),"r":payload.get("rack"),"l":payload.get("location"),"u":user_id,"o":org_id,"ids":valid})
+        elif operation_type=="ASSIGN":
+            conn.execute(text("update cargo_packages set assigned_to=:a,row_version=row_version+1,updated_by=:u,updated_at=now() where org_id=:o and id=any(cast(:ids as uuid[]))"),{"a":payload.get("assigned_to"),"u":user_id,"o":org_id,"ids":valid})
+        elif operation_type=="ARCHIVE":
+            conn.execute(text("update cargo_packages set deleted_at=now(),updated_by=:u,updated_at=now() where org_id=:o and id=any(cast(:ids as uuid[]))"),{"u":user_id,"o":org_id,"ids":valid})
+        elif operation_type=="NOTIFY":
+            if not payload.get("message"):raise HTTPException(422,"message_required")
+            conn.execute(text("insert into package_notifications(org_id,package_id,channel,notification_type,recipient,message,status,created_by) select p.org_id,p.id,:channel,'BULK_UPDATE',c.phone,:message,'PENDING',:u from cargo_packages p left join clients c on c.id=p.client_id and c.org_id=p.org_id where p.org_id=:o and p.id=any(cast(:ids as uuid[]))"),{"channel":payload.get("channel","whatsapp"),"message":payload["message"],"u":user_id,"o":org_id,"ids":valid})
+        result={"affected":len(valid)}
+        return _safe(dict(conn.execute(text("insert into package_bulk_operations(org_id,idempotency_key,operation_type,package_ids,payload,status,result,created_by,completed_at) values(:o,:k,:t,cast(:ids as uuid[]),cast(:p as jsonb),'COMPLETED',cast(:r as jsonb),:u,now()) returning *"),{"o":org_id,"k":idempotency_key,"t":operation_type,"ids":valid,"p":json.dumps(payload),"r":json.dumps(result),"u":user_id}).mappings().one()))
+
+def price_package(org_id,package_id,user_id,service_id):
+    from app.routes_services.repository import simulate
+    item=get_package(org_id,package_id)
+    if not item:raise HTTPException(404,"package_not_found")
+    weight=float(item.get("weight_kg") or 0);volume=float(item.get("volume_cbm") or 0);result=simulate(org_id,service_id,weight,volume,float(item.get("declared_value") or 0),item.get("client_id"),item.get("goods_classification") or item.get("category"),user_id)
+    with engine.begin() as conn:conn.execute(text("update cargo_packages set shipping_service_id=:s,chargeable_weight_kg=:w,fees_total=:total,currency=:currency,pricing_snapshot=cast(:snap as jsonb),row_version=row_version+1,updated_at=now() where org_id=:o and id=:id"),{"s":service_id,"w":result["chargeable_weight_kg"],"total":result["total_minor"]/100,"currency":result["currency"],"snap":json.dumps(result,default=str),"o":org_id,"id":package_id});_insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="PRICING_CALCULATED",title="Tarification calculée",description=f"{result['total_minor']/100:.2f} {result['currency']}",actor_id=user_id,metadata=result)
+    return get_package(org_id,package_id)
+
+def compatible_departures(org_id,package_id):
+    item=get_package(org_id,package_id)
+    if not item:raise HTTPException(404,"package_not_found")
+    with engine.connect() as conn:return [_safe(dict(r._mapping)) for r in conn.execute(text("select d.id,d.departure_code,d.scheduled_at,d.status,d.capacity_weight_kg,d.reserved_weight_kg,d.capacity_packages,d.reserved_packages,s.service_name,r.route_name from cargo_departures d join shipping_services s on s.id=d.shipping_service_id and s.org_id=d.org_id join shipping_routes r on r.id=s.route_id and r.org_id=s.org_id where d.org_id=:o and d.status in('OPEN','PLANNED','PENDING_CONFIRMATION','CONFIRMED') and (:service is null or s.id=:service) and (:route is null or r.id=:route) and (d.cutoff_at is null or d.cutoff_at>now()) order by d.scheduled_at limit 50"),{"o":org_id,"service":item.get("shipping_service_id"),"route":item.get("route_id")}).fetchall()]
+
+def delivery_proof(org_id,package_id,user_id,payload):
+    with engine.begin() as conn:
+        row=conn.execute(text("select * from cargo_packages where org_id=:o and id=:id and deleted_at is null for update"),{"o":org_id,"id":package_id}).mappings().first()
+        if not row:raise HTTPException(404,"package_not_found")
+        proof=conn.execute(text("insert into package_delivery_proofs(org_id,package_id,recipient_name,recipient_document,signature_path,photo_path,otp_verified,delivered_by) values(:o,:id,:recipient_name,:recipient_document,:signature_path,:photo_path,:otp_verified,:u) returning *"),{"o":org_id,"id":package_id,"u":user_id,**payload}).mappings().one()
+        conn.execute(text("update cargo_packages set status='DELIVERED',delivered_at=now(),delivered_to_name=:n,delivery_signature_path=:s,delivery_photo_path=:p,delivery_otp_verified=:otp,row_version=row_version+1,updated_at=now() where org_id=:o and id=:id"),{"n":payload["recipient_name"],"s":payload.get("signature_path"),"p":payload.get("photo_path"),"otp":payload.get("otp_verified",False),"o":org_id,"id":package_id});_insert_package_event(conn,org_id=org_id,package_id=package_id,event_type="DELIVERED",title="Colis livré",description=payload["recipient_name"],actor_id=user_id,metadata=dict(proof))
+    return get_package(org_id,package_id)
+
+def detect_package_alerts(org_id):
+    rules=[("STALE_WAREHOUSE","HIGH","Colis immobilisé en entrepôt depuis plus de 7 jours","received_at<now()-interval '7 days' and status in ('RECEIVED','WAREHOUSED','WAREHOUSE_PROCESSING')"),("MISSING_CLIENT","CRITICAL","Colis sans client","client_id is null"),("MISSING_DOSSIER","HIGH","Colis sans dossier","dossier_id is null"),("MISSING_WEIGHT","MEDIUM","Colis sans poids","weight_kg is null and status not in ('CREATED','PENDING_VALIDATION')"),("PAID_BLOCKED","HIGH","Colis payé mais bloqué","payment_status in ('PAID','CLEARED') and status='BLOCKED'"),("ARRIVED_NOT_PICKED","MEDIUM","Colis arrivé non retiré","status in ('ARRIVED','CLEARED','READY_FOR_PICKUP') and updated_at<now()-interval '5 days'")]
+    created=0
+    with engine.begin() as conn:
+        for typ,sev,msg,condition in rules:
+            result=conn.execute(text(f"insert into package_operational_alerts(org_id,package_id,alert_type,severity,message) select org_id,id,:t,:s,:m from cargo_packages where org_id=:o and deleted_at is null and {condition} on conflict(package_id,alert_type,status) do nothing returning id"),{"t":typ,"s":sev,"m":msg,"o":org_id}).fetchall();created+=len(result)
+    return created

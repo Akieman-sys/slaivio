@@ -12,7 +12,8 @@ export type PackageStatus =
   | "DELIVERED"
   | "BLOCKED"
   | "ISSUE"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "PENDING_VALIDATION"|"CONFIRMED"|"RECEIVED"|"WAREHOUSED"|"READY_FOR_BATCH"|"BATCHED"|"SHIPPED"|"ARRIVED"|"CLEARED"|"RETURNED";
 
 export type PackageCondition = "UNKNOWN" | "GOOD" | "DAMAGED" | "FRAGILE" | "MISSING_INFO" | "REPACK_REQUIRED";
 export type InventoryStatus = "NOT_STORED" | "IN_STOCK" | "RESERVED" | "GROUPED" | "DISPATCHED" | "RELEASED";
@@ -50,6 +51,11 @@ export type PackageRecord = {
   warehouse_location: string | null;
   warehouse_aisle?: string|null; warehouse_shelf?:string|null; warehouse_position?:string|null;
   priority?: "LOW"|"NORMAL"|"HIGH"|"URGENT"; assigned_to?:string|null; supplier_name?:string|null; row_version?:number;
+  supplier_tracking?:string|null; shipping_mark?:string|null; order_number?:string|null; external_reference?:string|null;
+  subcategory?:string|null; goods_classification?:string|null; declared_weight_kg?:number|null; chargeable_weight_kg?:number|null;
+  receiving_mode?:string|null; received_by?:string|null; route_id?:string|null; shipping_service_id?:string|null; pricing_snapshot?:Record<string,unknown>;
+  expected_at?:string|null; expectation_status?:string|null; return_status?:string|null; return_reason?:string|null;
+  delivered_to_name?:string|null; delivery_otp_verified?:boolean;
   origin_country: string | null;
   origin_city: string | null;
   destination_country: string | null;
@@ -106,6 +112,8 @@ export type PackageRecord = {
   notes_items?: PackageNote[];
   documents?: PackageDocument[];
   checklist?: PackageChecklistItem[];
+  quality_controls?:Array<Record<string,unknown>>;
+  operational_alerts?:Array<Record<string,unknown>>;
 };
 
 export type PackageMovement = { id:string; from_warehouse:string|null; from_zone:string|null; from_aisle:string|null; from_shelf:string|null; from_position:string|null; to_warehouse:string|null; to_zone:string|null; to_aisle:string|null; to_shelf:string|null; to_position:string|null; reason:string|null; moved_by:string; created_at:string };
@@ -191,6 +199,7 @@ export type PackageStats = {
   total_volume_cbm: number;
   total_pieces?: number;
   priority_count?:number; fragile_count?:number;
+  arrived?:number; ready_for_pickup?:number; total_declared_value?:number; average_processing_hours?:number|null;
 };
 
 export type PackagePayload = {
@@ -241,6 +250,9 @@ export type PackagePayload = {
   qr_code_value?: string | null;
   last_scan_location?: string | null;
   priority?:"LOW"|"NORMAL"|"HIGH"|"URGENT";assigned_to?:string|null;supplier_name?:string|null;
+  supplier_tracking?:string|null;shipping_mark?:string|null;order_number?:string|null;external_reference?:string|null;
+  subcategory?:string|null;goods_classification?:string|null;declared_weight_kg?:number|null;receiving_mode?:string|null;
+  route_id?:string|null;shipping_service_id?:string|null;expected_at?:string|null;
 };
 
 export type PackagesResponse = {
@@ -365,3 +377,17 @@ export async function getPackageMediaUrl(id:string,mediaId:string){return (await
 export async function getPackageLabel(id:string,kind:"barcode"|"qr"){return (await api.get<Blob>(`/packages/${id}/label/${kind}`,{responseType:"blob"})).data}
 export type PackageAnalytics={summary:{average_storage_days:number|null;average_before_dispatch_days:number|null;anomaly_rate:number|null};daily:Array<{day:string;count:number;weight_kg:number}>;warehouses:Array<{label:string;count:number;weight_kg:number;volume_cbm:number}>;suppliers:Array<{label:string;count:number}>;destinations:Array<{label:string;count:number}>;capacity:Array<{label:string;occupied:number;capacity:number}>};
 export async function getPackageAnalytics(){return (await api.get<{analytics:PackageAnalytics}>("/packages/analytics")).data.analytics}
+export async function transitionPackageState(id:string,new_status:string,expected_version:number,reason?:string){return(await api.post<{package:PackageRecord}>(`/packages/${id}/transition`,{new_status,expected_version,reason})).data.package}
+export async function qualityControlPackage(id:string,payload:Record<string,unknown>){return(await api.post<{package:PackageRecord}>(`/packages/${id}/quality-control`,payload)).data.package}
+export async function pricePackage(id:string,service_id:string){return(await api.post<{package:PackageRecord}>(`/packages/${id}/pricing`,{service_id})).data.package}
+export async function compatiblePackageDepartures(id:string){return(await api.get<{items:Array<Record<string,unknown>>}>(`/packages/${id}/compatible-departures`)).data.items}
+export async function listExpectedPackages(status?:string){return(await api.get<{items:Array<Record<string,unknown>>}>("/packages/expected",{params:{status}})).data.items}
+export async function createExpectedPackage(payload:Record<string,unknown>){return(await api.post("/packages/expected",payload)).data}
+export async function addPackageDeliveryProof(id:string,payload:Record<string,unknown>){return(await api.post<{package:PackageRecord}>(`/packages/${id}/delivery-proof`,payload)).data.package}
+export async function detectPackageAlerts(){return(await api.post<{created:number}>("/packages/alerts/detect")).data}
+export async function listPackageAlerts(status?:string){return(await api.get<{items:Array<Record<string,unknown>>}>("/packages/alerts",{params:{status}})).data.items}
+export async function resolvePackageAlert(id:string,resolution:string){return(await api.patch(`/packages/alerts/${id}`,{resolution})).data}
+export async function listPackageViews(){return(await api.get<{items:Array<{id:string;name:string;filters:Record<string,unknown>}>}>("/packages/views")).data.items}
+export async function savePackageView(name:string,filters:Record<string,unknown>){return(await api.post("/packages/views",{name,filters})).data}
+export async function deletePackageView(id:string){return(await api.delete(`/packages/views/${id}`)).data}
+export async function bulkPackageOperation(operation_type:string,package_ids:string[],payload:Record<string,unknown>={}){return(await api.post("/packages/bulk",{idempotency_key:crypto.randomUUID(),operation_type,package_ids,payload})).data}

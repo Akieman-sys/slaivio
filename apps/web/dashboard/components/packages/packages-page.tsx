@@ -50,6 +50,7 @@ import {
   movePackage, weighPackage, addPackageNote, updatePackageChecklist,
   uploadPackageDocument, getPackageDocumentDownload, archivePackage,
   restorePackage,listArchivedPackages,scanPackageLabel,uploadPackageMedia,getPackageMediaUrl,getPackageAnalytics,
+  transitionPackageState,qualityControlPackage,compatiblePackageDepartures,addPackageDeliveryProof,
   type PackageAnalytics,
   type AnomalySeverity,
   type InventoryStatus,
@@ -78,6 +79,16 @@ const statusLabels: Record<PackageStatus, string> = {
   BLOCKED: "Bloqué",
   ISSUE: "Anomalie",
   CANCELLED: "Annulé",
+  PENDING_VALIDATION: "À valider",
+  CONFIRMED: "Confirmé",
+  RECEIVED: "Reçu",
+  WAREHOUSED: "En entrepôt",
+  READY_FOR_BATCH: "Prêt au groupage",
+  BATCHED: "Groupé",
+  SHIPPED: "Expédié",
+  ARRIVED: "Arrivé",
+  CLEARED: "Dédouané",
+  RETURNED: "Retourné",
 };
 
 const statusStyles: Record<PackageStatus, string> = {
@@ -93,6 +104,16 @@ const statusStyles: Record<PackageStatus, string> = {
   BLOCKED: "bg-red-50 text-red-700 ring-red-100",
   ISSUE: "bg-red-50 text-red-700 ring-red-100",
   CANCELLED: "bg-gray-100 text-gray-700 ring-gray-200",
+  PENDING_VALIDATION: "bg-amber-50 text-amber-700 ring-amber-100",
+  CONFIRMED: "bg-sky-50 text-sky-700 ring-sky-100",
+  RECEIVED: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+  WAREHOUSED: "bg-teal-50 text-teal-700 ring-teal-100",
+  READY_FOR_BATCH: "bg-cyan-50 text-cyan-700 ring-cyan-100",
+  BATCHED: "bg-violet-50 text-violet-700 ring-violet-100",
+  SHIPPED: "bg-blue-50 text-blue-700 ring-blue-100",
+  ARRIVED: "bg-purple-50 text-purple-700 ring-purple-100",
+  CLEARED: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+  RETURNED: "bg-rose-50 text-rose-700 ring-rose-100",
 };
 
 const conditionLabels: Record<PackageCondition, string> = {
@@ -166,12 +187,17 @@ const emptyStats: PackageStats = {
 
 const views: Array<{ key: string; label: string; status?: PackageStatus; inventory?: InventoryStatus }> = [
   { key: "all", label: "Tous" },
+  { key: "expected", label: "Colis attendus" },
+  { key: "unidentified", label: "Non identifiés" },
+  { key: "pending", label: "À valider", status: "PENDING_VALIDATION" },
   { key: "received", label: "Reçus entrepôt", status: "RECEIVED_AT_ORIGIN" },
   { key: "review", label: "À vérifier" },
   { key: "stock", label: "En stock", inventory: "IN_STOCK" },
   { key: "ready", label: "Prêts à expédier", status: "READY_FOR_DISPATCH" },
   { key: "transit", label: "En transit", status: "IN_TRANSIT" },
   { key: "arrived", label: "Arrivés", status: "ARRIVED_DESTINATION" },
+  { key: "pickup", label: "Prêts au retrait", status: "READY_FOR_PICKUP" },
+  { key: "blocked", label: "Bloqués", status: "BLOCKED" },
   { key: "issues", label: "Anomalies" },
   { key: "delivered", label: "Livrés", status: "DELIVERED" },
   { key: "archived", label: "Archivés" },
@@ -799,7 +825,7 @@ function PackageDetails({
           </div>
 
           <div className={`flex-1 overflow-y-auto p-5 ${loading ? "opacity-60" : ""}`}>
-            {activeTab === "summary" && <SummaryTab item={item} />}
+            {activeTab === "summary" && <SummaryTab item={item} onUpdated={refreshPackage} />}
             {activeTab === "dossier" && <DossierTab item={item} />}
             {activeTab === "measures" && <MeasuresTab item={item} />}
             {activeTab === "warehouse" && <WarehouseTab item={item} onUpdated={refreshPackage} />}
@@ -819,7 +845,7 @@ function PackageDetails({
   );
 }
 
-function SummaryTab({ item }: { item: PackageRecord }) {
+function SummaryTab({ item,onUpdated }: { item: PackageRecord;onUpdated:(item:PackageRecord)=>void }) {
   return (
     <div className="space-y-5">
       <Section title="Résumé opérationnel">
@@ -846,8 +872,24 @@ function SummaryTab({ item }: { item: PackageRecord }) {
         <Field label="Montant payé" value={formatMoney(item.fees_paid, item.currency)} />
         <Field label="Statut paiement" value={paymentLabels[item.payment_clearance_status] || item.payment_clearance_status} />
       </Section>
+      <PhysicalLifecycle item={item} onUpdated={onUpdated}/>
     </div>
   );
+}
+
+const lifecycle:Record<string,Array<[PackageStatus,string]>>={
+  CREATED:[["PENDING_VALIDATION","Soumettre à validation"],["CONFIRMED","Confirmer"]],PENDING_VALIDATION:[["CONFIRMED","Confirmer"],["BLOCKED","Bloquer"]],CONFIRMED:[["RECEIVED","Marquer reçu"]],
+  RECEIVED:[["WAREHOUSED","Mettre en entrepôt"],["BLOCKED","Bloquer"]],RECEIVED_AT_ORIGIN:[["WAREHOUSED","Mettre en entrepôt"]],WAREHOUSE_PROCESSING:[["WAREHOUSED","Confirmer le stockage"]],
+  WAREHOUSED:[["READY_FOR_BATCH","Prêt au groupage"],["BLOCKED","Bloquer"]],READY_FOR_BATCH:[["BATCHED","Ajouter au batch"]],READY_FOR_DISPATCH:[["BATCHED","Ajouter au batch"],["SHIPPED","Marquer expédié"]],
+  BATCHED:[["SHIPPED","Marquer expédié"]],SHIPPED:[["IN_TRANSIT","En transit"]],IN_TRANSIT:[["ARRIVED","Marquer arrivé"],["BLOCKED","Bloquer"]],ARRIVED:[["CLEARED","Dédouané"]],ARRIVED_DESTINATION:[["CLEARED","Dédouané"],["READY_FOR_PICKUP","Prêt au retrait"]],CUSTOMS:[["CLEARED","Dédouané"]],CLEARED:[["READY_FOR_PICKUP","Prêt au retrait"]]
+};
+function PhysicalLifecycle({item,onUpdated}:{item:PackageRecord;onUpdated:(item:PackageRecord)=>void}){
+ const[busy,setBusy]=useState(false),[error,setError]=useState(""),[departures,setDepartures]=useState<Array<Record<string,unknown>>>([]);
+ async function move(next:PackageStatus){setBusy(true);setError("");try{onUpdated(await transitionPackageState(item.id,next,item.row_version||1,next==="BLOCKED"?(prompt("Motif du blocage")||undefined):undefined))}catch(e){setError(apiErrorMessage(e))}finally{setBusy(false)}}
+ async function quality(result:"COMPLIANT"|"REVIEW"|"NON_COMPLIANT"){setBusy(true);try{onUpdated(await qualityControlPackage(item.id,{packaging_intact:result==="COMPLIANT",label_readable:true,product_compliant:result==="COMPLIANT",quantity_compliant:result==="COMPLIANT",no_damage:result!=="NON_COMPLIANT",no_moisture:true,result,notes:prompt("Observation du contrôle qualité")||undefined}))}catch(e){setError(apiErrorMessage(e))}finally{setBusy(false)}}
+ async function proof(){const recipient=prompt("Nom complet du réceptionnaire");if(!recipient)return;setBusy(true);try{onUpdated(await addPackageDeliveryProof(item.id,{recipient_name:recipient,otp_verified:window.confirm("OTP vérifié ?")}))}catch(e){setError(apiErrorMessage(e))}finally{setBusy(false)}}
+ async function find(){try{setDepartures(await compatiblePackageDepartures(item.id))}catch(e){setError(apiErrorMessage(e))}}
+ return <Section title="Cycle de vie physique"><div className="flex flex-wrap gap-2">{(lifecycle[item.status]||[]).map(([s,l])=><button disabled={busy} key={s} onClick={()=>move(s)} className={primaryButtonClass}>{l}</button>)}<button disabled={busy} onClick={()=>quality("COMPLIANT")} className={buttonClass}>Contrôle conforme</button><button disabled={busy} onClick={()=>quality("NON_COMPLIANT")} className={buttonClass}>Signaler non-conformité</button><button disabled={busy} onClick={find} className={buttonClass}>Départs compatibles</button>{item.status==="READY_FOR_PICKUP"&&<button disabled={busy} onClick={proof} className={primaryButtonClass}>Preuve de retrait</button>}</div>{departures.length>0&&<div className="mt-3 space-y-2">{departures.map((d,i)=><div key={String(d.id||i)} className="border-t pt-2 text-[12px]"><b>{String(d.departure_code||"Départ")}</b> · {String(d.route_name||"")} · {formatDate(String(d.scheduled_at||""))}</div>)}</div>}{error&&<p className="mt-2 text-[12px] text-red-600">{error}</p>}</Section>
 }
 
 function MeasuresTab({ item }: { item: PackageRecord }) {

@@ -35,6 +35,7 @@ from app.ai.services.auto_reply_service import (
 from app.db.webhook_idempotency_repository import (
     claim_event,
 )
+from app.db.broadcast_repository import sync_delivery as sync_broadcast_delivery
 from app.platform.quarantine_service import quarantine_inbound_event
 from app.services.meta_webhook_security import validate_meta_signature
 
@@ -180,6 +181,7 @@ async def meta_whatsapp_webhook(request: Request):
                     provider_message_id=provider_message_id,
                     provider_status=status,
                 )
+                sync_broadcast_delivery(provider_message_id,status)
 
             org_id = notification.get("org_id") if notification else (
                 org_settings.get("org_id") if org_settings else None

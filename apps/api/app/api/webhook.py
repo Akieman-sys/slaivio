@@ -41,6 +41,7 @@ from app.db.followup_repository import (
     cancel_pending_followups_for_dossier,
     link_whatsapp_response,
 )
+from app.db.broadcast_repository import link_reply as link_broadcast_reply
 from app.services.escalation_service import (
     should_create_escalation,
     create_escalation_from_context,
@@ -145,6 +146,7 @@ async def process_normalized_whatsapp_message(
         message_id=normalized_message.provider_message_id,
         body=normalized_message.text_body or "",
     )
+    linked_broadcast = link_broadcast_reply(org_id,client_id,normalized_message.text_body or "")
 
     cancelled_followups = cancel_pending_followups_for_dossier(
         org_id=org_id,

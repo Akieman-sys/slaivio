@@ -1,0 +1,67 @@
+-- SLAIVIO Campaign & Audience Messaging Center. Additive and idempotent.
+create table if not exists broadcasts(
+ id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),title text not null,message text not null,broadcast_type text not null default 'INFORMATIONAL',target_type text not null default 'DYNAMIC',status text not null default 'DRAFT',created_by text,scheduled_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+alter table broadcasts add column if not exists reference text;
+alter table broadcasts add column if not exists workspace_id uuid references organization_workspaces(id);
+alter table broadcasts add column if not exists objective text not null default 'INFORM';
+alter table broadcasts add column if not exists channels text[] not null default '{WHATSAPP}';
+alter table broadcasts add column if not exists audience_id uuid;
+alter table broadcasts add column if not exists template_id uuid;
+alter table broadcasts add column if not exists language_versions jsonb not null default '{}'::jsonb;
+alter table broadcasts add column if not exists media jsonb not null default '[]'::jsonb;
+alter table broadcasts add column if not exists variable_defaults jsonb not null default '{}'::jsonb;
+alter table broadcasts add column if not exists timezone_mode text not null default 'WORKSPACE';
+alter table broadcasts add column if not exists approved_by text;
+alter table broadcasts add column if not exists approved_at timestamptz;
+alter table broadcasts add column if not exists started_at timestamptz;
+alter table broadcasts add column if not exists completed_at timestamptz;
+alter table broadcasts add column if not exists paused_at timestamptz;
+alter table broadcasts add column if not exists archived_at timestamptz;
+alter table broadcasts add column if not exists estimated_cost numeric(16,4);
+alter table broadcasts add column if not exists actual_cost numeric(16,4);
+alter table broadcasts add column if not exists attributed_revenue numeric(16,2);
+alter table broadcasts add column if not exists row_version integer not null default 1;
+update broadcasts set reference='CAM-'||upper(substr(id::text,1,8)) where reference is null;
+alter table broadcasts alter column reference set not null;
+create unique index if not exists idx_broadcast_reference on broadcasts(org_id,reference);
+
+create table if not exists broadcast_audiences(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),workspace_id uuid references organization_workspaces(id),name text not null,audience_type text not null check(audience_type in('STATIC','DYNAMIC')),filter_config jsonb not null default '{}'::jsonb,estimated_count integer not null default 0,created_by text not null,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(org_id,name));
+create table if not exists broadcast_templates(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),workspace_id uuid references organization_workspaces(id),name text not null,channel text not null,category text not null,language text not null default 'fr',subject text,preheader text,body text not null,variables text[] not null default '{}',media_config jsonb not null default '{}'::jsonb,buttons jsonb not null default '[]'::jsonb,provider_template_name text,provider_status text not null default 'DRAFT',active boolean not null default true,row_version integer not null default 1,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(org_id,name,channel,language));
+alter table broadcasts drop constraint if exists broadcasts_audience_id_fkey;alter table broadcasts add constraint broadcasts_audience_id_fkey foreign key(audience_id) references broadcast_audiences(id);
+alter table broadcasts drop constraint if exists broadcasts_template_id_fkey;alter table broadcasts add constraint broadcasts_template_id_fkey foreign key(template_id) references broadcast_templates(id);
+create table if not exists broadcast_consents(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),client_id uuid references clients(id),contact text not null,channel text not null,consent_status text not null check(consent_status in('OPTED_IN','OPTED_OUT','UNKNOWN')),source text,source_ip inet,evidence jsonb not null default '{}'::jsonb,recorded_at timestamptz not null default now(),unique(org_id,contact,channel));
+create table if not exists broadcast_suppressions(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),client_id uuid references clients(id),contact text not null,channel text not null,reason text not null,source text,created_at timestamptz not null default now(),unique(org_id,contact,channel));
+create table if not exists broadcast_recipients(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id),broadcast_id uuid not null references broadcasts(id),client_id uuid references clients(id),dossier_id uuid references dossiers(id),shipment_id uuid,recipient_phone text,recipient_email text,channel text not null default 'WHATSAPP',language text not null default 'fr',rendered_message text,rendered_subject text,status text not null default 'SNAPSHOT',exclusion_reason text,idempotency_key text not null,notification_id uuid,provider_message_id text,error_code text,error_message text,retry_count integer not null default 0,queued_at timestamptz,sent_at timestamptz,delivered_at timestamptz,read_at timestamptz,clicked_at timestamptz,replied_at timestamptz,opted_out_at timestamptz,converted_at timestamptz,created_at timestamptz not null default now(),unique(org_id,idempotency_key));
+-- Upgrade installations that already had the legacy recipient table.
+alter table broadcast_recipients add column if not exists recipient_email text;
+alter table broadcast_recipients add column if not exists channel text not null default 'WHATSAPP';
+alter table broadcast_recipients add column if not exists language text not null default 'fr';
+alter table broadcast_recipients add column if not exists rendered_message text;
+alter table broadcast_recipients add column if not exists rendered_subject text;
+alter table broadcast_recipients add column if not exists exclusion_reason text;
+alter table broadcast_recipients add column if not exists idempotency_key text;
+alter table broadcast_recipients add column if not exists provider_message_id text;
+alter table broadcast_recipients add column if not exists error_code text;
+alter table broadcast_recipients add column if not exists error_message text;
+alter table broadcast_recipients add column if not exists retry_count integer not null default 0;
+alter table broadcast_recipients add column if not exists queued_at timestamptz;
+alter table broadcast_recipients add column if not exists sent_at timestamptz;
+alter table broadcast_recipients add column if not exists delivered_at timestamptz;
+alter table broadcast_recipients add column if not exists read_at timestamptz;
+alter table broadcast_recipients add column if not exists clicked_at timestamptz;
+alter table broadcast_recipients add column if not exists replied_at timestamptz;
+alter table broadcast_recipients add column if not exists opted_out_at timestamptz;
+alter table broadcast_recipients add column if not exists converted_at timestamptz;
+update broadcast_recipients set idempotency_key=broadcast_id::text||':WHATSAPP:'||coalesce(recipient_phone,id::text) where idempotency_key is null;
+alter table broadcast_recipients alter column idempotency_key set not null;
+create unique index if not exists idx_broadcast_recipient_idempotency on broadcast_recipients(org_id,idempotency_key);
+create table if not exists broadcast_events(id bigserial primary key,org_id text not null references organizations(id),broadcast_id uuid references broadcasts(id),recipient_id uuid references broadcast_recipients(id),event_type text not null,payload jsonb not null default '{}'::jsonb,actor_id text,created_at timestamptz not null default now());
+create table if not exists broadcast_settings(id uuid primary key default gen_random_uuid(),org_id text not null references organizations(id) unique,quiet_hours_start time not null default '21:00',quiet_hours_end time not null default '08:00',allowed_weekdays integer[] not null default '{1,2,3,4,5,6}',marketing_frequency_days integer not null default 3,max_marketing_per_week integer not null default 2,batch_size integer not null default 100,failure_pause_threshold numeric(5,2) not null default 25,require_approval_above integer not null default 1000,updated_at timestamptz not null default now());
+insert into broadcast_settings(org_id) select id from organizations on conflict(org_id) do nothing;
+insert into permissions(permission_code,description) values ('broadcasts.read','Consulter les campagnes'),('broadcasts.create','Créer campagnes et audiences'),('broadcasts.update','Modifier les brouillons'),('broadcasts.approve','Approuver les campagnes'),('broadcasts.send','Programmer, lancer, suspendre et annuler'),('broadcasts.templates','Gérer les modèles'),('broadcasts.audiences','Gérer audiences et consentements'),('broadcasts.analytics','Consulter les analytics'),('broadcasts.export','Exporter les audiences') on conflict(permission_code) do update set description=excluded.description;
+insert into role_permissions(role_id,permission_id) select r.id,p.id from organization_roles r cross join permissions p where (r.role_code='OWNER' and p.permission_code like 'broadcasts.%') or (r.role_code='MANAGER' and p.permission_code like 'broadcasts.%') or (r.role_code in('MARKETING','SUPPORT') and p.permission_code in('broadcasts.read','broadcasts.create','broadcasts.update','broadcasts.templates','broadcasts.audiences','broadcasts.analytics')) on conflict do nothing;
+create index if not exists idx_broadcast_campaigns on broadcasts(org_id,status,scheduled_at) where archived_at is null;
+create index if not exists idx_broadcast_recipient_queue on broadcast_recipients(org_id,status,queued_at);
+create index if not exists idx_broadcast_events on broadcast_events(org_id,broadcast_id,created_at desc);
+revoke all on broadcasts,broadcast_audiences,broadcast_templates,broadcast_consents,broadcast_suppressions,broadcast_recipients,broadcast_events,broadcast_settings from public;

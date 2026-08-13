@@ -9,3 +9,5 @@ export async function executeFollowup(id:string){return(await api.post(`/followu
 export async function followupRules(){return(await api.get('/followups/rules')).data}
 export async function saveFollowupRule(payload:Record<string,unknown>){return(await api.post('/followups/rules',payload)).data}
 export async function saveFollowupSequence(payload:Record<string,unknown>){return(await api.post('/followups/sequences',payload)).data}
+export async function detectFollowups(){return(await api.post('/followups/detect')).data}
+export async function addFollowupNote(id:string,body:string){return(await api.post(`/followups/${id}/notes`,{body})).data}

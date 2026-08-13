@@ -177,7 +177,7 @@ def _attention_items(conn, org_id: str, tables: set[str]) -> list[dict]:
         rows = _optional_rows(conn, "attention_followups", """
             select id::text, coalesce(followup_type, 'Relance') title, status,
                    due_at created_at from followup_tasks
-            where org_id = :org_id and status = 'PENDING' and due_at <= now()
+            where org_id = :org_id and status in ('DUE','FAILED','ESCALATED') and due_at <= now()
             order by due_at asc limit 3
         """, {"org_id": org_id})
         items.extend(dict(item, kind="followup", message="Relance arrivée à échéance", href="/app/followups", priority="NORMAL") for item in rows)

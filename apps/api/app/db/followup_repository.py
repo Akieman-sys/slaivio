@@ -224,7 +224,11 @@ def followup_detail(org_id,item_id):
     with engine.connect() as c:
         row=c.execute(text("select f.*,coalesce(cl.display_name,cl.name,cl.company_name,cl.phone,cl.email) client_name,cl.phone client_phone from followup_tasks f left join clients cl on cl.id=f.client_id and cl.org_id=f.org_id where f.org_id=:o and f.id=:id"),{"o":org_id,"id":item_id}).mappings().first()
         if not row:return None
-        out=dict(row);out['attempts']=_rows(c.execute(text("select * from followup_attempts where org_id=:o and followup_id=:id order by queued_at"),{"o":org_id,"id":item_id}));out['responses']=_rows(c.execute(text("select * from followup_responses where org_id=:o and followup_id=:id order by received_at"),{"o":org_id,"id":item_id}));out['events']=_rows(c.execute(text("select * from followup_events where org_id=:o and followup_id=:id order by created_at desc"),{"o":org_id,"id":item_id}));return out
+        out=dict(row);out['attempts']=_rows(c.execute(text("select * from followup_attempts where org_id=:o and followup_id=:id order by queued_at"),{"o":org_id,"id":item_id}));out['responses']=_rows(c.execute(text("select * from followup_responses where org_id=:o and followup_id=:id order by received_at"),{"o":org_id,"id":item_id}));out['notes']=_rows(c.execute(text("select * from followup_notes where org_id=:o and followup_id=:id order by created_at desc"),{"o":org_id,"id":item_id}));out['events']=_rows(c.execute(text("select * from followup_events where org_id=:o and followup_id=:id order by created_at desc"),{"o":org_id,"id":item_id}));return out
+
+def detect_all_organizations():
+    with engine.connect() as c:orgs=[x[0] for x in c.execute(text('select id from organizations'))]
+    return {o:detect_candidates(o) for o in orgs}
 
 def create_manual_followup(org_id,actor,data):
     reference=f"FUP-{__import__('datetime').datetime.now():%Y}-{uuid4().hex[:8].upper()}";idem=data.pop('idempotency_key',None) or f'manual:{uuid4()}'
@@ -295,6 +299,67 @@ def record_response(org_id,item_id,actor,body,channel='WHATSAPP',message_id=None
         _event(c,org_id,item_id,'RESPONSE_RECEIVED',actor,{'response_id':str(row['id']),'classification':classification,'requires_review':requires_review})
         return dict(row)
 
+def classify_response(body):
+    value=(body or '').strip().lower()
+    if any(x in value for x in ('stop','désabonne','desabonne')):return 'UNSUBSCRIBE'
+    if any(x in value for x in ('montant incorrect','conteste','litige')):return 'DISPUTE'
+    if any(x in value for x in ('pas encore','plus tard')):return 'NOT_READY'
+    if any(x in value for x in ('adresse','information','comment')):return 'NEEDS_INFORMATION'
+    if any(x in value for x in ('je paie','payerai','paiement demain')):return 'PROMISE_TO_PAY'
+    if any(x in value for x in ('annuler','annulez')):return 'CANCEL_REQUEST'
+    return 'OTHER'
+
+def link_whatsapp_response(org_id,client_id,dossier_id,message_id,body):
+    classification=classify_response(body)
+    with engine.begin() as c:
+        item=c.execute(text("""select * from followup_tasks where org_id=:o and client_id=:client and archived_at is null
+          and status in('SENT','DELIVERED','READ','WAITING_RESPONSE','SCHEDULED','DUE')
+          order by case when dossier_id=:d then 0 else 1 end,coalesce(executed_at,updated_at) desc limit 1 for update"""),{'o':org_id,'client':client_id,'d':dossier_id}).mappings().first()
+        if not item:return None
+        requires=classification in ('DISPUTE','CANCEL_REQUEST','OTHER')
+        c.execute(text("insert into followup_responses(org_id,followup_id,channel,message_id,body,classification,confidence,requires_review) values(:o,:f,'WHATSAPP',:m,:body,:class,1,:review) on conflict(org_id,message_id) do nothing"),{'o':org_id,'f':item['id'],'m':message_id,'body':body or '', 'class':classification,'review':requires})
+        status='ESCALATED' if requires else 'RESPONDED'
+        c.execute(text("update followup_tasks set status=:s,responded_at=now(),response_classification=:class,escalated_at=case when :s='ESCALATED' then now() else escalated_at end,row_version=row_version+1,updated_at=now() where id=:id"),{'s':status,'class':classification,'id':item['id']})
+        if classification=='UNSUBSCRIBE':c.execute(text("insert into followup_stop_list(org_id,client_id,channel,reason,created_by) values(:o,:client,'WHATSAPP','CLIENT_REQUEST','webhook') on conflict do nothing"),{'o':org_id,'client':client_id})
+        _event(c,org_id,item['id'],'WHATSAPP_RESPONSE',None,{'classification':classification,'requires_review':requires});return {'followup_id':str(item['id']),'classification':classification,'requires_review':requires}
+
+def detect_candidates(org_id):
+    created=0
+    with engine.begin() as c:
+        key=f"detect:{__import__('datetime').datetime.utcnow():%Y%m%d%H}"
+        run=c.execute(text("insert into followup_detection_runs(org_id,idempotency_key) values(:o,:k) on conflict(org_id,idempotency_key) do nothing returning id"),{'o':org_id,'k':key}).scalar()
+        if not run:return {'created':0,'duplicate':True}
+        candidates=rows=[]
+        candidates+=_rows(c.execute(text("""select f.client_id,f.dossier_id,f.id subject_id,f.document_number subject_reference,'PAYMENT_DUE' followup_type,'INVOICE' subject_type,
+          'Solde de facture arrivé à échéance' reason,f.balance_due amount_context,f.currency,coalesce(cl.display_name,cl.name,'Client') client_name
+          from finance_documents f join clients cl on cl.id=f.client_id and cl.org_id=f.org_id where f.org_id=:o and f.document_type='INVOICE' and f.balance_due>0 and f.due_date<=current_date and f.status in('ISSUED','PARTIALLY_PAID','OVERDUE')"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select p.client_id,(select cp.dossier_id from pickup_order_items pi join cargo_packages cp on cp.id=pi.package_id where pi.pickup_id=p.id limit 1) dossier_id,p.id subject_id,p.pickup_reference subject_reference,'PICKUP_REMINDER' followup_type,'PICKUP' subject_type,
+          'Colis disponible non retiré' reason,null amount_context,null currency,coalesce(cl.display_name,cl.name,'Client') client_name
+          from pickup_orders p join clients cl on cl.id=p.client_id and cl.org_id=p.org_id where p.org_id=:o and p.status in('READY','NOTIFIED') and p.ready_at<now()-interval '2 days'"""),{'o':org_id}))
+        candidates+=_rows(c.execute(text("""select d.client_id,d.id dossier_id,d.id subject_id,coalesce(d.dossier_reference,d.tracking_id) subject_reference,'PACKAGE_DROP_REMINDER' followup_type,'DOSSIER' subject_type,
+          'Dossier créé mais colis non déposé' reason,null amount_context,null currency,coalesce(cl.display_name,cl.name,'Client') client_name from dossiers d join clients cl on cl.id=d.client_id and cl.org_id=d.org_id where d.org_id=:o and d.status_global in('LEAD','ACTIVE','WAITING_PACKAGE') and d.created_at<now()-interval '2 days' and not exists(select 1 from cargo_packages p where p.org_id=d.org_id and p.dossier_id=d.id and p.deleted_at is null)"""),{'o':org_id}))
+        org=c.execute(text('select name from organizations where id=:o'),{'o':org_id}).scalar() or 'Notre agence'
+        for x in candidates:
+            idem=f"auto:{x['followup_type']}:{x['subject_id']}"
+            message=(f"Bonjour {x['client_name']}, {org} vous contacte concernant {x['reason'].lower()} ({x['subject_reference'] or ''}). Merci de nous répondre directement sur WhatsApp.")
+            result=c.execute(text("""insert into followup_tasks(org_id,client_id,dossier_id,followup_type,reference,subject_type,subject_id,subject_reference,reason,channel,message,due_at,priority,amount_context,currency,consent_type,status,idempotency_key)
+              values(:o,:client,:dossier,:type,:ref,:subject_type,:subject,:subject_ref,:reason,'WHATSAPP',:message,now(),'NORMAL',:amount,:currency,'OPERATIONAL','DUE',:idem) on conflict(org_id,idempotency_key) do nothing returning id"""),{'o':org_id,'client':x['client_id'],'dossier':x.get('dossier_id'),'type':x['followup_type'],'ref':f"FUP-{uuid4().hex[:8].upper()}",'subject_type':x['subject_type'],'subject':x['subject_id'],'subject_ref':x.get('subject_reference'),'reason':x['reason'],'message':message,'amount':x.get('amount_context'),'currency':x.get('currency'),'idem':idem}).scalar();created+=bool(result)
+        c.execute(text("update followup_detection_runs set status='COMPLETED',candidates=:n,created=:created,completed_at=now() where id=:id"),{'n':len(candidates),'created':created,'id':run});return {'candidates':len(candidates),'created':created}
+
+def advance_sequences(org_id=None):
+    with engine.begin() as c:
+        params={};scope="and f.org_id=:o" if org_id else ''
+        if org_id:params['o']=org_id
+        items=_rows(c.execute(text("select f.*,s.id step_id,s.delay_minutes,s.channel step_channel,s.message_template from followup_tasks f join followup_sequence_steps s on s.sequence_id=f.sequence_id and s.step_number=f.current_step where f.status in('DUE','SCHEDULED') and f.due_at<=now() "+scope+" for update of f skip locked"),params));count=0
+        for item in items:
+            if _condition_still_true(c,item):
+                c.execute(text("update followup_tasks set channel=:channel,message=:message,status='DUE',max_steps=(select count(*) from followup_sequence_steps where sequence_id=:seq),updated_at=now() where id=:id"),{'channel':item['step_channel'],'message':item['message_template'],'seq':item['sequence_id'],'id':item['id']});count+=1
+            else:c.execute(text("update followup_tasks set status='COMPLETED',completed_at=now(),updated_at=now() where id=:id"),{'id':item['id']})
+        return count
+
+def add_note(org_id,item_id,actor,body):
+    with engine.begin() as c:return dict(c.execute(text("insert into followup_notes(org_id,followup_id,body,author_id) select :o,id,:body,:a from followup_tasks where org_id=:o and id=:id returning *"),{'o':org_id,'id':item_id,'body':body,'a':actor}).mappings().one())
+
 def followup_analytics(org_id):
     with engine.connect() as c:
         summary=dict(c.execute(text("""select count(*)::int total,count(*) filter(where status='RESPONDED')::int responded,
@@ -314,8 +379,9 @@ def process_attempt_queue(limit=100):
         candidates=_rows(c.execute(text("select a.*,f.client_id,f.dossier_id,f.followup_type from followup_attempts a join followup_tasks f on f.id=a.followup_id and f.org_id=a.org_id where a.status='QUEUED' order by a.queued_at for update of a skip locked limit :limit"),{'limit':limit}))
         for a in candidates:
             try:
-                create_notification_outbox(org_id=a['org_id'],client_id=a['client_id'],dossier_id=a.get('dossier_id'),recipient_phone=a['recipient'],notification_type=f"FOLLOWUP:{a['followup_type']}",message=a['message'],channel=(a['channel'] or 'WHATSAPP').lower())
-                c.execute(text("update followup_attempts set status='SENT',sent_at=now() where id=:id and status='QUEUED'"),{'id':a['id']});_event(c,a['org_id'],a['followup_id'],'SENT',None,{'attempt_id':str(a['id'])});processed+=1
+                if c.execute(text("select 1 from followup_stop_list where org_id=:o and client_id=:client and channel=:channel"),{'o':a['org_id'],'client':a['client_id'],'channel':a['channel']}).first():raise ValueError('stop_list')
+                n=create_notification_outbox(org_id=a['org_id'],client_id=a['client_id'],dossier_id=a.get('dossier_id'),recipient_phone=a['recipient'],notification_type=f"FOLLOWUP:{a['followup_type']}",message=a['message'],channel=(a['channel'] or 'WHATSAPP').lower())
+                c.execute(text("update followup_attempts set status='SENT',notification_id=:notification,sent_at=now() where id=:id and status='QUEUED'"),{'notification':n['id'],'id':a['id']});_event(c,a['org_id'],a['followup_id'],'SENT',None,{'attempt_id':str(a['id'])});processed+=1
             except Exception as exc:
                 retries=int(a.get('retry_count') or 0)+1;permanent=retries>=3
                 c.execute(text("update followup_attempts set status=:s,retry_count=:r,error_message=:e,failed_at=case when :s='FAILED' then now() end where id=:id"),{'s':'FAILED' if permanent else 'QUEUED','r':retries,'e':type(exc).__name__,'id':a['id']})

@@ -14,6 +14,7 @@ class SequenceStep(BaseModel):delay_minutes:int=Field(ge=0);channel:str;message_
 class SequenceSave(BaseModel):name:str;followup_type:str;exit_conditions:list[Any]=[];steps:list[SequenceStep]=Field(min_length=1,max_length=20)
 class RuleSave(BaseModel):workspace_id:str|None=None;name:str;followup_type:str;trigger_type:str;trigger_config:dict[str,Any]={};condition_config:dict[str,Any]={};sequence_id:str|None=None;priority:str='NORMAL';responsible_team:str|None=None
 class ResponseCreate(BaseModel):body:str=Field(min_length=1,max_length=4000);channel:str='WHATSAPP';message_id:str|None=None;classification:str|None=None;confidence:float|None=Field(None,ge=0,le=1);requires_review:bool=False
+class NoteCreate(BaseModel):body:str=Field(min_length=1,max_length=4000)
 
 @router.get('',dependencies=[Depends(require_permission('followups.read'))])
 def index(q:str|None=None,status:str|None=None,followup_type:str|None=None,channel:str|None=None,priority:str|None=None,responsible_id:str|None=None,date_scope:str|None=None,page:int=Query(1,ge=1),page_size:int=Query(40,ge=1,le=100),tenant=Depends(get_current_tenant)):return {'status':'ok',**repo.followup_dashboard(tenant['org_id'],q=q,status=status,followup_type=followup_type,channel=channel,priority=priority,responsible_id=responsible_id,date_scope=date_scope,page=page,page_size=page_size)}
@@ -30,6 +31,8 @@ def due(tenant=Depends(get_current_tenant)):
  data=repo.followup_dashboard(tenant['org_id'],status='DUE',page_size=100);return {'status':'ok','count':len(data['items']),'followups':data['items']}
 @router.get('/analytics',dependencies=[Depends(require_permission('followups.analytics'))])
 def analytics(tenant=Depends(get_current_tenant)):return {'status':'ok','analytics':repo.followup_analytics(tenant['org_id'])}
+@router.post('/detect',dependencies=[Depends(require_permission('followups.rules'))])
+def detect(tenant=Depends(get_current_tenant)):return {'status':'ok',**repo.detect_candidates(tenant['org_id'])}
 @router.get('/{item_id}',dependencies=[Depends(require_permission('followups.read'))])
 def detail(item_id:str,tenant=Depends(get_current_tenant)):
  item=repo.followup_detail(tenant['org_id'],item_id)
@@ -52,3 +55,5 @@ def response(item_id:str,body:ResponseCreate,tenant=Depends(get_current_tenant))
  result=repo.record_response(tenant['org_id'],item_id,actor(tenant),**body.model_dump())
  if not result:raise HTTPException(404,'followup_not_found')
  return {'status':'ok','response':result}
+@router.post('/{item_id}/notes',dependencies=[Depends(require_permission('followups.update'))])
+def note(item_id:str,body:NoteCreate,tenant=Depends(get_current_tenant)):return {'status':'ok','note':repo.add_note(tenant['org_id'],item_id,actor(tenant),body.body)}

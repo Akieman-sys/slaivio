@@ -39,6 +39,7 @@ from app.db.notification_repository import create_notification_outbox
 from app.db.followup_repository import (
     create_followup_task,
     cancel_pending_followups_for_dossier,
+    link_whatsapp_response,
 )
 from app.services.escalation_service import (
     should_create_escalation,
@@ -137,10 +138,18 @@ async def process_normalized_whatsapp_message(
         dossier_id=dossier_id,
     )
 
+    linked_followup = link_whatsapp_response(
+        org_id=org_id,
+        client_id=client_id,
+        dossier_id=dossier_id,
+        message_id=normalized_message.provider_message_id,
+        body=normalized_message.text_body or "",
+    )
+
     cancelled_followups = cancel_pending_followups_for_dossier(
         org_id=org_id,
         dossier_id=dossier_id,
-        reason="client_replied",
+        reason="linked_followup_response" if linked_followup else "client_replied",
     )
 
     if cancelled_followups:

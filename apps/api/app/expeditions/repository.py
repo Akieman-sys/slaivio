@@ -771,16 +771,43 @@ def get_expedition(org_id: str, expedition_id: str) -> dict | None:
     return expedition
 
 
+def _hydrate_expedition_references(conn, org_id: str, payload: dict) -> dict:
+    data = dict(payload)
+    service_id = data.get("shipping_service_id")
+    route_id = data.get("route_id")
+    if service_id:
+        service = conn.execute(text("""select route_id::text,shipping_mode,service_name
+            from shipping_services where org_id=:org_id and id=:id"""),
+            {"org_id": org_id, "id": service_id}).mappings().first()
+        if not service:
+            raise ValueError("shipping_service_not_found")
+        if route_id and service.get("route_id") and route_id != service["route_id"]:
+            raise ValueError("service_route_mismatch")
+        route_id = route_id or service.get("route_id")
+        data.update({"route_id": route_id, "mode": service.get("shipping_mode"), "service_type": service.get("service_name")})
+    if route_id:
+        route = conn.execute(text("""select route_name,origin_country,origin_city,destination_country,destination_city,transport_mode
+            from shipping_routes where org_id=:org_id and id=:id"""),
+            {"org_id": org_id, "id": route_id}).mappings().first()
+        if not route:
+            raise ValueError("route_not_found")
+        data.update({"route_label": route["route_name"], "origin_country": route["origin_country"],
+            "origin_city": route["origin_city"], "destination_country": route["destination_country"],
+            "destination_city": route["destination_city"], "mode": data.get("mode") or route["transport_mode"]})
+    return data
+
+
 def create_expedition(org_id: str, user_id: str, payload: dict) -> dict:
     _ensure_schema()
-    reference = payload.get("expedition_reference") or generate_expedition_reference()
-    status = payload.get("status") or "PREPARING"
-    mode = payload.get("mode") or "AIR"
-    if status not in EXPEDITION_STATUSES:
-        raise ValueError("invalid_status")
-    if mode not in EXPEDITION_MODES:
-        raise ValueError("invalid_mode")
     with engine.begin() as conn:
+        payload = _hydrate_expedition_references(conn, org_id, payload)
+        reference = payload.get("expedition_reference") or generate_expedition_reference()
+        status = payload.get("status") or "PREPARING"
+        mode = payload.get("mode") or "AIR"
+        if status not in EXPEDITION_STATUSES:
+            raise ValueError("invalid_status")
+        if mode not in EXPEDITION_MODES:
+            raise ValueError("invalid_mode")
         row = conn.execute(
             text("""
                 insert into cargo_expeditions (
@@ -790,7 +817,8 @@ def create_expedition(org_id: str, user_id: str, payload: dict) -> dict:
                     carrier_name, flight_number, vessel_name, container_number, awb_number,
                     bl_number, batch_reference, manifest_reference, owner_id, owner_name,
                     planned_departure_at, departed_at, eta_at, arrived_at, delivered_at,
-                    is_delayed, delay_reason, currency, notes, created_by, updated_by
+                    is_delayed, delay_reason, currency, notes, created_by, updated_by,
+                    route_id, shipping_service_id, origin_warehouse_id, destination_office_id, departure_id
                 )
                 values (
                     :org_id, :reference, :title, :status, :mode, :service_type, :risk_level,
@@ -799,7 +827,8 @@ def create_expedition(org_id: str, user_id: str, payload: dict) -> dict:
                     :carrier_name, :flight_number, :vessel_name, :container_number, :awb_number,
                     :bl_number, :batch_reference, :manifest_reference, :owner_id, :owner_name,
                     :planned_departure_at, :departed_at, :eta_at, :arrived_at, :delivered_at,
-                    :is_delayed, :delay_reason, :currency, :notes, :user_id, :user_id
+                    :is_delayed, :delay_reason, :currency, :notes, :user_id, :user_id,
+                    :route_id, :shipping_service_id, :origin_warehouse_id, :destination_office_id, :departure_id
                 )
                 returning id::text
             """),
@@ -1101,6 +1130,11 @@ def add_document(org_id: str, expedition_id: str, user_id: str, payload: dict) -
                 "visibility": payload.get("visibility") or "INTERNAL",
                 "notes": payload.get("notes"),
                 "user_id": user_id,
+                "route_id": payload.get("route_id"),
+                "shipping_service_id": payload.get("shipping_service_id"),
+                "origin_warehouse_id": payload.get("origin_warehouse_id"),
+                "destination_office_id": payload.get("destination_office_id"),
+                "departure_id": payload.get("departure_id"),
                 "size_bytes":payload.get("size_bytes"),
                 "checksum_sha256":payload.get("checksum_sha256"),
                 "object_path":payload.get("object_path"),

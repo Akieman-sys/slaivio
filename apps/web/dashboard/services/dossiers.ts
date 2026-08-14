@@ -26,6 +26,12 @@ export type DossierRecord = {
   id: string;
   org_id: string;
   client_id: string;
+  workspace_id?: string | null;
+  route_id?: string | null;
+  shipping_service_id?: string | null;
+  origin_warehouse_id?: string | null;
+  destination_office_id?: string | null;
+  pricing_snapshot_id?: string | null;
   dossier_reference: string;
   client_name: string | null;
   client_phone?: string | null;
@@ -90,6 +96,12 @@ export type DossierStats = {
 
 export type DossierPayload = Partial<Omit<DossierRecord, "id" | "org_id" | "dossier_reference" | "message_count" | "event_count" | "package_count" | "shipment_count" | "created_at" | "updated_at" | "messages" | "events" | "notifications" | "shipments">> & {
   client_id: string;
+  workspace_id?: string | null;
+  route_id?: string | null;
+  shipping_service_id?: string | null;
+  origin_warehouse_id?: string | null;
+  destination_office_id?: string | null;
+  pricing_snapshot_id?: string | null;
   row_version?: number;
 };
 

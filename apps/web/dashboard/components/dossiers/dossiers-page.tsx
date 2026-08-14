@@ -26,6 +26,7 @@ import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
+import { getReferenceCatalog, type ReferenceCatalog } from "@/services/references";
 import {
   archiveDossier,
   acknowledgeDossierAlert,
@@ -318,6 +319,10 @@ export function DossiersPage() {
     const form = new FormData(event.currentTarget);
     const payload: DossierPayload = {
       client_id: String(form.get("client_id") || ""),
+      route_id: clean(form.get("route_id")),
+      shipping_service_id: clean(form.get("shipping_service_id")),
+      origin_warehouse_id: clean(form.get("origin_warehouse_id")),
+      destination_office_id: clean(form.get("destination_office_id")),
       case_type: String(form.get("case_type") || "UNKNOWN") as DossierCaseType,
       status_global: String(form.get("status_global") || "LEAD") as DossierStatus,
       intake_status: String(form.get("intake_status") || "PARTIAL") as DossierIntakeStatus,
@@ -1019,6 +1024,8 @@ function DossierFormModal({ mode, dossier, saving, error, onClose, onSubmit }: {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [clientQuery, setClientQuery] = useState("");
   const [clientLoading, setClientLoading] = useState(false);
+  const [references, setReferences] = useState<ReferenceCatalog | null>(null);
+  const [routeId, setRouteId] = useState(dossier?.route_id || "");
 
   useEffect(() => {
     let active = true;
@@ -1035,6 +1042,12 @@ function DossierFormModal({ mode, dossier, saving, error, onClose, onSubmit }: {
       });
     return () => { active = false; };
   }, [clientQuery]);
+
+  useEffect(() => {
+    getReferenceCatalog().then(setReferences).catch(() => setReferences(null));
+  }, []);
+
+  const routeServices = (references?.services || []).filter((service) => !routeId || service.route_id === routeId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
@@ -1073,10 +1086,10 @@ function DossierFormModal({ mode, dossier, saving, error, onClose, onSubmit }: {
             <SelectField name="status_global" label="Statut" defaultValue={dossier?.status_global || "LEAD"} options={mode === "create" ? initialStatusLabels : statusLabels} />
             <SelectField name="intake_status" label="Collecte infos" defaultValue={dossier?.intake_status || "PARTIAL"} options={intakeLabels} />
             <SelectField name="validation_status" label="Validation" defaultValue={dossier?.validation_status || "PENDING"} options={validationLabels} />
-            <InputField name="origin_city" label="Ville origine" defaultValue={dossier?.origin_city} />
-            <InputField name="origin_country" label="Pays origine" defaultValue={dossier?.origin_country} />
-            <InputField name="destination_city" label="Ville destination" defaultValue={dossier?.destination_city} />
-            <InputField name="destination_country" label="Pays destination" defaultValue={dossier?.destination_country} />
+            <label><FormLabel>Route</FormLabel><select name="route_id" value={routeId} onChange={(event)=>setRouteId(event.target.value)} className="h-9 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]" required><option value="">Sélectionner une route configurée</option>{references?.routes.map((route)=><option key={route.id} value={route.id}>{route.label}{route.secondary?` — ${route.secondary}`:""}</option>)}</select></label>
+            <label><FormLabel>Service</FormLabel><select name="shipping_service_id" defaultValue={dossier?.shipping_service_id||""} className="h-9 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]" required><option value="">Sélectionner un service compatible</option>{routeServices.map((service)=><option key={service.id} value={service.id}>{service.label}{service.secondary?` — ${service.secondary}`:""}</option>)}</select></label>
+            <label><FormLabel>Entrepôt d’origine</FormLabel><select name="origin_warehouse_id" defaultValue={dossier?.origin_warehouse_id||""} className="h-9 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"><option value="">Selon la route / non défini</option>{references?.warehouses.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.label}{warehouse.secondary?` — ${warehouse.secondary}`:""}</option>)}</select></label>
+            <label><FormLabel>Bureau de destination</FormLabel><select name="destination_office_id" defaultValue={dossier?.destination_office_id||""} className="h-9 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"><option value="">Selon la route / non défini</option>{references?.offices.map((office)=><option key={office.id} value={office.id}>{office.label}{office.secondary?` — ${office.secondary}`:""}</option>)}</select></label>
             <InputField name="goods_type" label="Marchandise" defaultValue={dossier?.goods_type} />
             <InputField name="shipping_mode" label="Mode d’expédition" defaultValue={dossier?.shipping_mode} />
             <InputField name="estimated_weight_kg" label="Poids estimé kg" type="number" step="0.01" defaultValue={dossier?.estimated_weight_kg} />

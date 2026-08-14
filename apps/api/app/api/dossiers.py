@@ -56,6 +56,12 @@ router = APIRouter()
 
 class DossierPayload(BaseModel):
     client_id: str
+    workspace_id: str | None = None
+    route_id: str | None = None
+    shipping_service_id: str | None = None
+    origin_warehouse_id: str | None = None
+    destination_office_id: str | None = None
+    pricing_snapshot_id: str | None = None
     case_type: str = "UNKNOWN"
     status_global: str = "LEAD"
     intake_status: str = "PARTIAL"
@@ -100,6 +106,12 @@ class DossierPayload(BaseModel):
 class DossierPatchPayload(BaseModel):
     row_version: int = Field(ge=1)
     client_id: str | None = None
+    workspace_id: str | None = None
+    route_id: str | None = None
+    shipping_service_id: str | None = None
+    origin_warehouse_id: str | None = None
+    destination_office_id: str | None = None
+    pricing_snapshot_id: str | None = None
     case_type: str | None = None
     status_global: str | None = None
     intake_status: str | None = None

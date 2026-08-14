@@ -40,6 +40,11 @@ router = APIRouter()
 class ExpeditionPayload(BaseModel):
     expected_version: int | None = Field(default=None, ge=1)
     expedition_reference: str | None = None
+    route_id: str | None = None
+    shipping_service_id: str | None = None
+    origin_warehouse_id: str | None = None
+    destination_office_id: str | None = None
+    departure_id: str | None = None
     title: str | None = None
     status: str | None = None
     mode: str | None = None

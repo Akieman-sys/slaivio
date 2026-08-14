@@ -490,6 +490,38 @@ def _client_exists(conn, org_id: str, client_id: str) -> bool:
     ).scalar())
 
 
+def _hydrate_references(conn, org_id: str, payload: dict) -> dict:
+    """Resolve display snapshots from IDs owned by their source modules."""
+    data = dict(payload)
+    route_id = data.get("route_id")
+    service_id = data.get("shipping_service_id")
+    if service_id:
+        service = conn.execute(text("""
+            select id::text,route_id::text,shipping_mode
+            from shipping_services where org_id=:org_id and id=:id
+        """), {"org_id": org_id, "id": service_id}).mappings().first()
+        if not service:
+            raise ValueError("shipping_service_not_found")
+        if route_id and service.get("route_id") and service["route_id"] != route_id:
+            raise ValueError("service_route_mismatch")
+        route_id = route_id or service.get("route_id")
+        data["route_id"] = route_id
+        data["shipping_mode"] = service.get("shipping_mode")
+    if route_id:
+        route = conn.execute(text("""
+            select origin_country,origin_city,destination_country,destination_city,transport_mode
+            from shipping_routes where org_id=:org_id and id=:id
+        """), {"org_id": org_id, "id": route_id}).mappings().first()
+        if not route:
+            raise ValueError("route_not_found")
+        data.update({
+            "origin_country": route["origin_country"], "origin_city": route["origin_city"],
+            "destination_country": route["destination_country"], "destination_city": route["destination_city"],
+            "shipping_mode": data.get("shipping_mode") or route["transport_mode"],
+        })
+    return data
+
+
 def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
     client_id = payload.get("client_id")
     if not client_id:
@@ -499,6 +531,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
     with engine.begin() as conn:
         if not _client_exists(conn, org_id, client_id):
             raise ValueError("client_not_found")
+        payload = _hydrate_references(conn, org_id, payload)
         row = conn.execute(
             text("""
                 insert into dossiers (
@@ -508,7 +541,8 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     estimated_weight_kg, estimated_volume_cbm, shipping_mode,
                     tracking_id, quoted_total, quoted_currency, pricing_status,
                     final_total, final_currency, payment_status, client_full_name,
-                    supplier_payment_amount, supplier_payment_currency
+                    supplier_payment_amount, supplier_payment_currency, workspace_id, route_id,
+                    shipping_service_id, origin_warehouse_id, destination_office_id, pricing_snapshot_id
                 )
                 values (
                     :org_id, :client_id, :dossier_reference, :case_type, :status_global, :intake_status,
@@ -517,7 +551,8 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     :estimated_weight_kg, :estimated_volume_cbm, :shipping_mode,
                     :tracking_id, :quoted_total, :quoted_currency, :pricing_status,
                     :final_total, :final_currency, :payment_status, :client_full_name,
-                    :supplier_payment_amount, :supplier_payment_currency
+                    :supplier_payment_amount, :supplier_payment_currency, :workspace_id, :route_id,
+                    :shipping_service_id, :origin_warehouse_id, :destination_office_id, :pricing_snapshot_id
                 )
                 returning id::text
             """),
@@ -548,6 +583,12 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                 "client_full_name": payload.get("client_full_name"),
                 "supplier_payment_amount": payload.get("supplier_payment_amount"),
                 "supplier_payment_currency": payload.get("supplier_payment_currency"),
+                "workspace_id": payload.get("workspace_id"),
+                "route_id": payload.get("route_id"),
+                "shipping_service_id": payload.get("shipping_service_id"),
+                "origin_warehouse_id": payload.get("origin_warehouse_id"),
+                "destination_office_id": payload.get("destination_office_id"),
+                "pricing_snapshot_id": payload.get("pricing_snapshot_id"),
             },
         ).fetchone()
         dossier_id = row[0]
@@ -579,6 +620,8 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
         "shipping_mode", "tracking_id", "quoted_total", "quoted_currency", "pricing_status",
         "final_total", "final_currency", "payment_status", "client_full_name",
         "supplier_payment_amount", "supplier_payment_currency",
+        "workspace_id", "route_id", "shipping_service_id", "origin_warehouse_id",
+        "destination_office_id", "pricing_snapshot_id",
     }
     data = {key: payload.get(key, existing.get(key)) for key in allowed}
     expected_version = int(payload["row_version"])
@@ -588,6 +631,7 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
     with engine.begin() as conn:
         if data.get("client_id") and not _client_exists(conn, org_id, data["client_id"]):
             raise ValueError("client_not_found")
+        data = _hydrate_references(conn, org_id, data)
         result = conn.execute(
             text("""
                 update dossiers set
@@ -615,6 +659,12 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
                     client_full_name = :client_full_name,
                     supplier_payment_amount = :supplier_payment_amount,
                     supplier_payment_currency = :supplier_payment_currency,
+                    workspace_id = :workspace_id,
+                    route_id = :route_id,
+                    shipping_service_id = :shipping_service_id,
+                    origin_warehouse_id = :origin_warehouse_id,
+                    destination_office_id = :destination_office_id,
+                    pricing_snapshot_id = :pricing_snapshot_id,
                     updated_at = now(),
                     row_version = row_version + 1
                 where org_id = :org_id

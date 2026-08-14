@@ -10,7 +10,7 @@ import {
   Edit3,
   History,
   MessageCircle,
-  MoreHorizontal,
+  Bell,
   Package,
   RotateCcw,
   Search,
@@ -29,7 +29,6 @@ import { listClients, type ClientRecord } from "@/services/clients";
 import { getReferenceCatalog, type ReferenceCatalog } from "@/services/references";
 import {
   archiveDossier,
-  acknowledgeDossierAlert,
   createDossier,
   exportDossiers,
   getDossier,
@@ -154,10 +153,9 @@ const emptyStats: DossierStats = {
 
 const views: Array<{ key: string; label: string; status?: DossierStatus; archived?: boolean }> = [
   { key: "all", label: "Tous" },
-  { key: "active", label: "Actifs" },
-  { key: "lead", label: "Leads", status: "LEAD" },
   { key: "quoted", label: "Devis", status: "QUOTED" },
-  { key: "waiting", label: "Attente colis", status: "WAITING_PACKAGES" },
+  { key: "waiting", label: "En attente du colis", status: "WAITING_PACKAGES" },
+  { key: "active", label: "Avec colis" },
   { key: "archived", label: "Archivés", archived: true },
 ];
 
@@ -431,13 +429,7 @@ export function DossiersPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Dossiers cargo" description="Chaque demande client devient un dossier traçable : route, colis, devis, paiement, messages et expéditions liés."
           actions={<>
-              <button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}>
-                <SlidersHorizontal size={16} /> Filtres
-              </button>
-              <PermissionGuard permission="dossiers.export"><button onClick={handleExport} className={buttonClass}>
-                <Download size={16} />
-                Exporter
-              </button></PermissionGuard>
+              <details className="relative"><summary className={`${buttonClass} cursor-pointer list-none`}>Plus</summary><div className="absolute right-0 z-30 mt-1 w-56 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]"><button className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><span className="flex items-center gap-2"><Bell size={14}/>Alertes du module</span>{alerts.length>0&&<span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alerts.length}</span>}</button><PermissionGuard permission="dossiers.export"><button onClick={handleExport} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><Download size={14}/>Exporter</button></PermissionGuard></div></details>
               <PermissionGuard permission="dossiers.create"><button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau dossier
@@ -448,8 +440,8 @@ export function DossiersPage() {
               <button
                 key={view.key}
                 onClick={() => setActiveView(view.key)}
-                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition ${
-                  activeView === view.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"
+                className={`rounded-t-md px-3 py-2 text-[13px] font-medium transition ${
+                  activeView === view.key ? "border-b-2 border-[#12c76f] bg-[#effaf4] text-[#067a45]" : "text-[#526071] hover:bg-[#f2f4f7]"
                 }`}
               >
                 {view.label}
@@ -458,26 +450,21 @@ export function DossiersPage() {
           </>}
         />
 
-        <section className="hidden">
+        <section className="bg-white px-5 py-4"><div className="grid grid-cols-2 lg:grid-cols-5">
           {statCards.map((card) => (
-            <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
-              <div className="flex items-start justify-between gap-4">
-                <p className="text-[14px] font-medium leading-5">{card.label}</p>
-                <span className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white/80 text-[16px] leading-none text-[#4b5563] shadow-sm">↗</span>
-              </div>
-              <p className="mt-3 text-[34px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+            <div key={card.label} className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
+              <p className="text-[12px] text-[#6b7580]">{card.label}</p><p className="mt-1 text-[24px] font-medium tracking-[-.035em]">{card.value.toLocaleString("fr-FR")}</p>
             </div>
-          ))}
+          ))}</div>
         </section>
 
         <section>
-          <div className="px-5 py-4">
-            <label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100">
+          <div className="border-y border-[#eceef1] px-4 py-2.5"><div className="flex items-center gap-2">
+            <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
               <Search size={18} className="text-[#6b7280]" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un dossier..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
-            </label>
-          </div>
-          {alerts.length > 0 && <div className="border-b border-[#d8dce2] bg-[#fffaf0] px-5 py-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[13px] font-semibold text-[#7a4300]">{alerts.length} alerte(s) opérationnelle(s)</p><p className="text-[12px] text-[#8a5a18]">Échéances, urgences, checklist et dossiers sans activité.</p></div></div><div className="mt-3 grid gap-2 lg:grid-cols-2">{alerts.slice(0, 4).map((alert) => <button key={alert.id} onClick={async () => { const dossier = dossiers.find((item) => item.id === alert.dossier_id); if (dossier) await selectDossier(dossier); }} className="flex items-center gap-3 rounded-md border border-amber-200 bg-white p-3 text-left"><AlertCircle size={16} className={alert.severity === "CRITICAL" ? "text-red-600" : "text-amber-600"} /><span className="min-w-0 flex-1"><strong className="block truncate text-[13px]">{alert.dossier_reference} · {alert.title}</strong><small className="block truncate text-[#687584]">{alert.message}</small></span>{alert.status === "OPEN" && <PermissionGuard permission="dossiers.update"><span onClick={async (event) => { event.stopPropagation(); await acknowledgeDossierAlert(alert.id); await loadAlerts(); }} className="rounded border px-2 py-1 text-[11px]">Prendre en charge</span></PermissionGuard>}</button>)}</div></div>}
+            </label><button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}><SlidersHorizontal size={16}/>Filtres</button>
+          </div></div>
           {filtersOpen && <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={caseType} onChange={(value) => setCaseType(value as DossierCaseType | "")} label="Type">
               <option value="">Type</option>
@@ -535,7 +522,7 @@ export function DossiersPage() {
               </button>
             </div>
           </div>
-          <section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+          <section className="hidden">
             {statCards.map((card) => (
               <div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
                 <p className="text-[13px] font-medium">{card.label}</p>
@@ -666,7 +653,7 @@ function DossiersTable({ dossiers, loading, selectedId, onSelect }: {
               <td className="px-3 py-2 text-right font-medium">{dossier.package_count}</td>
               <td className="px-3 py-2 text-right font-medium">{dossier.shipment_count}</td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(dossier.updated_at || dossier.created_at)}</td>
-              <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
+              <td className="px-3 py-2"><ChevronRight size={16} className="text-[#687584]" /></td>
             </tr>
           ))}
         </tbody>

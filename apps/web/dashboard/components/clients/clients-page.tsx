@@ -59,10 +59,10 @@ import {
 } from "@/services/clients";
 
 const statusLabels: Record<ClientLifecycleStatus, string> = {
-  lead: "Lead",
-  active: "Actif",
-  pending: "En attente",
-  inactive: "Inactif",
+  lead: "Nouveau contact",
+  active: "Client avec colis",
+  pending: "En attente du premier colis",
+  inactive: "Sans activité",
   blocked: "Bloqué",
 };
 
@@ -110,9 +110,9 @@ type ClientView = {
 
 const views: ClientView[] = [
   { key: "all", label: "Tous" },
-  { key: "lead", label: "Leads", status: "lead" },
-  { key: "active", label: "Actifs", status: "active" },
-  { key: "pending", label: "À suivre", status: "pending" },
+  { key: "lead", label: "Nouveaux contacts", status: "lead" },
+  { key: "pending", label: "Premier colis attendu", status: "pending" },
+  { key: "active", label: "Clients avec colis", status: "active" },
   { key: "business", label: "Entreprises", customerType: "business" },
   { key: "archived", label: "Archivés", archived: true },
 ];
@@ -419,69 +419,58 @@ export function ClientsPage() {
 
   const statCards = useMemo(() => [
     { label: "Clients total", value: stats.total, tone: "blue" },
-    { label: "Actifs", value: stats.active, tone: "blue" },
-    { label: "Leads", value: stats.leads, tone: "blue" },
-    { label: "À suivre", value: stats.pending, tone: "amber" },
-    { label: "Inactifs", value: stats.inactive + stats.blocked, tone: "neutral" },
+    { label: "Clients avec colis", value: stats.active, tone: "blue" },
+    { label: "Nouveaux contacts", value: stats.leads, tone: "blue" },
+    { label: "Premier colis attendu", value: stats.pending, tone: "amber" },
+    { label: "Sans activité", value: stats.inactive + stats.blocked, tone: "neutral" },
   ], [stats]);
 
   return (
     <div className="min-h-full bg-[#f7f7f6] text-[#1f2328]">
       <div className="overflow-hidden bg-white">
-        <OperationPageHeader title="Clients" description="Répertoire opérationnel des leads, clients et partenaires. Les lignes affichées proviennent uniquement de l’organisation active."
+        <OperationPageHeader title="Clients" description="Suivez chaque contact depuis sa première demande jusqu’à la réception et la livraison de ses colis."
           actions={<>
-              <button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}>
-                <SlidersHorizontal size={16} /> Filtres
-              </button>
-              <PermissionGuard permission="clients.import"><button onClick={() => setImportOpen(true)} className={buttonClass}>
-                <Upload size={16} />
-                Importer
-              </button></PermissionGuard>
-              <PermissionGuard permission="clients.export"><button onClick={handleExport} disabled={exporting} className={`${buttonClass} disabled:cursor-wait disabled:opacity-60`}>
-                <Download size={16} />
-                {exporting ? "Export..." : "Exporter"}
-              </button></PermissionGuard>
+              <details className="relative"><summary className={`${buttonClass} cursor-pointer list-none`}>Plus</summary><div className="absolute right-0 z-30 mt-1 w-48 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]"><PermissionGuard permission="clients.import"><button onClick={() => setImportOpen(true)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><Upload size={14}/>Importer</button></PermissionGuard><PermissionGuard permission="clients.export"><button onClick={handleExport} disabled={exporting} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7] disabled:opacity-50"><Download size={14}/>{exporting ? "Export en cours…" : "Exporter"}</button></PermissionGuard></div></details>
               <PermissionGuard permission="clients.create"><button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau client
               </button></PermissionGuard>
             </>}
           tabs={<>
-            {views.map((view) => (
+            {views.slice(0, 4).map((view) => (
               <button
                 key={view.key}
                 disabled={Boolean(view.archived && !archivedAllowed)}
                 title={view.archived && !archivedAllowed ? "Permission clients.archive requise" : undefined}
                 onClick={() => setActiveView(view.key)}
-                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition ${
-                  activeView === view.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"
+                className={`rounded-t-md px-3 py-2 text-[13px] font-medium transition ${
+                  activeView === view.key ? "border-b-2 border-[#12c76f] bg-[#effaf4] text-[#067a45]" : "text-[#526071] hover:bg-[#f2f4f7]"
                 } disabled:cursor-not-allowed disabled:opacity-45`}
               >
                 {view.label}{view.archived && !archivedAllowed ? " · verrouillé" : ""}
               </button>
-            ))}
+            ))}<select aria-label="Autres vues clients" value={views.slice(4).some(view=>view.key===activeView)?activeView:""} onChange={event=>setActiveView(event.target.value as ClientView["key"])} className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{views.slice(4).map(view=><option key={view.key} value={view.key}>{view.label}</option>)}</select>
           </>}
         />
 
-        <section className="hidden">
+        <section className="bg-white px-5 py-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5">
           {statCards.map((card) => (
-            <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
-              <div className="flex items-start justify-between gap-4">
-                <p className="text-[14px] font-medium leading-5">{card.label}</p>
-                <span className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white/80 text-[16px] leading-none text-[#4b5563] shadow-sm">↗</span>
-              </div>
-              <p className="mt-3 text-[34px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+            <div key={card.label} className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
+              <p className="text-[12px] text-[#6b7580]">{card.label}</p>
+              <p className="mt-1 text-[24px] font-medium tracking-[-.035em]">{card.value.toLocaleString("fr-FR")}</p>
             </div>
           ))}
+          </div>
         </section>
 
         <section>
-          <div className="px-5 py-4">
-            <label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100">
+          <div className="border-y border-[#eceef1] px-4 py-2.5"><div className="flex items-center gap-2">
+            <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
               <Search size={18} className="text-[#6b7280]" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un client..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
-            </label>
-          </div>
+            </label><button onClick={() => setFiltersOpen((value) => !value)} className={buttonClass} aria-expanded={filtersOpen}><SlidersHorizontal size={16}/>Filtres</button>
+          </div></div>
           {filtersOpen && <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={customerType} onChange={(value) => setCustomerType(value as ClientCustomerType | "")} label="Type">
               <option value="">Type</option>
@@ -540,7 +529,7 @@ export function ClientsPage() {
               </button>
             </div>
           </div>
-          <section className="grid gap-3 border-t border-[#d8dce2] bg-[#fafbfc] px-5 py-4 sm:grid-cols-2 lg:grid-cols-5">
+          <section className="hidden">
             {statCards.map((card) => (
               <div key={card.label} className={`min-h-[90px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
                 <p className="text-[13px] font-medium">{card.label}</p>

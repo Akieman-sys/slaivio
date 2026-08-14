@@ -17,7 +17,6 @@ import {
   History,
   Image as ImageIcon,
   MapPin,
-  MoreHorizontal,
   PackageCheck,
   PackageSearch,
   Ruler,
@@ -480,52 +479,36 @@ export function PackagesPage() {
       <div className="overflow-hidden bg-white">
         <OperationPageHeader title="Colis" description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
           actions={<>
-              <button onClick={()=>setFiltersOpen(value=>!value)} className={buttonClass} aria-expanded={filtersOpen}><SlidersHorizontal size={16}/>Filtres</button>
-              <button onClick={()=>setScanOpen(true)} className={buttonClass}><Barcode size={16}/>Scanner</button>
-              <button onClick={()=>setLayoutMode(layoutMode==="kanban"?"table":"kanban")} className={buttonClass}>{layoutMode==="kanban"?"Tableau":"Kanban"}</button>
-              <button onClick={()=>layoutMode==="analytics"?setLayoutMode("table"):showAnalytics()} className={buttonClass}>Analytics</button>
-              <button onClick={() => setImportOpen(true)} className={buttonClass}>
-                <Upload size={16} />
-                Importer
-              </button>
-              <button onClick={handleExport} className={buttonClass}>
-                <Download size={16} />
-                Exporter
-              </button>
+              <details className="relative"><summary className={`${buttonClass} cursor-pointer list-none`}>Plus</summary><div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]"><button onClick={()=>setScanOpen(true)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><Barcode size={14}/>Scanner un colis</button><button onClick={()=>setLayoutMode(layoutMode==="kanban"?"table":"kanban")} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">{layoutMode==="kanban"?"Vue tableau":"Vue Kanban"}</button><button onClick={()=>layoutMode==="analytics"?setLayoutMode("table"):showAnalytics()} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">{layoutMode==="analytics"?"Vue tableau":"Analytics"}</button><button onClick={() => setImportOpen(true)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><Upload size={14}/>Importer</button><button onClick={handleExport} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"><Download size={14}/>Exporter</button></div></details>
               <button onClick={openCreate} className={primaryButtonClass}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau colis
               </button>
             </>}
           tabs={<>
-            {views.map((view) => (
+            {views.slice(0, 5).map((view) => (
               <button
                 key={view.key}
                 onClick={() => setActiveView(view.key)}
-                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition ${
-                  activeView === view.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"
+                className={`rounded-t-md px-3 py-2 text-[13px] font-medium transition ${
+                  activeView === view.key ? "border-b-2 border-[#12c76f] bg-[#effaf4] text-[#067a45]" : "text-[#526071] hover:bg-[#f2f4f7]"
                 }`}
               >
                 {view.label}
               </button>
-            ))}
+            ))}<select aria-label="Autres vues colis" value={views.slice(5).some(view=>view.key===activeView)?activeView:""} onChange={event=>setActiveView(event.target.value)} className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{views.slice(5).map(view=><option key={view.key} value={view.key}>{view.label}</option>)}</select>
           </>}
         />
 
-        <section className="grid gap-3 border-b border-[#d8dce2] px-5 py-4 sm:grid-cols-2 lg:grid-cols-6">
+        <section className="bg-white px-5 py-4"><div className="grid grid-cols-2 lg:grid-cols-6">
           {statCards.map((card) => (
-            <div key={card.label} className={`min-h-[102px] rounded-md border p-4 ${metricCardClass(card.tone)}`}>
-              <div className="flex items-start justify-between gap-4">
-                <p className="text-[14px] font-medium leading-5">{card.label}</p>
-                <span className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white/80 text-[16px] leading-none text-[#4b5563] shadow-sm">↗</span>
-              </div>
-              <p className="mt-3 text-[34px] font-normal leading-none tracking-[-0.04em]">{card.value.toLocaleString("fr-FR")}</p>
+            <div key={card.label} className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"><p className="text-[12px] text-[#6b7580]">{card.label}</p><p className="mt-1 text-[24px] font-medium tracking-[-.035em]">{card.value.toLocaleString("fr-FR")}</p>
             </div>
-          ))}
+          ))}</div>
         </section>
 
         <section className={selected ? "xl:pr-[380px]" : ""}>
-          <div className="px-5 py-4"><label className="flex h-11 items-center rounded-md border border-[#cfd5dd] bg-white px-3 shadow-sm focus-within:border-[#2f7df6] focus-within:ring-2 focus-within:ring-blue-100"><Search size={18} className="text-[#6b7280]"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Rechercher un colis..." className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none"/></label></div>
+          <div className="border-y border-[#eceef1] px-4 py-2.5"><div className="flex items-center gap-2"><label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]"><Search size={16} className="text-[#6b7280]"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Rechercher un colis..." className="ml-3 min-w-0 flex-1 bg-transparent text-[13px] outline-none"/></label><button onClick={()=>setFiltersOpen(value=>!value)} className={buttonClass} aria-expanded={filtersOpen}><SlidersHorizontal size={16}/>Filtres</button></div></div>
           {filtersOpen&&<div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
             <SelectFilter value={status} onChange={(value) => setStatus(value as PackageStatus | "")} label="Statut">
               <option value="">Statut</option>
@@ -692,7 +675,7 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
             <th className="px-3 py-2">Colis</th>
             <th className="px-3 py-2">Dossier / Client</th>
             <th className="px-3 py-2 text-right">Poids</th>
-            <th className="px-3 py-2">Origine</th>
+            <th className="px-3 py-2">Origine → destination</th>
             <th className="px-3 py-2">Statut</th>
             <th className="px-3 py-2">Dernière mise à jour</th>
             <th className="w-10 px-3 py-2" />
@@ -713,10 +696,10 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
                 <p className="font-medium text-[#1f2328]">{item.client_name || "Client"}</p>
               </td>
               <td className="px-3 py-2 text-right text-[#334155]">{item.weight_kg ? `${item.weight_kg} kg` : "-"}</td>
-              <td className="px-3 py-2 text-[#334155]"><p>{item.origin_city || "-"}</p><p className="text-[12px] text-[#687584]">{item.origin_country || "-"}</p></td>
+              <td className="px-3 py-2 text-[#334155]"><p>{item.origin_city || item.origin_country || "-"} → {item.destination_city || item.destination_country || "-"}</p><p className="text-[12px] text-[#687584]">{item.origin_country || "-"} → {item.destination_country || "-"}</p></td>
               <td className="px-3 py-2"><StatusBadge status={item.status} /></td>
               <td className="px-3 py-2 text-[#687584]">{formatDate(item.updated_at || item.created_at)}</td>
-              <td className="px-3 py-2"><MoreHorizontal size={16} className="text-[#687584]" /></td>
+              <td className="px-3 py-2"><ChevronRight size={16} className="text-[#687584]" /></td>
             </tr>
           ))}
         </tbody>
@@ -728,7 +711,7 @@ function PackagesTable({ packages, loading, selectedId, onSelect }: {
 function PackageThumbnail({item}:{item:PackageRecord}) {
   const media=item.media?.find(file=>file.media_type?.startsWith("image"));
   if(media?.media_url)return <Image src={media.media_url} alt="" width={56} height={48} unoptimized className="h-12 w-14 shrink-0 rounded-md border border-[#d8dce2] object-cover"/>;
-  return <span className="flex h-12 w-14 shrink-0 items-center justify-center rounded-md border border-[#d8dce2] bg-[#f1f4f2] text-[#4f7c65]"><Box size={20}/></span>;
+  return <span className="flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-md border border-dashed border-[#cfd5dd] bg-[#f7f8f8] text-[#7b8794]"><ImageIcon size={17}/><small className="mt-0.5 text-[9px]">Photo manquante</small></span>;
 }
 
 function PackageDetails({

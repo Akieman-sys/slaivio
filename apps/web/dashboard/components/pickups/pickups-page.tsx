@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import {
   checkInPickup,
   createPickup,
@@ -121,20 +122,40 @@ export function PickupsPage() {
   }
   return (
     <div className="min-h-full bg-[#f7f7f6]">
-      <header className="border-b border-[#dedfdf] bg-white px-6 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[12px] text-[#6c7480]">Opérations › Retraits</p>
-            <h1 className="mt-1 text-[24px] font-semibold tracking-[-.02em]">
-              Retraits en agence
-            </h1>
-            <p className="mt-1 text-[13px] text-[#68717d]">
-              Vérifiez le client, le paiement et le code avant toute remise
-              physique.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <details className="relative"><summary className={`${button} cursor-pointer list-none`}>Plus</summary><div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]"><button onClick={() => setAnalyticsOpen(true)} className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">Analytics</button><PermissionGuard permission="pickups.notify"><button onClick={reminders} className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">Relancer les retraits en attente</button></PermissionGuard><PermissionGuard permission="pickups.settings"><button onClick={() => setSettingsOpen(true)} className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">Paramètres des retraits</button></PermissionGuard></div></details>
+      <OperationPageHeader
+        title="Retraits en agence"
+        description="Vérifiez le client, le paiement et le code avant toute remise physique."
+        actions={
+          <>
+            <details className="relative">
+              <summary className={`${button} cursor-pointer list-none`}>
+                Plus
+              </summary>
+              <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+                <button
+                  onClick={() => setAnalyticsOpen(true)}
+                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
+                >
+                  Analytics
+                </button>
+                <PermissionGuard permission="pickups.notify">
+                  <button
+                    onClick={reminders}
+                    className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
+                  >
+                    Relancer les retraits en attente
+                  </button>
+                </PermissionGuard>
+                <PermissionGuard permission="pickups.settings">
+                  <button
+                    onClick={() => setSettingsOpen(true)}
+                    className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
+                  >
+                    Paramètres des retraits
+                  </button>
+                </PermissionGuard>
+              </div>
+            </details>
             <PermissionGuard permission="pickups.export">
               <button onClick={download} className={button}>
                 <Download size={14} />
@@ -147,11 +168,11 @@ export function PickupsPage() {
                 Préparer un retrait
               </button>
             </PermissionGuard>
-          </div>
-        </div>
-      </header>
-      <main className="p-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          </>
+        }
+      />
+      <main>
+        <div className="grid grid-cols-2 bg-white px-5 py-4 xl:grid-cols-6">
           {[
             ["En attente", stats.waiting],
             ["Au guichet", stats.at_counter],
@@ -162,14 +183,14 @@ export function PickupsPage() {
           ].map(([l, v]) => (
             <div
               key={l}
-              className="rounded-[7px] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.06)]"
+              className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
             >
               <p className="text-[12px] text-[#68717d]">{l}</p>
               <b className="mt-2 block text-[22px]">{v}</b>
             </div>
           ))}
         </div>
-        <section className="mt-4 overflow-hidden rounded-[7px] bg-white shadow-[0_1px_3px_rgba(15,23,42,.07)]">
+        <section className="overflow-hidden bg-white">
           <div className="flex flex-wrap gap-2 border-b border-[#e5e7e8] p-3">
             <label className="flex h-9 min-w-64 flex-1 items-center rounded-[5px] bg-[#f3f4f4] px-3">
               <Search size={15} />

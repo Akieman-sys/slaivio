@@ -9,6 +9,7 @@ import {
   Warehouse as WarehouseIcon,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import {
   createWarehouse,
   exportWarehouseInventory,
@@ -72,19 +73,11 @@ export function WarehousesPage() {
   }
   return (
     <div className="min-h-full bg-[#f7f7f6]">
-      <header className="border-b border-[#dedfdf] bg-white px-6 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[12px] text-[#6c7480]">Opérations › Entrepôts</p>
-            <h1 className="mt-1 text-[24px] font-semibold tracking-[-.02em]">
-              Entrepôts
-            </h1>
-            <p className="mt-1 text-[13px] text-[#68717d]">
-              Pilotez le stock, les emplacements, les transferts et les
-              contrôles physiques.
-            </p>
-          </div>
-          <div className="flex gap-2">
+      <OperationPageHeader
+        title="Entrepôts"
+        description="Pilotez le stock, les emplacements, les transferts et les contrôles physiques."
+        actions={
+          <>
             <PermissionGuard permission="warehouses.export">
               <button onClick={download} className={button}>
                 <Download size={15} />
@@ -97,29 +90,31 @@ export function WarehousesPage() {
                 Nouvel entrepôt
               </button>
             </PermissionGuard>
+          </>
+        }
+      />
+      <main>
+        <section className="bg-white px-5 py-4">
+          <div className="grid grid-cols-2 xl:grid-cols-6">
+            {[
+              ["Entrepôts", stats.warehouses],
+              ["Colis stockés", stats.packages],
+              ["Poids total", `${num(stats.weight_kg)} kg`],
+              ["Volume", `${num(stats.volume_cbm)} m³`],
+              ["Transferts", stats.transfers],
+              ["Anomalies", stats.anomalies],
+            ].map(([label, value], i) => (
+              <div
+                key={label}
+                className={`border-l border-[#eceef1] px-4 py-1 first:border-l-0 ${i === 5 && Number(value) > 0 ? "text-amber-700" : ""}`}
+              >
+                <p className="text-[12px] text-[#68717d]">{label}</p>
+                <b className="mt-2 block text-[23px] font-semibold">{value}</b>
+              </div>
+            ))}
           </div>
-        </div>
-      </header>
-      <main className="p-5">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          {[
-            ["Entrepôts", stats.warehouses],
-            ["Colis stockés", stats.packages],
-            ["Poids total", `${num(stats.weight_kg)} kg`],
-            ["Volume", `${num(stats.volume_cbm)} m³`],
-            ["Transferts", stats.transfers],
-            ["Anomalies", stats.anomalies],
-          ].map(([label, value], i) => (
-            <div
-              key={label}
-              className={`rounded-[7px] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.06)] ${i === 5 && Number(value) > 0 ? "ring-1 ring-amber-200" : ""}`}
-            >
-              <p className="text-[12px] text-[#68717d]">{label}</p>
-              <b className="mt-2 block text-[23px] font-semibold">{value}</b>
-            </div>
-          ))}
         </section>
-        <section className="mt-4 overflow-hidden rounded-[7px] bg-white shadow-[0_1px_3px_rgba(15,23,42,.07)]">
+        <section className="overflow-hidden bg-white">
           <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e7e8] p-3">
             <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-[5px] bg-[#f4f5f5] px-3">
               <Search size={15} className="text-[#7a838e]" />

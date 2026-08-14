@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, Plus, RefreshCcw, ScanLine, Trash2, X } from "lucide-react";
 import { getReferenceCatalog, ReferenceCatalog } from "@/services/references";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import {
   addBatchPackages,
   Batch,
@@ -143,54 +144,61 @@ export function BatchCenterPage() {
   const stats = data?.stats || {};
   return (
     <div className="min-h-full bg-[#f6f7f6] text-[#17201c]">
-      <header className="border-b border-[#e2e4e2] bg-white px-6 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[11px] text-[#707872]">Opérations › Groupage</p>
-            <h1 className="mt-1 text-[25px] font-semibold">
-              Batchs & Groupages
-            </h1>
-            <p className="mt-1 text-[13px] text-[#68716c]">
-              Regroupez les colis compatibles, contrôlez la capacité et préparez
-              les expéditions.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button className={button} onClick={download}>
-              <Download size={14} />
-              Exporter
-            </button>
-            <button className={button} onClick={load}>
-              <RefreshCcw size={14} />
-              Actualiser
-            </button>
+      <OperationPageHeader
+        title="Batchs & Groupages"
+        description="Regroupez les colis compatibles, contrôlez la capacité et préparez les expéditions."
+        actions={
+          <>
+            <details className="relative">
+              <summary className={`${button} cursor-pointer list-none`}>
+                Plus
+              </summary>
+              <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+                <button
+                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
+                  onClick={download}
+                >
+                  <Download size={14} />
+                  Exporter
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
+                  onClick={load}
+                >
+                  <RefreshCcw size={14} />
+                  Actualiser
+                </button>
+              </div>
+            </details>
             <button className={primary} onClick={showCreate}>
               <Plus size={15} />
               Nouveau batch
             </button>
+          </>
+        }
+      />
+      <main>
+        <section className="bg-white px-5 py-4">
+          <div className="grid grid-cols-2 xl:grid-cols-6">
+            {[
+              ["Batchs ouverts", stats.open_batches],
+              ["Prêts au départ", stats.ready],
+              ["En préparation", stats.preparing],
+              ["Complets", stats.full],
+              ["Bloqués", stats.blocked],
+              ["Colis non groupés", stats.unassigned_packages],
+            ].map(([l, v]) => (
+              <div
+                key={String(l)}
+                className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
+              >
+                <p className="text-[11px] text-[#707872]">{l}</p>
+                <b className="mt-2 block text-[23px]">{n(v)}</b>
+              </div>
+            ))}
           </div>
-        </div>
-      </header>
-      <main className="p-5 sm:p-6">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          {[
-            ["Batchs ouverts", stats.open_batches],
-            ["Prêts au départ", stats.ready],
-            ["En préparation", stats.preparing],
-            ["Complets", stats.full],
-            ["Bloqués", stats.blocked],
-            ["Colis non groupés", stats.unassigned_packages],
-          ].map(([l, v]) => (
-            <div
-              key={String(l)}
-              className="rounded-[7px] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.07)]"
-            >
-              <p className="text-[11px] text-[#707872]">{l}</p>
-              <b className="mt-2 block text-[23px]">{n(v)}</b>
-            </div>
-          ))}
         </section>
-        <section className="mt-4 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,.08)]">
+        <section className="bg-white">
           <div className="flex flex-wrap gap-2 border-b border-[#e7e9e7] p-3">
             <input
               className={`${input} max-w-sm`}
@@ -392,7 +400,9 @@ function CreatePanel({
             onChange={(e) => set("batch_type", e.target.value)}
           >
             {Object.entries(batchTypeLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
+              <option key={value} value={value}>
+                {label}
+              </option>
             ))}
           </select>
         </Field>

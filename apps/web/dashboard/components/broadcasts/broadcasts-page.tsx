@@ -329,45 +329,74 @@ function CampaignModal({
   return (
     <Modal title="Nouvelle campagne" close={close}>
       <form className="grid gap-3" onSubmit={submit}>
-        <input
-          required
-          name="title"
-          className={field}
-          placeholder="Titre campagne"
-        />
-        <select name="objective" className={field}>
-          <option value="INFORM">Informer les clients</option>
-          <option value="PROMOTE">Présenter une offre</option>
-          <option value="REACTIVATE">Recontacter des clients inactifs</option>
-          <option value="ANNOUNCE">Faire une annonce importante</option>
-        </select>
-        <select name="type" className={field}>
-          <option value="INFORMATIONAL">Information opérationnelle</option>
-          <option value="COMMERCIAL">
-            Commerciale — consentement obligatoire
-          </option>
-          <option value="ENGAGEMENT">Engagement</option>
-        </select>
-        <select name="channel" className={field}>
-          <option value="WHATSAPP">WhatsApp Business connecté</option>
-        </select>
-        <select name="audience" className={field}>
-          <option value="">Choisir les clients concernés</option>
-          {((resources.audiences || []) as Array<Record<string, unknown>>).map(
-            (x) => (
+        <label className="grid gap-1 text-[12px] font-medium">
+          Nom interne de la campagne
+          <input
+            required
+            name="title"
+            className={field}
+            placeholder="Ex. Annonce du départ de vendredi"
+          />
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Que souhaitez-vous faire ?
+          <select name="objective" className={field}>
+            <option value="INFORM">Informer les clients</option>
+            <option value="PROMOTE">Présenter une offre</option>
+            <option value="REACTIVATE">Recontacter des clients inactifs</option>
+            <option value="ANNOUNCE">Faire une annonce importante</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Nature du message
+          <select name="type" className={field}>
+            <option value="INFORMATIONAL">Information opérationnelle</option>
+            <option value="COMMERCIAL">
+              Commerciale — consentement obligatoire
+            </option>
+            <option value="ENGAGEMENT">Engagement</option>
+          </select>
+          <small className="font-normal text-[#727b84]">
+            Les offres commerciales sont envoyées uniquement aux clients ayant
+            donné leur accord.
+          </small>
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Canal d’envoi
+          <select name="channel" className={field}>
+            <option value="WHATSAPP">WhatsApp Business connecté</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Clients destinataires
+          <select name="audience" className={field}>
+            <option value="">Choisir les clients concernés</option>
+            {(
+              (resources.audiences || []) as Array<Record<string, unknown>>
+            ).map((x) => (
               <option key={String(x.id)} value={String(x.id)}>
                 {String(x.name)}
               </option>
-            ),
-          )}
-        </select>
-        <textarea
-          required
-          name="message"
-          className="min-h-36 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]"
-          placeholder="Écrivez le message au nom de votre agence. Le prénom du client sera ajouté automatiquement lorsqu’il est disponible."
-        />
-        <input name="date" type="datetime-local" className={field} />
+            ))}
+          </select>
+          <small className="font-normal text-[#727b84]">
+            Le groupe applique automatiquement ses pays, statuts et
+            consentements.
+          </small>
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Message envoyé au nom de l’agence
+          <textarea
+            required
+            name="message"
+            className="min-h-36 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]"
+            placeholder="Écrivez le message au nom de votre agence. Le prénom du client sera ajouté automatiquement lorsqu’il est disponible."
+          />
+        </label>
+        <label className="grid gap-1 text-[12px] font-medium">
+          Programmer l’envoi (facultatif)
+          <input name="date" type="datetime-local" className={field} />
+        </label>
         <button className={primary}>Créer la campagne</button>
       </form>
     </Modal>

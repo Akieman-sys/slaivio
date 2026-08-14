@@ -219,11 +219,27 @@ export function DeparturesPage() {
             value={mode}
             onChange={(e) => setMode(e.target.value)}
           >
-            <option value="">Tous services</option>
-            <option>AIR</option>
-            <option>SEA</option>
-            <option>EXPRESS</option>
-            <option>ROAD</option>
+            <option value="">Tous les services de l’agence</option>
+            {Array.from(
+              new Set(
+                services
+                  .map((service) => service.shipping_mode)
+                  .filter(Boolean),
+              ),
+            ).map((serviceMode) => (
+              <option key={serviceMode} value={serviceMode}>
+                {(
+                  {
+                    AIR: "Avion",
+                    SEA: "Bateau",
+                    EXPRESS: "Express",
+                    ROAD: "Route",
+                    RAIL: "Rail",
+                    MULTIMODAL: "Plusieurs modes",
+                  } as Record<string, string>
+                )[serviceMode] || serviceMode}
+              </option>
+            ))}
           </select>
         </div>
         {error && (

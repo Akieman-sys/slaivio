@@ -535,7 +535,7 @@ function Rules({ close }: { close: () => void }) {
       exit_conditions: ["CLIENT_RESPONDED", "BUSINESS_CONDITION_RESOLVED"],
       steps: [
         {
-          delay_minutes: Number(f.get("delay")),
+          delay_minutes: Number(f.get("delay_days")) * 1440,
           channel: f.get("channel"),
           message_template: f.get("message"),
           condition_config: {},
@@ -552,7 +552,7 @@ function Rules({ close }: { close: () => void }) {
       name: f.get("name"),
       followup_type: f.get("type"),
       trigger_type: f.get("trigger"),
-      trigger_config: { delay_minutes: Number(f.get("delay")) },
+      trigger_config: { delay_minutes: Number(f.get("delay_days")) * 1440 },
       condition_config: {},
       sequence_id: f.get("sequence") || null,
       priority: f.get("priority"),
@@ -584,29 +584,33 @@ function Rules({ close }: { close: () => void }) {
             className={input}
             placeholder="Séquence paiement standard"
           />
-          <input
-            required
-            name="type"
-            className={input}
-            placeholder="PAYMENT_DUE"
-          />
+          <label className="grid gap-1 text-[12px] font-medium">
+            Situation concernée
+            <select required name="type" className={input}>
+              {Object.entries(followupTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             required
             type="number"
-            name="delay"
+            name="delay_days"
             className={input}
-            placeholder="Délai minutes"
+            placeholder="Attendre combien de jours ?"
           />
           <select name="channel" className={input}>
-            <option>WHATSAPP</option>
-            <option>EMAIL</option>
-            <option>IN_APP</option>
+            <option value="WHATSAPP">WhatsApp connecté</option>
+            <option value="EMAIL">Email connecté</option>
+            <option value="IN_APP">Créer une tâche pour un agent</option>
           </select>
           <textarea
             required
             name="message"
-            className="min-h-24 border p-3"
-            placeholder="Bonjour {{client_name}}..."
+            className="min-h-24 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f]"
+            placeholder="Écrivez le message au nom de l’agence. Le prénom sera ajouté automatiquement."
           />
           <button className={primary}>Enregistrer la séquence</button>
         </form>
@@ -618,23 +622,29 @@ function Rules({ close }: { close: () => void }) {
             className={input}
             placeholder="Facture échue J+1"
           />
-          <input
-            required
-            name="type"
-            className={input}
-            placeholder="PAYMENT_DUE"
-          />
+          <label className="grid gap-1 text-[12px] font-medium">
+            Situation à surveiller
+            <select required name="type" className={input}>
+              {Object.entries(followupTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
           <select name="trigger" className={input}>
-            <option value="DATE">Date</option>
-            <option value="STATUS">Statut</option>
-            <option value="INACTIVITY">Inactivité</option>
-            <option value="EVENT">Événement</option>
+            <option value="DATE">Une date est atteinte</option>
+            <option value="STATUS">Une situation reste non résolue</option>
+            <option value="INACTIVITY">
+              Le client ou dossier reste sans activité
+            </option>
+            <option value="EVENT">Un événement métier se produit</option>
           </select>
           <input
             type="number"
-            name="delay"
+            name="delay_days"
             className={input}
-            placeholder="Délai minutes"
+            placeholder="Attendre combien de jours ?"
           />
           <select name="sequence" className={input}>
             <option value="">Sans séquence</option>
@@ -647,9 +657,9 @@ function Rules({ close }: { close: () => void }) {
             )}
           </select>
           <select name="priority" className={input}>
-            <option>NORMAL</option>
-            <option>HIGH</option>
-            <option>URGENT</option>
+            <option value="NORMAL">Priorité normale</option>
+            <option value="HIGH">Priorité haute</option>
+            <option value="URGENT">Priorité urgente</option>
           </select>
           <input
             name="team"

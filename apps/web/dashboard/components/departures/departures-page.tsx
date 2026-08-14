@@ -8,7 +8,6 @@ import {
   RefreshCcw,
   Search,
   Ship,
-  X,
 } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -557,30 +556,8 @@ function Detail({
 }) {
   const [current, setCurrent] = useState(item);
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        className="ml-auto h-full w-full max-w-[720px] overflow-y-auto bg-white"
-      >
-        <header className="border-b p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>Départ planifié</small>
-              <h2 className="text-xl font-semibold">
-                {current.departure_code}
-              </h2>
-              <p>
-                {current.route_name} · {current.service_name}
-              </p>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <div className="mt-3">
-            <Badge value={current.status} />
-          </div>
-        </header>
+    <OperationDrawer open title={current.departure_code} description={`${current.route_name} · ${current.service_name}`} close={close}>
+        <div className="mb-4"><Badge value={current.status} /></div>
         <div className="grid gap-4 p-5">
           <section className="grid grid-cols-2 gap-3">
             <Info label="Départ" value={date(current.scheduled_at)} />
@@ -642,8 +619,7 @@ function Detail({
             </PermissionGuard>
           </div>
         </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 function DepartureOperations({

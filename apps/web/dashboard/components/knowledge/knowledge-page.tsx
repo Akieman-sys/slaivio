@@ -71,6 +71,7 @@ const statusLabels: Record<string, string> = {
   EXPIRED: "Expiré",
   ARCHIVED: "Archivé",
 };
+const aiScopeLabels: Record<string, string> = { NONE: "Non utilisé par l’assistant", INTERNAL: "Aide réservée à l’équipe", CLIENT: "Réponses aux clients", BOTH: "Équipe et clients" };
 const categories = [
   "ALL",
   "AGENCY",
@@ -307,21 +308,7 @@ export function KnowledgePage() {
       ) : view === "files" ? (
         <Files items={files} />
       ) : (
-        <main className="grid xl:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="hidden border-r bg-white p-3 xl:block">
-            <p className="px-2 py-2 text-[10px] font-semibold uppercase text-[#7b838b]">
-              Catégories
-            </p>
-            {categories.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategory(c)}
-                className={`block w-full rounded px-2 py-2 text-left text-[12px] ${category === c ? "bg-[#eaf6f0] font-medium text-[#126744]" : "hover:bg-[#f3f4f4]"}`}
-              >
-                {c === "ALL" ? "Toutes les catégories" : c}
-              </button>
-            ))}
-          </aside>
+        <main>
           <section>
             <div className="flex flex-wrap gap-2 border-b bg-white p-4">
               <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
@@ -334,12 +321,12 @@ export function KnowledgePage() {
                 />
               </label>
               <select
-                className={`${input} w-44 xl:hidden`}
+                className={`${input} w-52`}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
                 {categories.map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>{c === "ALL" ? "Toutes les catégories" : categoryLabels[c] || c}</option>
                 ))}
               </select>
             </div>
@@ -485,28 +472,8 @@ function Detail({
     }
   }
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        className="ml-auto h-full w-full max-w-[680px] overflow-y-auto bg-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="border-b p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>{item.reference}</small>
-              <h2 className="mt-1 text-xl font-semibold">{item.title}</h2>
-              <div className="mt-2 flex gap-2">
-                <Badge value={item.status} />
-                <span className="rounded-full bg-[#f0f2f3] px-2 py-1 text-[10px]">
-                  {item.ai_scope}
-                </span>
-              </div>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-        </header>
+    <OperationDrawer open title={item.title} description={item.reference} close={close}>
+          <div className="mb-4 flex gap-2"><Badge value={item.status} /><span className="rounded-full bg-[#f0f2f3] px-2 py-1 text-[10px]">{aiScopeLabels[item.ai_scope] || item.ai_scope}</span></div>
         <div className="space-y-4 p-5">
           <section className="border p-4">
             <h3 className="text-[13px] font-semibold">Contenu officiel</h3>
@@ -585,8 +552,7 @@ function Detail({
             </PermissionGuard>
           </div>
         </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 function Create({ close, done }: { close: () => void; done: () => void }) {

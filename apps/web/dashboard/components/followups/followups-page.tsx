@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Download, Plus, Search, Send, X } from "lucide-react";
+import { Download, Plus, Search, Send } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
@@ -280,28 +280,8 @@ function Detail({
   action: (x: Followup, a: string) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        className="ml-auto h-full w-full max-w-[650px] overflow-y-auto bg-white"
-      >
-        <header className="border-b p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>Relance</small>
-              <h2 className="text-xl font-semibold">{item.reference}</h2>
-              <p>
-                {item.client_name} · {item.followup_type}
-              </p>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <div className="mt-3">
-            <Badge value={item.status} />
-          </div>
-        </header>
+    <OperationDrawer open title={item.reference} description={`${item.client_name} · ${item.followup_type}`} close={close}>
+        <div className="mb-4"><Badge value={item.status} /></div>
         <div className="grid gap-4 p-5">
           <section className="grid grid-cols-2 gap-3">
             {[
@@ -370,8 +350,7 @@ function Detail({
             </button>
           </div>
         </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 function Create({ close, done }: { close: () => void; done: () => void }) {

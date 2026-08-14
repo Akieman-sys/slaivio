@@ -1,8 +1,9 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Download, Megaphone, Plus, Search, X } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { listClients } from "@/services/clients";
 import {
   campaignAction,
   campaignResources,
@@ -191,19 +192,11 @@ export function BroadcastsPage() {
         </tbody>
       </table>
       {selected && (
-        <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-xl overflow-y-auto bg-white p-5 shadow-2xl">
-          <button className="float-right" onClick={() => setSelected(null)}>
-            <X />
-          </button>
-          <Megaphone />
-          <h2 className="mt-3 text-xl font-semibold">{selected.title}</h2>
-          <p>
-            {selected.reference} · {selected.status}
-          </p>
-          <div className="my-5 border p-4 whitespace-pre-wrap">
+        <OperationDrawer open title={selected.title} description={`${selected.reference} · ${selected.status}`} close={() => setSelected(null)}>
+          <div className="rounded-md bg-white p-4 whitespace-pre-wrap">
             {selected.message}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               className={btn}
               onClick={async () => {
@@ -229,7 +222,7 @@ export function BroadcastsPage() {
               Annuler
             </button>
           </div>
-        </aside>
+        </OperationDrawer>
       )}
       {modal === "campaign" && (
         <CampaignModal
@@ -336,6 +329,8 @@ function AudienceModal({
   close: () => void;
   done: () => void;
 }) {
+  const [countries,setCountries]=useState<string[]>([]);
+  useEffect(()=>{listClients({page_size:500}).then((data)=>setCountries(Array.from(new Set(data.items.map((client)=>client.country).filter((country):country is string=>Boolean(country)))).sort())).catch(()=>setCountries([]))},[]);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -362,11 +357,7 @@ function AudienceModal({
         />
         <label className="text-[12px] text-[#5f6873]">
           Pays des clients
-          <input
-            name="country"
-            className={`${field} mt-1 w-full`}
-            placeholder="Ex. RDC"
-          />
+          <select name="country" className={`${field} mt-1 w-full`}><option value="">Tous les pays configurés</option>{countries.map((country)=><option key={country} value={country}>{country}</option>)}</select>
         </label>
         <select name="language" className={field}>
           <option value="">Toutes les langues</option>

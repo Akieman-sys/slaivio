@@ -149,18 +149,15 @@ export function BatchCenterPage() {
         description="Regroupez les colis compatibles, contrôlez la capacité et préparez les expéditions."
         actions={
           <>
+            <button className={button} onClick={download}>
+              <Download size={14} />
+              Exporter
+            </button>
             <details className="relative">
               <summary className={`${button} cursor-pointer list-none`}>
                 Plus
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
-                <button
-                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
-                  onClick={download}
-                >
-                  <Download size={14} />
-                  Exporter
-                </button>
                 <button
                   className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   onClick={load}

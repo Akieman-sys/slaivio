@@ -172,25 +172,38 @@ export function DeparturesPage() {
                 ["delays", "Retards"],
                 ["history", "Historique"],
               ] as const
-            ).slice(0,4).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setView(k)}
-                className={`h-10 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
-              >
-                {l}
-              </button>
-            ))}
-            <select aria-label="Autres vues" value={["delays","history"].includes(view)?view:""} onChange={(e)=>setView(e.target.value as typeof view)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option><option value="delays">Retards</option><option value="history">Historique</option></select>
+            )
+              .slice(0, 4)
+              .map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setView(k)}
+                  className={`h-10 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
+                >
+                  {l}
+                </button>
+              ))}
+            <select
+              aria-label="Autres vues"
+              value={["delays", "history"].includes(view) ? view : ""}
+              onChange={(e) => setView(e.target.value as typeof view)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              <option value="delays">Retards</option>
+              <option value="history">Historique</option>
+            </select>
           </>
         }
       />
       <main>
-        <section className="bg-white px-5 py-4"><div className="grid grid-cols-2 lg:grid-cols-4">
-          {cards.slice(0,4).map(([l, v]) => (
-            <Metric key={l} label={String(l)} value={v} />
-          ))}
-        </div></section>
+        <section className="bg-white px-5 py-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4">
+            {cards.slice(0, 4).map(([l, v]) => (
+              <Metric key={l} label={String(l)} value={v} />
+            ))}
+          </div>
+        </section>
         <div className="flex flex-wrap gap-2 border-b bg-white p-4">
           <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
             <Search size={15} />
@@ -293,7 +306,9 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
       <small className="text-[#69727d]">{label}</small>
-      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">{value}</b>
+      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+        {value}
+      </b>
     </div>
   );
 }
@@ -439,6 +454,7 @@ function List({
               "Capacité",
               "Statut",
               "Responsable",
+              "",
             ].map((h) => (
               <th key={h} className="p-3">
                 {h}
@@ -477,6 +493,9 @@ function List({
                 <Badge value={x.status} />
               </td>
               <td>{x.responsible_name || "—"}</td>
+              <td className="pr-4 text-right text-[#7b848d]">
+                <ChevronRight size={17} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -556,69 +575,73 @@ function Detail({
 }) {
   const [current, setCurrent] = useState(item);
   return (
-    <OperationDrawer open title={current.departure_code} description={`${current.route_name} · ${current.service_name}`} close={close}>
-        <div className="mb-4"><Badge value={current.status} /></div>
-        <div className="grid gap-4 p-5">
-          <section className="grid grid-cols-2 gap-3">
-            <Info label="Départ" value={date(current.scheduled_at)} />
-            <Info label="ETA" value={date(current.estimated_arrival_at)} />
-            <Info label="Cut-off" value={date(current.cutoff_at)} />
-            <Info label="Fuseau" value={current.timezone} />
-            <Info label="Transporteur" value={current.carrier_name || "—"} />
-            <Info
-              label="Référence transport"
-              value={current.transport_reference || "—"}
-            />
-          </section>
-          <section className="border p-4">
-            <h3 className="font-semibold">Capacité</h3>
-            <p className="mt-3 text-[12px]">Poids</p>
-            <Bar
-              value={current.reserved_weight_kg}
-              max={current.capacity_weight_kg}
-            />
-            <p className="mt-3 text-[12px]">CBM</p>
-            <Bar value={current.reserved_cbm} max={current.capacity_cbm} />
-            <p className="mt-3 text-[12px]">Colis</p>
-            <Bar
-              value={current.reserved_packages}
-              max={current.capacity_packages}
-            />
-          </section>
-          <DepartureOperations
-            item={current}
-            refresh={async () => setCurrent(await departure(current.id))}
+    <OperationDrawer
+      open
+      title={current.departure_code}
+      description={`${current.route_name} · ${current.service_name}`}
+      close={close}
+    >
+      <div className="mb-4">
+        <Badge value={current.status} />
+      </div>
+      <div className="grid gap-4 p-5">
+        <section className="grid grid-cols-2 gap-3">
+          <Info label="Départ" value={date(current.scheduled_at)} />
+          <Info label="ETA" value={date(current.estimated_arrival_at)} />
+          <Info label="Cut-off" value={date(current.cutoff_at)} />
+          <Info label="Fuseau" value={current.timezone} />
+          <Info label="Transporteur" value={current.carrier_name || "—"} />
+          <Info
+            label="Référence transport"
+            value={current.transport_reference || "—"}
           />
-          <section className="border p-4">
-            <h3 className="font-semibold">Audit</h3>
-            {current.events?.map((e, i) => (
-              <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-                {String(e.event_type)} · {date(String(e.created_at))}
-              </p>
-            ))}
-          </section>
-          <div className="flex flex-wrap gap-2">
-            <PermissionGuard permission="departures.dispatch">
-              {next(current.status).map(([s, l]) => (
-                <button
-                  key={s}
-                  className={primary}
-                  onClick={() => move(current, s)}
-                >
-                  {l}
-                </button>
-              ))}
-            </PermissionGuard>
-            <PermissionGuard permission="departures.cancel">
+        </section>
+        <section className="border p-4">
+          <h3 className="font-semibold">Capacité</h3>
+          <p className="mt-3 text-[12px]">Poids</p>
+          <Bar
+            value={current.reserved_weight_kg}
+            max={current.capacity_weight_kg}
+          />
+          <p className="mt-3 text-[12px]">CBM</p>
+          <Bar value={current.reserved_cbm} max={current.capacity_cbm} />
+          <p className="mt-3 text-[12px]">Colis</p>
+          <Bar
+            value={current.reserved_packages}
+            max={current.capacity_packages}
+          />
+        </section>
+        <DepartureOperations
+          item={current}
+          refresh={async () => setCurrent(await departure(current.id))}
+        />
+        <section className="border p-4">
+          <h3 className="font-semibold">Audit</h3>
+          {current.events?.map((e, i) => (
+            <p key={i} className="mt-2 border-t pt-2 text-[12px]">
+              {String(e.event_type)} · {date(String(e.created_at))}
+            </p>
+          ))}
+        </section>
+        <div className="flex flex-wrap gap-2">
+          <PermissionGuard permission="departures.dispatch">
+            {next(current.status).map(([s, l]) => (
               <button
-                className={btn}
-                onClick={() => move(current, "CANCELLED")}
+                key={s}
+                className={primary}
+                onClick={() => move(current, s)}
               >
-                Annuler
+                {l}
               </button>
-            </PermissionGuard>
-          </div>
+            ))}
+          </PermissionGuard>
+          <PermissionGuard permission="departures.cancel">
+            <button className={btn} onClick={() => move(current, "CANCELLED")}>
+              Annuler
+            </button>
+          </PermissionGuard>
         </div>
+      </div>
     </OperationDrawer>
   );
 }
@@ -785,7 +808,11 @@ function Create({
     [error, setError] = useState(""),
     [routeId, setRouteId] = useState(""),
     [offices, setOffices] = useState<ReferenceItem[]>([]);
-  useEffect(()=>{getReferenceCatalog().then((data)=>setOffices(data.offices)).catch(()=>setOffices([]))},[]);
+  useEffect(() => {
+    getReferenceCatalog()
+      .then((data) => setOffices(data.offices))
+      .catch(() => setOffices([]));
+  }, []);
   const routes = Array.from(
     new Map(
       services.map((service) => [
@@ -820,7 +847,12 @@ function Create({
     }
   }
   return (
-    <OperationDrawer open title="Nouveau départ" description="Sélectionnez une route et un service déjà configurés par l’agence." close={close}>
+    <OperationDrawer
+      open
+      title="Nouveau départ"
+      description="Sélectionnez une route et un service déjà configurés par l’agence."
+      close={close}
+    >
       <form onSubmit={submit} className="bg-white p-5">
         <div className="grid gap-4 md:grid-cols-2">
           <label>
@@ -863,7 +895,11 @@ function Create({
             type="datetime-local"
             required
           />
-          <Field name="cutoff_at" label="Date limite de réception des colis" type="datetime-local" />
+          <Field
+            name="cutoff_at"
+            label="Date limite de réception des colis"
+            type="datetime-local"
+          />
           <Field
             name="estimated_arrival_at"
             label="Arrivée estimée"
@@ -884,7 +920,18 @@ function Create({
           <Field name="carrier_name" label="Transporteur" />
           <Field name="transport_reference" label="Vol / navire / véhicule" />
           <Field name="responsible_name" label="Responsable" />
-          <label className="grid gap-1 text-[12px] font-medium text-[#555e58]">Bureau chargé de l’arrivée<select name="destination_office" className={input}><option value="">Aucun bureau sélectionné</option>{offices.map((office)=><option key={office.id} value={office.id}>{office.label}{office.secondary?` · ${office.secondary}`:""}</option>)}</select></label>
+          <label className="grid gap-1 text-[12px] font-medium text-[#555e58]">
+            Bureau chargé de l’arrivée
+            <select name="destination_office" className={input}>
+              <option value="">Aucun bureau sélectionné</option>
+              {offices.map((office) => (
+                <option key={office.id} value={office.id}>
+                  {office.label}
+                  {office.secondary ? ` · ${office.secondary}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" name="published" value="true" />
             Publier aux clients

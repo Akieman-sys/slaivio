@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Download, Plus, Search } from "lucide-react";
+import { ChevronRight, Download, Plus, Search } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { listClients } from "@/services/clients";
@@ -14,9 +14,12 @@ import {
   snapshotCampaign,
   type Campaign,
 } from "@/services/broadcasts";
-const btn = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
-  primary = "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
-  field = "h-9 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]";
+const btn =
+    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
+  primary =
+    "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
+  field =
+    "h-9 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]";
 const tabs = [
   ["", "Toutes"],
   ["DRAFT", "Brouillons"],
@@ -26,6 +29,25 @@ const tabs = [
   ["COMPLETED", "Terminées"],
   ["FAILED", "Échouées"],
 ];
+const campaignStatusLabels: Record<string, string> = {
+  DRAFT: "Brouillon",
+  PENDING_APPROVAL: "À approuver",
+  SCHEDULED: "Programmée",
+  QUEUED: "En file",
+  SENDING: "En cours",
+  PAUSED: "En pause",
+  COMPLETED: "Terminée",
+  PARTIALLY_FAILED: "Partiellement échouée",
+  FAILED: "Échouée",
+  CANCELLED: "Annulée",
+  ARCHIVED: "Archivée",
+};
+const channelLabels: Record<string, string> = {
+  WHATSAPP: "WhatsApp",
+  EMAIL: "Email",
+  SMS: "SMS",
+  PUSH: "Notification mobile",
+};
 export function BroadcastsPage() {
   const [items, setItems] = useState<Campaign[]>([]),
     [stats, setStats] = useState<Record<string, number>>({}),
@@ -119,7 +141,19 @@ export function BroadcastsPage() {
                 {l}
               </button>
             ))}
-            <select aria-label="Autres vues" value={tabs.slice(4).some(([v])=>v===status)?status:""} onChange={(e)=>setStatus(e.target.value)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{tabs.slice(4).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+            <select
+              aria-label="Autres vues"
+              value={tabs.slice(4).some(([v]) => v === status) ? status : ""}
+              onChange={(e) => setStatus(e.target.value)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              {tabs.slice(4).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </div>
         }
       />
@@ -158,6 +192,7 @@ export function BroadcastsPage() {
               "Statut",
               "Programmation",
               "Performance",
+              "",
             ].map((x) => (
               <th className="border-b p-3" key={x}>
                 {x}
@@ -176,9 +211,17 @@ export function BroadcastsPage() {
                 <b>{x.title}</b>
                 <small className="block">{x.reference}</small>
               </td>
-              <td>{x.channels?.join(" + ")}</td>
+              <td>
+                {x.channels
+                  ?.map((channel) => channelLabels[channel] || channel)
+                  .join(" + ")}
+              </td>
               <td>{x.recipients || 0}</td>
-              <td>{x.status}</td>
+              <td>
+                <span className="rounded-full bg-[#eef2f1] px-2 py-1 text-[11px] font-medium">
+                  {campaignStatusLabels[x.status] || x.status}
+                </span>
+              </td>
               <td>
                 {x.scheduled_at
                   ? new Date(x.scheduled_at).toLocaleString("fr-FR")
@@ -187,12 +230,20 @@ export function BroadcastsPage() {
               <td>
                 {x.reads || 0} lus · {x.replies || 0} réponses
               </td>
+              <td className="pr-4 text-right text-[#7b848d]">
+                <ChevronRight size={17} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       {selected && (
-        <OperationDrawer open title={selected.title} description={`${selected.reference} · ${selected.status}`} close={() => setSelected(null)}>
+        <OperationDrawer
+          open
+          title={selected.title}
+          description={`${selected.reference} · ${campaignStatusLabels[selected.status] || selected.status}`}
+          close={() => setSelected(null)}
+        >
           <div className="rounded-md bg-white p-4 whitespace-pre-wrap">
             {selected.message}
           </div>
@@ -329,8 +380,22 @@ function AudienceModal({
   close: () => void;
   done: () => void;
 }) {
-  const [countries,setCountries]=useState<string[]>([]);
-  useEffect(()=>{listClients({page_size:500}).then((data)=>setCountries(Array.from(new Set(data.items.map((client)=>client.country).filter((country):country is string=>Boolean(country)))).sort())).catch(()=>setCountries([]))},[]);
+  const [countries, setCountries] = useState<string[]>([]);
+  useEffect(() => {
+    listClients({ page_size: 500 })
+      .then((data) =>
+        setCountries(
+          Array.from(
+            new Set(
+              data.items
+                .map((client) => client.country)
+                .filter((country): country is string => Boolean(country)),
+            ),
+          ).sort(),
+        ),
+      )
+      .catch(() => setCountries([]));
+  }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -357,7 +422,14 @@ function AudienceModal({
         />
         <label className="text-[12px] text-[#5f6873]">
           Pays des clients
-          <select name="country" className={`${field} mt-1 w-full`}><option value="">Tous les pays configurés</option>{countries.map((country)=><option key={country} value={country}>{country}</option>)}</select>
+          <select name="country" className={`${field} mt-1 w-full`}>
+            <option value="">Tous les pays configurés</option>
+            {countries.map((country) => (
+              <option key={country} value={country}>
+                {country}
+              </option>
+            ))}
+          </select>
         </label>
         <select name="language" className={field}>
           <option value="">Toutes les langues</option>
@@ -383,7 +455,16 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  return <OperationDrawer open title={title} description="Renseignez uniquement les informations utiles à l’agence." close={close}>{children}</OperationDrawer>;
+  return (
+    <OperationDrawer
+      open
+      title={title}
+      description="Renseignez uniquement les informations utiles à l’agence."
+      close={close}
+    >
+      {children}
+    </OperationDrawer>
+  );
 }
 function exportCampaigns(items: Campaign[]) {
   const rows = [

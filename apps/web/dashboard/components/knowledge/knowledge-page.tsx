@@ -5,6 +5,7 @@ import {
   Archive,
   BookOpen,
   CheckCircle2,
+  ChevronRight,
   FileUp,
   Languages,
   Link2,
@@ -71,7 +72,12 @@ const statusLabels: Record<string, string> = {
   EXPIRED: "Expiré",
   ARCHIVED: "Archivé",
 };
-const aiScopeLabels: Record<string, string> = { NONE: "Non utilisé par l’assistant", INTERNAL: "Aide réservée à l’équipe", CLIENT: "Réponses aux clients", BOTH: "Équipe et clients" };
+const aiScopeLabels: Record<string, string> = {
+  NONE: "Non utilisé par l’assistant",
+  INTERNAL: "Aide réservée à l’équipe",
+  CLIENT: "Réponses aux clients",
+  BOTH: "Équipe et clients",
+};
 const categories = [
   "ALL",
   "AGENCY",
@@ -278,24 +284,52 @@ export function KnowledgePage() {
                 ["playground", "Tester mon IA"],
                 ["analytics", "Analytics"],
               ] as const
-            ).slice(0,4).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setView(k)}
-                className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
-              >
-                {l}
-              </button>
-            ))}
-            <select aria-label="Autres vues" value={["policies","files","review","expired","playground","analytics"].includes(view)?view:""} onChange={(e)=>setView(e.target.value as View)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option><option value="policies">Règles</option><option value="files">Fichiers</option><option value="review">À vérifier</option><option value="expired">Expirées</option><option value="playground">Tester mon IA</option><option value="analytics">Analytics</option></select>
+            )
+              .slice(0, 4)
+              .map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setView(k)}
+                  className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
+                >
+                  {l}
+                </button>
+              ))}
+            <select
+              aria-label="Autres vues"
+              value={
+                [
+                  "policies",
+                  "files",
+                  "review",
+                  "expired",
+                  "playground",
+                  "analytics",
+                ].includes(view)
+                  ? view
+                  : ""
+              }
+              onChange={(e) => setView(e.target.value as View)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              <option value="policies">Règles</option>
+              <option value="files">Fichiers</option>
+              <option value="review">À vérifier</option>
+              <option value="expired">Expirées</option>
+              <option value="playground">Tester mon IA</option>
+              <option value="analytics">Analytics</option>
+            </select>
           </>
         }
       />
-      <section className="bg-white px-5 py-4"><div className="grid grid-cols-2 lg:grid-cols-4">
-        {cards.slice(0,4).map(([l, v]) => (
-          <Metric key={String(l)} label={String(l)} value={v} />
-        ))}
-      </div></section>
+      <section className="bg-white px-5 py-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+          {cards.slice(0, 4).map(([l, v]) => (
+            <Metric key={String(l)} label={String(l)} value={v} />
+          ))}
+        </div>
+      </section>
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
           {error}
@@ -326,7 +360,11 @@ export function KnowledgePage() {
                 onChange={(e) => setCategory(e.target.value)}
               >
                 {categories.map((c) => (
-                  <option key={c} value={c}>{c === "ALL" ? "Toutes les catégories" : categoryLabels[c] || c}</option>
+                  <option key={c} value={c}>
+                    {c === "ALL"
+                      ? "Toutes les catégories"
+                      : categoryLabels[c] || c}
+                  </option>
                 ))}
               </select>
             </div>
@@ -390,6 +428,7 @@ function KnowledgeTable({
               "Utilisation par l’assistant",
               "Responsable",
               "Mise à jour",
+              "",
             ].map((h) => (
               <th key={h} className="p-3 font-medium text-[#5d6670]">
                 {h}
@@ -430,6 +469,9 @@ function KnowledgeTable({
                 <small className="block text-[#737b84]">
                   Version {x.version}
                 </small>
+              </td>
+              <td className="pr-4 text-right text-[#7b848d]">
+                <ChevronRight size={17} />
               </td>
             </tr>
           ))}
@@ -472,86 +514,93 @@ function Detail({
     }
   }
   return (
-    <OperationDrawer open title={item.title} description={item.reference} close={close}>
-          <div className="mb-4 flex gap-2"><Badge value={item.status} /><span className="rounded-full bg-[#f0f2f3] px-2 py-1 text-[10px]">{aiScopeLabels[item.ai_scope] || item.ai_scope}</span></div>
-        <div className="space-y-4 p-5">
-          <section className="border p-4">
-            <h3 className="text-[13px] font-semibold">Contenu officiel</h3>
-            <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6">
-              {item.content || "Référence vers une donnée métier structurée."}
+    <OperationDrawer
+      open
+      title={item.title}
+      description={item.reference}
+      close={close}
+    >
+      <div className="mb-4 flex gap-2">
+        <Badge value={item.status} />
+        <span className="rounded-full bg-[#f0f2f3] px-2 py-1 text-[10px]">
+          {aiScopeLabels[item.ai_scope] || item.ai_scope}
+        </span>
+      </div>
+      <div className="space-y-4 p-5">
+        <section className="border p-4">
+          <h3 className="text-[13px] font-semibold">Contenu officiel</h3>
+          <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6">
+            {item.content || "Référence vers une donnée métier structurée."}
+          </p>
+        </section>
+        <section className="grid grid-cols-2 gap-3">
+          <Info label="Type" value={item.knowledge_type} />
+          <Info label="Catégorie" value={item.category} />
+          <Info label="Source de vérité" value={item.source_type} />
+          <Info label="Langue" value={item.language} />
+          <Info label="Audience" value={item.audiences.join(", ")} />
+          <Info label="Responsable" value={item.owner_name || "Non assigné"} />
+        </section>
+        {item.sensitive && (
+          <p className="border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
+            <ShieldCheck size={14} className="mr-2 inline" />
+            Contenu sensible : jamais accessible à l’IA client.
+          </p>
+        )}
+        <section className="border p-4">
+          <h3 className="text-[13px] font-semibold">Versions</h3>
+          {item.versions?.map((v) => (
+            <p key={v.id} className="mt-2 border-t pt-2 text-[12px]">
+              v{v.version} · {v.change_reason || "Modification"}
+              <small className="block text-[#737b84]">
+                {v.created_by_name || "Système"} ·{" "}
+                {new Date(v.created_at).toLocaleString("fr-FR")}
+              </small>
             </p>
-          </section>
-          <section className="grid grid-cols-2 gap-3">
-            <Info label="Type" value={item.knowledge_type} />
-            <Info label="Catégorie" value={item.category} />
-            <Info label="Source de vérité" value={item.source_type} />
-            <Info label="Langue" value={item.language} />
-            <Info label="Audience" value={item.audiences.join(", ")} />
-            <Info
-              label="Responsable"
-              value={item.owner_name || "Non assigné"}
-            />
-          </section>
-          {item.sensitive && (
-            <p className="border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
-              <ShieldCheck size={14} className="mr-2 inline" />
-              Contenu sensible : jamais accessible à l’IA client.
-            </p>
-          )}
-          <section className="border p-4">
-            <h3 className="text-[13px] font-semibold">Versions</h3>
-            {item.versions?.map((v) => (
-              <p key={v.id} className="mt-2 border-t pt-2 text-[12px]">
-                v{v.version} · {v.change_reason || "Modification"}
-                <small className="block text-[#737b84]">
-                  {v.created_by_name || "Système"} ·{" "}
-                  {new Date(v.created_at).toLocaleString("fr-FR")}
-                </small>
-              </p>
-            ))}
-          </section>
-          <div className="flex flex-wrap gap-2">
-            <PermissionGuard permission="knowledge.update">
-              {["DRAFT", "NEEDS_REVIEW"].includes(item.status) && (
-                <button className={primary} onClick={() => action("submit")}>
-                  Soumettre
-                </button>
-              )}
-            </PermissionGuard>
-            <PermissionGuard permission="knowledge.review">
-              {["PENDING_REVIEW", "NEEDS_REVIEW"].includes(item.status) && (
-                <button className={primary} onClick={() => action("approve")}>
-                  <CheckCircle2 size={14} />
-                  Valider
-                </button>
-              )}
-            </PermissionGuard>
-            <PermissionGuard permission="knowledge.publish">
-              {item.status === "APPROVED" && (
-                <button className={primary} onClick={() => action("publish")}>
-                  Publier
-                </button>
-              )}
-              {item.status === "PUBLISHED" && (
-                <button className={btn} onClick={() => action("unpublish")}>
-                  Dépublier
-                </button>
-              )}
-            </PermissionGuard>
-            <PermissionGuard permission="knowledge.archive">
-              {item.status !== "ARCHIVED" ? (
-                <button className={btn} onClick={() => action("archive")}>
-                  <Archive size={14} />
-                  Archiver
-                </button>
-              ) : (
-                <button className={btn} onClick={() => action("restore")}>
-                  Restaurer
-                </button>
-              )}
-            </PermissionGuard>
-          </div>
+          ))}
+        </section>
+        <div className="flex flex-wrap gap-2">
+          <PermissionGuard permission="knowledge.update">
+            {["DRAFT", "NEEDS_REVIEW"].includes(item.status) && (
+              <button className={primary} onClick={() => action("submit")}>
+                Soumettre
+              </button>
+            )}
+          </PermissionGuard>
+          <PermissionGuard permission="knowledge.review">
+            {["PENDING_REVIEW", "NEEDS_REVIEW"].includes(item.status) && (
+              <button className={primary} onClick={() => action("approve")}>
+                <CheckCircle2 size={14} />
+                Valider
+              </button>
+            )}
+          </PermissionGuard>
+          <PermissionGuard permission="knowledge.publish">
+            {item.status === "APPROVED" && (
+              <button className={primary} onClick={() => action("publish")}>
+                Publier
+              </button>
+            )}
+            {item.status === "PUBLISHED" && (
+              <button className={btn} onClick={() => action("unpublish")}>
+                Dépublier
+              </button>
+            )}
+          </PermissionGuard>
+          <PermissionGuard permission="knowledge.archive">
+            {item.status !== "ARCHIVED" ? (
+              <button className={btn} onClick={() => action("archive")}>
+                <Archive size={14} />
+                Archiver
+              </button>
+            ) : (
+              <button className={btn} onClick={() => action("restore")}>
+                Restaurer
+              </button>
+            )}
+          </PermissionGuard>
         </div>
+      </div>
     </OperationDrawer>
   );
 }
@@ -1741,7 +1790,9 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
       <small className="text-[11px] text-[#69727d]">{label}</small>
-      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">{value}</b>
+      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+        {value}
+      </b>
     </div>
   );
 }
@@ -1784,5 +1835,14 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  return <OperationDrawer open title={title} description="Les informations restent modifiables avant publication." close={close}>{children}</OperationDrawer>;
+  return (
+    <OperationDrawer
+      open
+      title={title}
+      description="Les informations restent modifiables avant publication."
+      close={close}
+    >
+      {children}
+    </OperationDrawer>
+  );
 }

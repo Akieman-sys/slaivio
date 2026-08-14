@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Download, Plus, Search, Send } from "lucide-react";
+import { ChevronRight, Download, Plus, Search, Send } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
@@ -39,6 +39,26 @@ const views = [
   ["packages", "Dépôt colis", { followup_type: "PACKAGE_DROP_REMINDER" }],
   ["pickups", "Retraits", { followup_type: "PICKUP" }],
 ] as const;
+const followupTypeLabels: Record<string, string> = {
+  PAYMENT_DUE: "Paiement",
+  QUOTE_FOLLOWUP: "Devis",
+  PACKAGE_DROP_REMINDER: "Dépôt de colis",
+  PICKUP_REMINDER: "Retrait",
+  DOCUMENT_MISSING: "Document manquant",
+  CLIENT_INACTIVE: "Client inactif",
+};
+const followupChannelLabels: Record<string, string> = {
+  WHATSAPP: "WhatsApp",
+  EMAIL: "Email",
+  IN_APP: "Tâche interne",
+  PHONE: "Appel manuel",
+};
+const priorityLabels: Record<string, string> = {
+  LOW: "Faible",
+  NORMAL: "Normale",
+  HIGH: "Haute",
+  URGENT: "Urgente",
+};
 export function FollowupsPage() {
   const [items, setItems] = useState<Followup[]>([]),
     [stats, setStats] = useState<FollowupStats | null>(null),
@@ -148,7 +168,19 @@ export function FollowupsPage() {
                 {l}
               </button>
             ))}
-            <select aria-label="Autres vues" value={views.slice(4).some(([k])=>k===view)?view:""} onChange={(e)=>setView(e.target.value)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{views.slice(4).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+            <select
+              aria-label="Autres vues"
+              value={views.slice(4).some(([k]) => k === view) ? view : ""}
+              onChange={(e) => setView(e.target.value)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              {views.slice(4).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </div>
         }
       />
@@ -228,6 +260,7 @@ function Table({
               "Priorité",
               "Responsable",
               "Statut",
+              "",
             ].map((h) => (
               <th className="p-3" key={h}>
                 {h}
@@ -244,19 +277,22 @@ function Table({
             >
               <td className="p-3 font-semibold">{x.client_name || "Client"}</td>
               <td>
-                {x.followup_type}
+                {followupTypeLabels[x.followup_type] || x.followup_type}
                 <small className="block text-[#6b7280]">{x.reason}</small>
               </td>
               <td>{x.subject_reference || x.reference}</td>
-              <td>{x.channel}</td>
+              <td>{followupChannelLabels[x.channel] || x.channel}</td>
               <td>{date(x.due_at)}</td>
               <td>
                 {x.current_step}/{x.max_steps}
               </td>
-              <td>{x.priority}</td>
+              <td>{priorityLabels[x.priority] || x.priority}</td>
               <td>{x.responsible_name || "—"}</td>
               <td>
                 <Badge value={x.status} />
+              </td>
+              <td className="pr-4 text-right text-[#7b848d]">
+                <ChevronRight size={17} />
               </td>
             </tr>
           ))}
@@ -280,76 +316,79 @@ function Detail({
   action: (x: Followup, a: string) => void;
 }) {
   return (
-    <OperationDrawer open title={item.reference} description={`${item.client_name} · ${item.followup_type}`} close={close}>
-        <div className="mb-4"><Badge value={item.status} /></div>
-        <div className="grid gap-4 p-5">
-          <section className="grid grid-cols-2 gap-3">
-            {[
-              ["Motif", item.reason],
-              ["Objet", item.subject_reference],
-              ["Prochaine tentative", date(item.due_at)],
-              ["Responsable", item.responsible_name],
-              ["Étape", `${item.current_step}/${item.max_steps}`],
-              [
-                "Montant",
-                item.amount_context
-                  ? `${item.amount_context} ${item.currency || ""}`
-                  : "—",
-              ],
-            ].map(([l, v]) => (
-              <div className="border p-3" key={l}>
-                <small>{l}</small>
-                <b className="mt-1 block">{v || "—"}</b>
-              </div>
-            ))}
-          </section>
-          <section className="border p-4">
-            <h3 className="font-semibold">Message</h3>
-            <p className="mt-2 whitespace-pre-wrap text-[13px]">
-              {item.message}
+    <OperationDrawer
+      open
+      title={item.reference}
+      description={`${item.client_name} · ${item.followup_type}`}
+      close={close}
+    >
+      <div className="mb-4">
+        <Badge value={item.status} />
+      </div>
+      <div className="grid gap-4 p-5">
+        <section className="grid grid-cols-2 gap-3">
+          {[
+            ["Motif", item.reason],
+            ["Objet", item.subject_reference],
+            ["Prochaine tentative", date(item.due_at)],
+            ["Responsable", item.responsible_name],
+            ["Étape", `${item.current_step}/${item.max_steps}`],
+            [
+              "Montant",
+              item.amount_context
+                ? `${item.amount_context} ${item.currency || ""}`
+                : "—",
+            ],
+          ].map(([l, v]) => (
+            <div className="border p-3" key={l}>
+              <small>{l}</small>
+              <b className="mt-1 block">{v || "—"}</b>
+            </div>
+          ))}
+        </section>
+        <section className="border p-4">
+          <h3 className="font-semibold">Message</h3>
+          <p className="mt-2 whitespace-pre-wrap text-[13px]">{item.message}</p>
+        </section>
+        <section className="border p-4">
+          <h3 className="font-semibold">Tentatives & réponses</h3>
+          {[...(item.attempts || []), ...(item.responses || [])].map((x, i) => (
+            <p key={i} className="mt-2 border-t pt-2 text-[12px]">
+              {String(x.status || x.classification || "Réponse")} ·{" "}
+              {String(x.message || x.body || "")}
             </p>
-          </section>
-          <section className="border p-4">
-            <h3 className="font-semibold">Tentatives & réponses</h3>
-            {[...(item.attempts || []), ...(item.responses || [])].map(
-              (x, i) => (
-                <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-                  {String(x.status || x.classification || "Réponse")} ·{" "}
-                  {String(x.message || x.body || "")}
-                </p>
-              ),
-            )}
-          </section>
-          <section className="border p-4">
-            <h3 className="font-semibold">Timeline & audit</h3>
-            {item.events?.map((x, i) => (
-              <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-                {String(x.event_type)} · {date(String(x.created_at))}
-              </p>
-            ))}
-          </section>
-          <div className="flex flex-wrap gap-2">
-            <button className={primary} onClick={() => action(item, "SEND")}>
-              <Send size={14} />
-              Envoyer maintenant
-            </button>
-            <button className={btn} onClick={() => action(item, "PAUSE")}>
-              Pause
-            </button>
-            <button className={btn} onClick={() => action(item, "RESUME")}>
-              Reprendre
-            </button>
-            <button className={btn} onClick={() => action(item, "ESCALATE")}>
-              Escalader
-            </button>
-            <button className={btn} onClick={() => action(item, "COMPLETE")}>
-              Terminer
-            </button>
-            <button className={btn} onClick={() => action(item, "CANCEL")}>
-              Annuler
-            </button>
-          </div>
+          ))}
+        </section>
+        <section className="border p-4">
+          <h3 className="font-semibold">Timeline & audit</h3>
+          {item.events?.map((x, i) => (
+            <p key={i} className="mt-2 border-t pt-2 text-[12px]">
+              {String(x.event_type)} · {date(String(x.created_at))}
+            </p>
+          ))}
+        </section>
+        <div className="flex flex-wrap gap-2">
+          <button className={primary} onClick={() => action(item, "SEND")}>
+            <Send size={14} />
+            Envoyer maintenant
+          </button>
+          <button className={btn} onClick={() => action(item, "PAUSE")}>
+            Pause
+          </button>
+          <button className={btn} onClick={() => action(item, "RESUME")}>
+            Reprendre
+          </button>
+          <button className={btn} onClick={() => action(item, "ESCALATE")}>
+            Escalader
+          </button>
+          <button className={btn} onClick={() => action(item, "COMPLETE")}>
+            Terminer
+          </button>
+          <button className={btn} onClick={() => action(item, "CANCEL")}>
+            Annuler
+          </button>
         </div>
+      </div>
     </OperationDrawer>
   );
 }
@@ -636,7 +675,16 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  return <OperationDrawer open title={title} description="Choisissez les informations existantes de l’agence puis confirmez." close={close}>{children}</OperationDrawer>;
+  return (
+    <OperationDrawer
+      open
+      title={title}
+      description="Choisissez les informations existantes de l’agence puis confirmez."
+      close={close}
+    >
+      {children}
+    </OperationDrawer>
+  );
 }
 function Badge({ value }: { value: string }) {
   return (

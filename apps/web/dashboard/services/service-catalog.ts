@@ -1,0 +1,17 @@
+import{api}from"./api";
+export type Service={id:string;service_code:string;service_name:string;description?:string;category:string;service_type:string;shipping_mode:string;eta_min_days?:number;eta_max_days?:number;cutoff_hours?:number;status:string;availability:string;owner_name?:string;public_visible:boolean;quote_only:boolean;route_count:number;pricing_method?:string;pricing_currency?:string;starting_price?:number;package_count:number;real_delay_days?:number;sla_target_percent:number;row_version:number};
+export type Catalog={routes:Array<{id:string;route_code:string;route_name:string;origin_country:string;destination_country:string}>;warehouses:Array<{id:string;name:string;city:string;country:string}>;offices:Array<{id:string;name:string;city:string;country:string}>;categories:Array<{id:string;code:string;name:string}>};
+export const listServices=async(params:Record<string,string|undefined>={})=>(await api.get<{items:Service[];total:number}>("/service-catalog",{params})).data;
+export const serviceStats=async()=>(await api.get<Record<string,number>>("/service-catalog/stats")).data;
+export const serviceCatalog=async()=>(await api.get<Catalog>("/service-catalog/catalog")).data;
+export const createService=async(p:Record<string,unknown>)=>(await api.post("/service-catalog",p)).data;
+export const serviceDetail=async(id:string)=>(await api.get<Service&{routes:Array<Record<string,unknown>>;pricing:Array<Record<string,unknown>>;conditions:Array<Record<string,unknown>>;options:Array<Record<string,unknown>>;documents:Array<Record<string,unknown>>;departures:Array<Record<string,unknown>>;audit:Array<Record<string,unknown>>;alerts:Array<Record<string,unknown>>}>(`/service-catalog/${id}`)).data;
+export const updateService=async(id:string,p:Record<string,unknown>)=>(await api.patch(`/service-catalog/${id}`,p)).data;
+export const transitionService=async(id:string,status:string,reason?:string)=>(await api.post(`/service-catalog/${id}/transition`,{status,reason})).data;
+export const duplicateService=async(id:string)=>(await api.post(`/service-catalog/${id}/duplicate`)).data;
+export const addServiceRoute=async(id:string,p:Record<string,unknown>)=>(await api.post(`/service-catalog/${id}/routes`,p)).data;
+export const addServiceCondition=async(id:string,p:Record<string,unknown>)=>(await api.post(`/service-catalog/${id}/conditions`,p)).data;
+export const addServiceDocument=async(id:string,p:Record<string,unknown>)=>(await api.post(`/service-catalog/${id}/documents`,p)).data;
+export const addServiceOption=async(id:string,p:Record<string,unknown>)=>(await api.post(`/service-catalog/${id}/options`,p)).data;
+export const recommendServices=async(p:Record<string,unknown>)=>(await api.post<{items:Array<Record<string,unknown>>;requires_confirmation:boolean}>("/service-catalog/recommend",p)).data;
+export const serviceAnalytics=async()=>(await api.get<{by_service:Array<Record<string,unknown>>;by_route:Array<Record<string,unknown>>}>("/service-catalog/analytics")).data;

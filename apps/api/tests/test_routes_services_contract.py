@@ -23,5 +23,5 @@ def test_route_intelligence_is_separate_complete_and_audited():
 def test_routes_and_services_have_distinct_dashboard_routes():
  routes=(ROOT/'apps/web/dashboard/app/app/routes/page.tsx').read_text(encoding='utf-8');services=(ROOT/'apps/web/dashboard/app/app/services/page.tsx').read_text(encoding='utf-8');ui=(ROOT/'apps/web/dashboard/components/routes/route-intelligence-center.tsx').read_text(encoding='utf-8')
  assert 'RouteIntelligenceCenter' in routes and 'RouteCatalogPage' not in routes
- assert 'RouteCatalogPage' in services and 'ServiceConfigurationCenter' in services
+ assert 'ServiceCatalogCenter' in services and 'permission="services.read"' in services
  for feature in ('Route Engine','Sources métier live' if False else 'Routes actives','Capacité limitée','Suspendre','Dupliquer','Ajouter escale','Ajouter transporteur','Ajouter restriction','Simulateur de route'):assert feature in ui

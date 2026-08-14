@@ -1,0 +1,15 @@
+import {api} from "./api";
+export type Grid={id:string;grid_code:string;name:string;route_id:string;shipping_service_id:string;route_name:string;service_name:string;shipping_mode:string;currency_code:string;calculation_method:string;visibility:string;status:string;effective_from:string;effective_until?:string;version:number;rule_count:number;tier_count:number;fee_count:number};
+export type Dashboard={stats:Record<string,number|string|null>;settings:Record<string,unknown>;alerts:Array<Record<string,unknown>>;grids:Grid[]};
+export type Catalog={routes:Array<{id:string;route_code:string;route_name:string}>;services:Array<{id:string;route_id:string;service_code:string;service_name:string;shipping_mode:string}>;categories:Array<{id:string;code:string;name:string;risk_class:string}>;promotions:Array<Record<string,unknown>>};
+export const pricingDashboard=async()=>(await api.get<Dashboard>("/pricing")).data;
+export const pricingCatalog=async()=>(await api.get<Catalog>("/pricing/catalog")).data;
+export const createGrid=async(p:Record<string,unknown>)=>(await api.post("/pricing/grids",p)).data;
+export const gridDetail=async(id:string)=>(await api.get<Record<string,unknown>&{grid:Grid;rules:Array<Record<string,unknown>>;tiers:Array<Record<string,unknown>>;fees:Array<Record<string,unknown>>;costs:Array<Record<string,unknown>>;audit:Array<Record<string,unknown>>}>(`/pricing/grids/${id}`)).data;
+export const addGridRule=async(id:string,p:Record<string,unknown>)=>(await api.post(`/pricing/grids/${id}/rules`,p)).data;
+export const addGridTier=async(id:string,p:Record<string,unknown>)=>(await api.post(`/pricing/grids/${id}/tiers`,p)).data;
+export const addGridFee=async(id:string,p:Record<string,unknown>)=>(await api.post(`/pricing/grids/${id}/fees`,p)).data;
+export const approveGrid=async(id:string,note?:string)=>(await api.post(`/pricing/grids/${id}/approve`,{note})).data;
+export const transitionGrid=async(id:string,status:string,reason?:string)=>(await api.post(`/pricing/grids/${id}/transition`,{status,reason})).data;
+export const simulatePrice=async(p:Record<string,unknown>)=>(await api.post<{currency:string;actual_weight_kg:number;volumetric_weight_kg:number;chargeable_weight_kg:number;volume_cbm:number;subtotal:number;fees_total:number;discount_total:number;tax_total:number;total:number;margin:number;margin_percent:number;breakdown:Array<{type:string;label:string;amount:number}>;grid_code:string;grid_version:number}>("/pricing/quote",p)).data;
+export const pricingAnalytics=async()=>(await api.get<{by_route:Array<Record<string,unknown>>;by_category:Array<Record<string,unknown>>}>("/pricing/analytics")).data;

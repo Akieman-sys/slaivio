@@ -14,6 +14,7 @@ import {
   BookOpen,
   Megaphone,
   BellRing,
+  BadgeDollarSign,
   type LucideIcon,
 } from "lucide-react";
 
@@ -74,6 +75,7 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     label: "Finance",
     icon: ReceiptText,
     routes: [
+      { label: "Tarification", href: "/app/pricing", icon: BadgeDollarSign, permission: "pricing.read", keywords: ["tarif", "pricing", "grille", "prix", "marge", "simulateur"] },
       { label: "Facturation", href: "/app/finance", icon: ReceiptText, permission: "finance.read", keywords: ["facture", "devis", "avoir", "paiement", "finance"] },
     ],
   },

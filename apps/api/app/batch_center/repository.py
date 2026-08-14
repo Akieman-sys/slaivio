@@ -21,16 +21,20 @@ def audit(c,o,b,event,a,n,new=None,old=None,reason=None):c.execute(text("insert 
 
 def _summary_sql(where=""):
  return f"""select b.*,r.route_name,s.service_name,s.shipping_mode,w.warehouse_name,d.departure_code,
- count(i.id) filter(where i.removed_at is null)::int package_count,count(distinct p.client_id) filter(where i.removed_at is null)::int client_count,
- coalesce(sum(p.weight_kg) filter(where i.removed_at is null),0)::float total_weight_kg,coalesce(sum(p.volume_cbm) filter(where i.removed_at is null),0)::float total_cbm,
- coalesce(sum(p.declared_value) filter(where i.removed_at is null),0)::float total_value,
- greatest(case when b.capacity_weight_kg>0 then coalesce(sum(p.weight_kg) filter(where i.removed_at is null),0)/b.capacity_weight_kg*100 else 0 end,
- case when b.capacity_cbm>0 then coalesce(sum(p.volume_cbm) filter(where i.removed_at is null),0)/b.capacity_cbm*100 else 0 end,
- case when b.capacity_packages>0 then count(i.id) filter(where i.removed_at is null)::numeric/b.capacity_packages*100 else 0 end)::float occupancy_percent
+ coalesce(m.package_count,0)::int package_count,coalesce(m.client_count,0)::int client_count,
+ coalesce(m.total_weight_kg,0)::float total_weight_kg,coalesce(m.total_cbm,0)::float total_cbm,
+ coalesce(m.total_value,0)::float total_value,
+ greatest(case when b.capacity_weight_kg>0 then coalesce(m.total_weight_kg,0)/b.capacity_weight_kg*100 else 0 end,
+ case when b.capacity_cbm>0 then coalesce(m.total_cbm,0)/b.capacity_cbm*100 else 0 end,
+ case when b.capacity_packages>0 then coalesce(m.package_count,0)::numeric/b.capacity_packages*100 else 0 end)::float occupancy_percent
  from shipment_batches b join shipping_routes r on r.id=b.route_id and r.org_id=b.org_id join shipping_services s on s.id=b.shipping_service_id and s.org_id=b.org_id
- left join warehouses w on w.id=b.origin_warehouse_id left join cargo_departures d on d.id=b.departure_id
- left join batch_package_items i on i.batch_id=b.id left join cargo_packages p on p.id=i.package_id {where}
- group by b.id,r.route_name,s.service_name,s.shipping_mode,w.warehouse_name,d.departure_code"""
+ left join warehouses w on w.id=b.origin_warehouse_id and w.org_id=b.org_id left join cargo_departures d on d.id=b.departure_id and d.org_id=b.org_id
+ left join lateral (
+  select count(i.id)::int package_count,count(distinct p.client_id)::int client_count,
+  coalesce(sum(p.weight_kg),0) total_weight_kg,coalesce(sum(p.volume_cbm),0) total_cbm,coalesce(sum(p.declared_value),0) total_value
+  from batch_package_items i join cargo_packages p on p.id=i.package_id and p.org_id=i.org_id
+  where i.org_id=b.org_id and i.batch_id=b.id and i.removed_at is null
+ ) m on true {where}"""
 
 def dashboard(o,q=None,status=None,page=1,page_size=30):
  clauses=["b.org_id=:o","b.archived_at is null"];p={"o":o,"limit":page_size,"offset":(page-1)*page_size}
@@ -39,9 +43,9 @@ def dashboard(o,q=None,status=None,page=1,page_size=30):
  where="where "+" and ".join(clauses)
  with engine.connect() as c:
   data=rows(c.execute(text(_summary_sql(where)+" order by b.updated_at desc limit :limit offset :offset"),p))
-  total=c.execute(text("select count(*) from shipment_batches b join shipping_routes r on r.id=b.route_id join shipping_services s on s.id=b.shipping_service_id "+where),p).scalar_one()
+  total=c.execute(text("select count(*) from shipment_batches b join shipping_routes r on r.id=b.route_id and r.org_id=b.org_id join shipping_services s on s.id=b.shipping_service_id and s.org_id=b.org_id "+where),p).scalar_one()
   stats=dict(c.execute(text("""select count(*) filter(where status in('DRAFT','OPEN','PREPARING','NEAR_CAPACITY','FULL','PENDING_VALIDATION'))::int open_batches,count(*) filter(where status='READY_FOR_SHIPMENT')::int ready,count(*) filter(where status='PREPARING')::int preparing,count(*) filter(where status='FULL')::int full,count(*) filter(where status='BLOCKED')::int blocked from shipment_batches where org_id=:o and archived_at is null"""),{"o":o}).mappings().one())
-  stats["unassigned_packages"]=c.execute(text("select count(*) from cargo_packages p where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH') and not exists(select 1 from batch_package_items i where i.package_id=p.id and i.removed_at is null)"),{"o":o}).scalar_one()
+  stats["unassigned_packages"]=c.execute(text("select count(*) from cargo_packages p where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH') and not exists(select 1 from batch_package_items i where i.org_id=p.org_id and i.package_id=p.id and i.removed_at is null)"),{"o":o}).scalar_one()
  return {"items":data,"stats":stats,"pagination":{"page":page,"page_size":page_size,"total":total,"total_pages":max(1,(total+page_size-1)//page_size)}}
 
 def create(o,t,p):
@@ -62,7 +66,7 @@ def detail(o,b):
  with engine.connect() as c:
   batch=c.execute(text(_summary_sql("where b.org_id=:o and b.id=:b")),{"o":o,"b":b}).mappings().first()
   if not batch:raise HTTPException(404,"batch_not_found")
-  items=rows(c.execute(text("""select i.*,p.package_reference,p.tracking_id,p.description,p.category,p.status package_status,p.weight_kg,p.volume_cbm,p.payment_status,p.client_id::text,p.dossier_id::text,coalesce(cl.display_name,cl.name) client_name,d.dossier_reference from batch_package_items i join cargo_packages p on p.id=i.package_id left join clients cl on cl.id=p.client_id left join dossiers d on d.id=p.dossier_id where i.org_id=:o and i.batch_id=:b and i.removed_at is null order by coalesce(i.load_order,999999),i.added_at"""),{"o":o,"b":b}))
+  items=rows(c.execute(text("""select i.*,p.package_reference,p.tracking_id,p.description,p.category,p.status package_status,p.weight_kg,p.volume_cbm,p.payment_status,p.client_id::text,p.dossier_id::text,coalesce(cl.display_name,cl.name) client_name,d.dossier_reference from batch_package_items i join cargo_packages p on p.id=i.package_id and p.org_id=i.org_id left join clients cl on cl.id=p.client_id and cl.org_id=p.org_id left join dossiers d on d.id=p.dossier_id and d.org_id=p.org_id where i.org_id=:o and i.batch_id=:b and i.removed_at is null order by coalesce(i.load_order,999999),i.added_at"""),{"o":o,"b":b}))
   checklist=dict(c.execute(text("select * from batch_checklist where org_id=:o and batch_id=:b"),{"o":o,"b":b}).mappings().first() or {})
   return {"batch":dict(batch),"packages":items,"checklist":checklist,"alerts":rows(c.execute(text("select * from batch_alerts where org_id=:o and batch_id=:b order by status,severity desc,created_at desc"),{"o":o,"b":b})),"events":rows(c.execute(text("select * from batch_audit_events where org_id=:o and batch_id=:b order by created_at desc limit 150"),{"o":o,"b":b})),"notes":rows(c.execute(text("select * from batch_notes where org_id=:o and batch_id=:b order by created_at desc"),{"o":o,"b":b}))}
 
@@ -72,9 +76,9 @@ def compatible(o,b,q=None):
   if not batch:raise HTTPException(404,"batch_not_found")
   p={"o":o,"b":b,"r":batch["route_id"],"s":batch["shipping_service_id"],"w":batch["origin_warehouse_id"],"q":f"%{q or ''}%"}
   return rows(c.execute(text("""select p.id::text,p.package_reference,p.tracking_id,coalesce(cl.display_name,cl.name) client_name,p.weight_kg,p.volume_cbm,p.category,p.status
-  from cargo_packages p left join clients cl on cl.id=p.client_id where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH')
+  from cargo_packages p left join clients cl on cl.id=p.client_id and cl.org_id=p.org_id where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH')
   and p.route_id=:r and p.shipping_service_id=:s and (:w is null or p.warehouse_id=:w) and (:q='%%' or p.package_reference ilike :q or p.tracking_id ilike :q or coalesce(cl.display_name,cl.name,'') ilike :q)
-  and not exists(select 1 from batch_package_items i where i.package_id=p.id and i.removed_at is null) order by p.created_at limit 300"""),p))
+  and not exists(select 1 from batch_package_items i where i.org_id=p.org_id and i.package_id=p.id and i.removed_at is null) order by p.created_at limit 300"""),p))
 
 def _capacity(batch,weight,cbm,count,value):
  limits=[(batch.get("capacity_weight_kg"),weight,"WEIGHT"),(batch.get("capacity_cbm"),cbm,"CBM"),(batch.get("capacity_packages"),count,"PACKAGES"),(batch.get("capacity_value"),value,"VALUE")]
@@ -96,7 +100,7 @@ def add_packages(o,b,ids,t,override=False):
    elif str(p.get("shipping_service_id"))!=str(batch["shipping_service_id"]):problems.append({"package":p["package_reference"],"reason":"SERVICE_MISMATCH"})
    elif batch.get("origin_warehouse_id") and str(p.get("warehouse_id"))!=str(batch["origin_warehouse_id"]):problems.append({"package":p["package_reference"],"reason":"WAREHOUSE_MISMATCH"})
   if problems:raise HTTPException(422,{"code":"incompatible_packages","items":problems})
-  totals=c.execute(text("""select coalesce(sum(p.weight_kg),0) w,coalesce(sum(p.volume_cbm),0) cbm,count(*) n,coalesce(sum(p.declared_value),0) value from batch_package_items i join cargo_packages p on p.id=i.package_id where i.batch_id=:b and i.removed_at is null"""),{"b":b}).mappings().one()
+  totals=c.execute(text("""select coalesce(sum(p.weight_kg),0) w,coalesce(sum(p.volume_cbm),0) cbm,count(*) n,coalesce(sum(p.declared_value),0) value from batch_package_items i join cargo_packages p on p.id=i.package_id and p.org_id=i.org_id where i.org_id=:o and i.batch_id=:b and i.removed_at is null"""),{"o":o,"b":b}).mappings().one()
   weight=float(totals["w"])+sum(float(p.get("weight_kg") or 0) for p in packages);cbm=float(totals["cbm"])+sum(float(p.get("volume_cbm") or 0) for p in packages);count=int(totals["n"])+len(packages);value=float(totals["value"])+sum(float(p.get("declared_value") or 0) for p in packages)
   occupancy,exceeded=_capacity(batch,weight,cbm,count,value)
   if exceeded and not (override and batch.get("override_capacity")):raise HTTPException(409,{"code":"capacity_exceeded","constraints":exceeded,"occupancy":occupancy})
@@ -104,7 +108,7 @@ def add_packages(o,b,ids,t,override=False):
    c.execute(text("""insert into batch_package_items(org_id,batch_id,package_id,added_by,added_by_name) values(:o,:b,:p,:a,:n)
    on conflict(batch_id,package_id) do update set removed_at=null,removed_by=null,removal_reason=null,scan_status='PLANNED',added_by=excluded.added_by,added_by_name=excluded.added_by_name,added_at=now()"""),{"o":o,"b":b,"p":p["id"],"a":a,"n":n});c.execute(text("update cargo_packages set shipment_batch_id=:b,status='BATCHED',updated_by=:a,updated_at=now() where org_id=:o and id=:p"),{"b":b,"a":a,"o":o,"p":p["id"]})
   new_status="FULL" if occupancy>=100 else "NEAR_CAPACITY" if occupancy>=float(batch["near_capacity_percent"]) else "PREPARING"
-  c.execute(text("update shipment_batches set status=:s,row_version=row_version+1,updated_at=now() where id=:b"),{"s":new_status,"b":b});audit(c,o,b,"PACKAGES_ADDED",a,n,new={"package_ids":ids,"occupancy":occupancy})
+  c.execute(text("update shipment_batches set status=:s,row_version=row_version+1,updated_at=now() where org_id=:o and id=:b"),{"s":new_status,"o":o,"b":b});audit(c,o,b,"PACKAGES_ADDED",a,n,new={"package_ids":ids,"occupancy":occupancy})
  return {"added":len(packages),"occupancy_percent":occupancy,"status":new_status}
 
 def remove_package(o,b,p,t,reason):
@@ -114,7 +118,7 @@ def remove_package(o,b,p,t,reason):
   if not batch or batch["status"] in("CONVERTED_TO_SHIPMENT","ARCHIVED"):raise HTTPException(409,"batch_not_editable")
   item=c.execute(text("update batch_package_items set removed_at=now(),removed_by=:a,removal_reason=:r,scan_status='REMOVED' where org_id=:o and batch_id=:b and package_id=:p and removed_at is null returning id"),{"a":a,"r":reason,"o":o,"b":b,"p":p}).first()
   if not item:raise HTTPException(404,"batch_package_not_found")
-  c.execute(text("update cargo_packages set shipment_batch_id=null,status='READY_FOR_BATCH',updated_by=:a,updated_at=now() where org_id=:o and id=:p"),{"a":a,"o":o,"p":p});c.execute(text("update shipment_batches set status='PREPARING',row_version=row_version+1,updated_at=now() where id=:b"),{"b":b});audit(c,o,b,"PACKAGE_REMOVED",a,n,new={"package_id":p},reason=reason)
+  c.execute(text("update cargo_packages set shipment_batch_id=null,status='READY_FOR_BATCH',updated_by=:a,updated_at=now() where org_id=:o and id=:p"),{"a":a,"o":o,"p":p});c.execute(text("update shipment_batches set status='PREPARING',row_version=row_version+1,updated_at=now() where org_id=:o and id=:b"),{"o":o,"b":b});audit(c,o,b,"PACKAGE_REMOVED",a,n,new={"package_id":p},reason=reason)
  return {"removed":True}
 
 def checklist(o,b,p,t):
@@ -157,11 +161,36 @@ def convert(o,b,t):
  with engine.begin() as c:
   c.execute(text("insert into expedition_batches(org_id,expedition_id,batch_id) values(:o,:e,:b)"),{"o":o,"e":expedition["id"],"b":b})
   c.execute(text("update shipment_batches set status='CONVERTED_TO_SHIPMENT',converted_expedition_id=:e,row_version=row_version+1,updated_at=now() where org_id=:o and id=:b"),{"e":expedition["id"],"o":o,"b":b})
-  c.execute(text("update cargo_packages p set status='SHIPPED',updated_by=:a,updated_at=now() from batch_package_items i where i.package_id=p.id and i.batch_id=:b and i.removed_at is null and p.org_id=:o"),{"a":actor(t),"b":b,"o":o});audit(c,o,b,"EXPEDITION_CREATED",actor(t),name(t),new={"expedition_id":expedition["id"],"reference":expedition["expedition_reference"]})
+  c.execute(text("update cargo_packages p set status='SHIPPED',updated_by=:a,updated_at=now() from batch_package_items i where i.org_id=:o and i.package_id=p.id and p.org_id=i.org_id and i.batch_id=:b and i.removed_at is null"),{"a":actor(t),"b":b,"o":o});audit(c,o,b,"EXPEDITION_CREATED",actor(t),name(t),new={"expedition_id":expedition["id"],"reference":expedition["expedition_reference"]})
  return expedition
 
 def analytics(o):
- with engine.connect() as c:return {"by_route":rows(c.execute(text("""select r.route_name label,count(*)::int batches,round(avg(x.occupancy),2) average_occupancy from (select b.id,b.route_id,greatest(case when b.capacity_weight_kg>0 then coalesce(sum(p.weight_kg),0)/b.capacity_weight_kg*100 else 0 end,case when b.capacity_cbm>0 then coalesce(sum(p.volume_cbm),0)/b.capacity_cbm*100 else 0 end) occupancy from shipment_batches b left join batch_package_items i on i.batch_id=b.id and i.removed_at is null left join cargo_packages p on p.id=i.package_id where b.org_id=:o group by b.id) x join shipping_routes r on r.id=x.route_id group by r.id order by batches desc"""),{"o":o})),"by_warehouse":rows(c.execute(text("select coalesce(w.warehouse_name,'Non défini') label,count(*)::int batches from shipment_batches b left join warehouses w on w.id=b.origin_warehouse_id where b.org_id=:o group by w.id order by batches desc"),{"o":o}))}
+ with engine.connect() as c:
+  by_route=rows(c.execute(text("""
+   select r.route_name label,count(*)::int batches,round(avg(x.occupancy),2) average_occupancy
+   from (
+    select b.id,b.org_id,b.route_id,
+     greatest(
+      case when b.capacity_weight_kg>0 then coalesce(m.total_weight_kg,0)/b.capacity_weight_kg*100 else 0 end,
+      case when b.capacity_cbm>0 then coalesce(m.total_cbm,0)/b.capacity_cbm*100 else 0 end
+     )::numeric occupancy
+    from shipment_batches b
+    left join lateral (
+     select coalesce(sum(p.weight_kg),0)::float total_weight_kg,coalesce(sum(p.volume_cbm),0)::float total_cbm
+     from batch_package_items i join cargo_packages p on p.id=i.package_id and p.org_id=i.org_id
+     where i.org_id=b.org_id and i.batch_id=b.id and i.removed_at is null
+    ) m on true
+    where b.org_id=:o and b.archived_at is null
+   ) x join shipping_routes r on r.id=x.route_id and r.org_id=x.org_id
+   group by r.id,r.route_name order by batches desc
+  """),{"o":o}))
+  by_warehouse=rows(c.execute(text("""
+   select coalesce(w.warehouse_name,'Non défini') label,count(*)::int batches
+   from shipment_batches b left join warehouses w on w.id=b.origin_warehouse_id and w.org_id=b.org_id
+   where b.org_id=:o and b.archived_at is null
+   group by w.id,w.warehouse_name order by batches desc
+  """),{"o":o}))
+  return {"by_route":by_route,"by_warehouse":by_warehouse}
 
 def export_csv(o):
  data=dashboard(o,page_size=1000)["items"];out=io.StringIO();w=csv.writer(out);w.writerow(["batch","route","service","warehouse","packages","clients","weight_kg","cbm","capacity_percent","cutoff","status"])
@@ -173,8 +202,8 @@ def suggestions(o):
   groups=rows(c.execute(text("""select p.route_id::text,p.shipping_service_id::text,p.warehouse_id::text,count(*)::int package_count,
   coalesce(sum(p.weight_kg),0)::float total_weight_kg,coalesce(sum(p.volume_cbm),0)::float total_cbm,r.route_name,s.service_name,w.warehouse_name
   from cargo_packages p join shipping_routes r on r.id=p.route_id and r.org_id=p.org_id join shipping_services s on s.id=p.shipping_service_id and s.org_id=p.org_id
-  left join warehouses w on w.id=p.warehouse_id where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH')
-  and not exists(select 1 from batch_package_items i where i.package_id=p.id and i.removed_at is null)
+  left join warehouses w on w.id=p.warehouse_id and w.org_id=p.org_id where p.org_id=:o and p.deleted_at is null and p.status in('READY_FOR_BATCH','READY_FOR_DISPATCH')
+  and not exists(select 1 from batch_package_items i where i.org_id=p.org_id and i.package_id=p.id and i.removed_at is null)
   group by p.route_id,p.shipping_service_id,p.warehouse_id,r.route_name,s.service_name,w.warehouse_name order by package_count desc"""),{"o":o}))
  return {"groups":groups,"strategy":"COMPATIBILITY_FIRST","requires_confirmation":True}
 

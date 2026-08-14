@@ -24,10 +24,25 @@ def test_batch_repository_checks_compatibility_capacity_and_idempotence():
     assert "add_package_to_expedition" in repo
     assert "shipment_id=:e" not in repo
 
+def test_batch_summary_uses_tenant_scoped_lateral_metrics():
+    repo=read("apps/api/app/batch_center/repository.py")
+    assert repo.count("left join lateral") >= 2
+    assert repo.count("i.org_id=b.org_id and i.batch_id=b.id") >= 2
+    assert "p.org_id=i.org_id" in repo
+    assert "group by b.id,r.route_name" not in repo
+
+def test_batch_mutations_and_suggestions_stay_in_the_active_tenant():
+    repo=read("apps/api/app/batch_center/repository.py")
+    assert "where org_id=:o and id=:b" in repo
+    assert "i.org_id=p.org_id and i.package_id=p.id" in repo
+    assert "w.id=p.warehouse_id and w.org_id=p.org_id" in repo
+
 def test_batch_ui_is_published_and_not_a_dead_button():
     ui=read("apps/web/dashboard/components/batches/batch-center-page.tsx")
     nav=read("apps/web/dashboard/config/app-navigation.ts")
     assert "createBatch(" in ui
     assert "addBatchPackages(" in ui
+    assert "removeBatchPackage(" in ui
     assert "convertBatch(" in ui
+    assert "Promise.allSettled" in ui
     assert 'href: "/app/batches"' in nav

@@ -20,7 +20,13 @@ def dashboard(o):
 
 def create_grid(o,a,n,p):
  with engine.begin() as c:
-  service=c.execute(text("select s.id,s.route_id from shipping_services s where s.org_id=:o and s.id=cast(:s as uuid) and s.route_id=cast(:r as uuid)"),{"o":o,"s":p['shipping_service_id'],"r":p['route_id']}).first()
+  service=c.execute(text("""select s.id from shipping_services s
+   where s.org_id=:o and s.id=cast(:s as uuid) and s.active
+   and (s.route_id=cast(:r as uuid) or exists(
+    select 1 from service_route_offerings x where x.org_id=s.org_id and x.service_id=s.id
+    and x.route_id=cast(:r as uuid) and x.availability in('AVAILABLE','LIMITED')
+    and x.effective_from<=now() and (x.effective_until is null or x.effective_until>now())
+   ))"""),{"o":o,"s":p['shipping_service_id'],"r":p['route_id']}).first()
   if not service: raise HTTPException(422,"route_service_mismatch")
   row=dict(c.execute(text("""insert into pricing_grids(org_id,workspace_id,grid_code,name,description,route_id,shipping_service_id,currency_code,calculation_method,visibility,status,effective_from,effective_until,volumetric_divisor,chargeable_weight_rule,rounding_increment,minimum_weight_kg,minimum_cbm,maximum_weight_kg,maximum_cbm,maximum_declared_value,tax_inclusive,tax_rate,requires_approval,created_by,updated_by) values(:o,:workspace_id,:grid_code,:name,:description,cast(:route_id as uuid),cast(:shipping_service_id as uuid),upper(:currency_code),:calculation_method,:visibility,'DRAFT',:effective_from,:effective_until,:volumetric_divisor,:chargeable_weight_rule,:rounding_increment,:minimum_weight_kg,:minimum_cbm,:maximum_weight_kg,:maximum_cbm,:maximum_declared_value,:tax_inclusive,:tax_rate,:requires_approval,:a,:a) returning *"""),{"o":o,"a":a,**p}).mappings().one())
   _audit(c,o,str(row['id']),'GRID_CREATED',a,n,new=row); return row
@@ -124,7 +130,11 @@ def quote(o,p,a):
   return result
 
 def catalog(o):
- with engine.connect() as c:return {"routes":_rows(c.execute(text("select id,route_code,route_name,origin_country,origin_city,destination_country,destination_city from shipping_routes where org_id=:o and status in('ACTIVE','LIMITED') order by route_name"),{"o":o})),"services":_rows(c.execute(text("select id,route_id,service_code,service_name,shipping_mode from shipping_services where org_id=:o and active order by service_name"),{"o":o})),"categories":_rows(c.execute(text("select * from pricing_categories where org_id=:o and active order by name"),{"o":o})),"promotions":_rows(c.execute(text("select * from pricing_promotions where org_id=:o order by created_at desc"),{"o":o}))}
+ with engine.connect() as c:return {"routes":_rows(c.execute(text("select id,route_code,route_name,origin_country,origin_city,destination_country,destination_city from shipping_routes where org_id=:o and status in('ACTIVE','LIMITED') order by route_name"),{"o":o})),"services":_rows(c.execute(text("""select distinct s.id,coalesce(x.route_id,s.route_id) route_id,s.service_code,s.service_name,s.shipping_mode
+  from shipping_services s left join service_route_offerings x on x.org_id=s.org_id and x.service_id=s.id
+   and x.availability in('AVAILABLE','LIMITED') and x.effective_from<=now()
+   and (x.effective_until is null or x.effective_until>now())
+  where s.org_id=:o and s.active and coalesce(x.route_id,s.route_id) is not null order by s.service_name"""),{"o":o})),"categories":_rows(c.execute(text("select * from pricing_categories where org_id=:o and active order by name"),{"o":o})),"promotions":_rows(c.execute(text("select * from pricing_promotions where org_id=:o order by created_at desc"),{"o":o}))}
 
 def analytics(o):
  with engine.connect() as c:return {"by_route":_rows(c.execute(text("select r.route_name label,count(s.id)::int simulations,round(avg((s.result_payload->>'total')::numeric),2) average_price,round(avg((s.result_payload->>'margin_percent')::numeric),2) average_margin from pricing_quote_snapshots s join pricing_grids g on g.id=s.grid_id join shipping_routes r on r.id=g.route_id where s.org_id=:o group by r.id order by simulations desc"),{"o":o})),"by_category":_rows(c.execute(text("select coalesce(input_payload->>'category_code','Non classé') label,count(*)::int simulations,round(avg((result_payload->>'total')::numeric),2) average_price from pricing_quote_snapshots where org_id=:o group by 1 order by 2 desc"),{"o":o}))}

@@ -5,6 +5,7 @@ type AccessTokenProvider = (options?: TokenOptions) => Promise<string | null>;
 type RetriableRequest = { _slaivioAuthRetried?: boolean };
 let accessTokenProvider: AccessTokenProvider | null = null;
 export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
+export const API_MUTATION_FAILED_EVENT = "slaivio:api-mutation-failed";
 
 function normalizeApiBaseUrl(value?: string) {
   if (!value) return undefined;
@@ -70,6 +71,25 @@ api.interceptors.response.use(
         }
       }
       if (hadAuthorization) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+    if (typeof window !== "undefined" && axios.isAxiosError(error)) {
+      const method = String(error.config?.method || "get").toUpperCase();
+      if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+        const detail = error.response?.data?.detail;
+        const raw = Array.isArray(detail)
+          ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(" · ")
+          : typeof detail === "string" ? detail : "";
+        const message = !error.response
+          ? "Le serveur est injoignable. Vérifiez le déploiement du backend."
+          : error.response.status === 403
+            ? "Vous n’avez pas la permission d’effectuer cette action."
+            : error.response.status === 409
+              ? `Cette opération entre en conflit avec l’état actuel.${raw ? ` ${raw}` : ""}`
+              : error.response.status === 422
+                ? `Certaines données sont invalides ou incompatibles.${raw ? ` ${raw}` : ""}`
+                : raw || `L’opération a échoué (erreur ${error.response.status}).`;
+        window.dispatchEvent(new CustomEvent(API_MUTATION_FAILED_EVENT, { detail: { message, status: error.response?.status } }));
+      }
     }
     return Promise.reject(error);
   },

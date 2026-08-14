@@ -48,3 +48,13 @@ def test_expedition_creation_uses_route_and_service_sources():
     assert "def _hydrate_expedition_references" in source
     assert '"route_label": route["route_name"]' in source
     assert "shipping_service_id, origin_warehouse_id, destination_office_id, departure_id" in source
+
+
+def test_pricing_accepts_service_route_offerings_and_ui_reports_mutation_errors():
+    pricing = read("apps/api/app/pricing_engine/repository.py")
+    api = read("apps/web/dashboard/services/api.ts")
+    feedback = read("apps/web/dashboard/components/ui/api-mutation-feedback.tsx")
+    assert "service_route_offerings" in pricing
+    assert "route_service_mismatch" in pricing
+    assert "API_MUTATION_FAILED_EVENT" in api
+    assert "Action non enregistrée" in feedback

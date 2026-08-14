@@ -781,8 +781,14 @@ def _hydrate_expedition_references(conn, org_id: str, payload: dict) -> dict:
             {"org_id": org_id, "id": service_id}).mappings().first()
         if not service:
             raise ValueError("shipping_service_not_found")
-        if route_id and service.get("route_id") and route_id != service["route_id"]:
-            raise ValueError("service_route_mismatch")
+        if route_id and route_id != service.get("route_id"):
+            offered = conn.execute(text("""select 1 from service_route_offerings
+                where org_id=:org_id and service_id=:service_id and route_id=:route_id
+                and availability in('AVAILABLE','LIMITED') and effective_from<=now()
+                and (effective_until is null or effective_until>now())"""),
+                {"org_id": org_id, "service_id": service_id, "route_id": route_id}).first()
+            if not offered:
+                raise ValueError("service_route_mismatch")
         route_id = route_id or service.get("route_id")
         data.update({"route_id": route_id, "mode": service.get("shipping_mode"), "service_type": service.get("service_name")})
     if route_id:

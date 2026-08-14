@@ -56,10 +56,14 @@ def reference_catalog(
             order by route_name limit 250
         """, params)
         services = _rows(conn, f"""
-            select s.id::text id,s.service_name label,
-                   concat_ws(' · ',s.shipping_mode,r.route_name) secondary,s.route_id::text route_id,
+            select distinct s.id::text id,s.service_name label,
+                   concat_ws(' · ',s.shipping_mode,r.route_name) secondary,coalesce(o.route_id,s.route_id)::text route_id,
                    s.shipping_mode,s.status
-            from shipping_services s left join shipping_routes r on r.org_id=s.org_id and r.id=s.route_id
+            from shipping_services s
+            left join service_route_offerings o on o.org_id=s.org_id and o.service_id=s.id
+              and o.availability in('AVAILABLE','LIMITED') and o.effective_from<=now()
+              and (o.effective_until is null or o.effective_until>now())
+            left join shipping_routes r on r.org_id=s.org_id and r.id=coalesce(o.route_id,s.route_id)
             where s.org_id=:org_id and s.status not in('ARCHIVED','INACTIVE')
               and (:q='%%' or s.service_name ilike :q or s.service_code ilike :q or coalesce(r.route_name,'') ilike :q)
             order by s.service_name limit 250

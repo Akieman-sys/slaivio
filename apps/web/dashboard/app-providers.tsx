@@ -8,6 +8,7 @@ import { FeatureProvider } from "@/components/features/feature-provider";
 import { PermissionProvider } from "@/components/permissions/permission-provider";
 import { setAccessTokenProvider } from "@/services/api";
 import { LoadingState } from "@/components/ui/page-state";
+import { ApiMutationFeedback } from "@/components/ui/api-mutation-feedback";
 
 export function AppProviders({
   children,
@@ -18,7 +19,7 @@ export function AppProviders({
   const content = (
     <PermissionProvider>
       <FeatureProvider>
-        <EntitlementProvider>{children}</EntitlementProvider>
+        <EntitlementProvider>{children}<ApiMutationFeedback /></EntitlementProvider>
       </FeatureProvider>
     </PermissionProvider>
   );

@@ -2,6 +2,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Download, Megaphone, Plus, Search, X } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   campaignAction,
   campaignResources,
@@ -12,9 +13,9 @@ import {
   snapshotCampaign,
   type Campaign,
 } from "@/services/broadcasts";
-const btn = "h-9 border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium",
-  primary = "h-9 bg-[#16855f] px-3 text-[12px] font-semibold text-white",
-  field = "h-9 border px-3 text-[12px]";
+const btn = "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
+  primary = "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
+  field = "h-9 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]";
 const tabs = [
   ["", "Toutes"],
   ["DRAFT", "Brouillons"],
@@ -107,8 +108,8 @@ export function BroadcastsPage() {
           </>
         }
         tabs={
-          <div className="flex">
-            {tabs.map(([v, l]) => (
+          <div className="flex items-end gap-1">
+            {tabs.slice(0, 4).map(([v, l]) => (
               <button
                 key={v}
                 onClick={() => setStatus(v)}
@@ -117,6 +118,7 @@ export function BroadcastsPage() {
                 {l}
               </button>
             ))}
+            <select aria-label="Autres vues" value={tabs.slice(4).some(([v])=>v===status)?status:""} onChange={(e)=>setStatus(e.target.value)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{tabs.slice(4).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
           </div>
         }
       />
@@ -134,10 +136,10 @@ export function BroadcastsPage() {
         </div>
       </section>
       <div className="flex gap-2 border-b bg-white p-4">
-        <label className="flex h-9 flex-1 items-center border px-3">
+        <label className="flex h-9 flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
           <Search size={14} />
           <input
-            className="ml-2 flex-1 outline-none"
+            className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Rechercher une campagne..."
@@ -318,7 +320,7 @@ function CampaignModal({
         <textarea
           required
           name="message"
-          className="min-h-36 border p-3"
+          className="min-h-36 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]"
           placeholder="Écrivez le message au nom de votre agence. Le prénom du client sera ajouté automatiquement lorsqu’il est disponible."
         />
         <input name="date" type="datetime-local" className={field} />
@@ -390,20 +392,7 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <section
-        onClick={(e) => e.stopPropagation()}
-        className="ml-auto h-full w-full max-w-lg bg-white p-5"
-      >
-        <button className="float-right" onClick={close}>
-          <X />
-        </button>
-        <h2 className="mb-5 text-xl font-semibold">{title}</h2>
-        {children}
-      </section>
-    </div>
-  );
+  return <OperationDrawer open title={title} description="Renseignez uniquement les informations utiles à l’agence." close={close}>{children}</OperationDrawer>;
 }
 function exportCampaigns(items: Campaign[]) {
   const rows = [

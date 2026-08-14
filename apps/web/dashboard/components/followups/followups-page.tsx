@@ -2,6 +2,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Download, Plus, Search, Send, X } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   getReferenceCatalog,
   type ReferenceCatalog,
@@ -137,8 +138,8 @@ export function FollowupsPage() {
           </>
         }
         tabs={
-          <div className="flex overflow-x-auto">
-            {views.map(([k, l]) => (
+          <div className="flex items-end gap-1">
+            {views.slice(0, 4).map(([k, l]) => (
               <button
                 key={k}
                 onClick={() => setView(k)}
@@ -147,6 +148,7 @@ export function FollowupsPage() {
                 {l}
               </button>
             ))}
+            <select aria-label="Autres vues" value={views.slice(4).some(([k])=>k===view)?view:""} onChange={(e)=>setView(e.target.value)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{views.slice(4).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
           </div>
         }
       />
@@ -164,12 +166,12 @@ export function FollowupsPage() {
         </div>
       </section>
       <div className="flex gap-2 border-b bg-white p-4">
-        <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md border px-3">
+        <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
           <Search size={14} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="ml-2 flex-1 outline-none"
+            className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
             placeholder="Client, téléphone, dossier, facture, colis..."
           />
         </label>
@@ -491,7 +493,7 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
         <textarea
           required
           name="message"
-          className="min-h-28 rounded-md border p-3 text-[12px]"
+          className="min-h-28 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]"
           placeholder="Message au nom de l’agence"
         />
         <button className={primary}>Programmer</button>
@@ -655,22 +657,7 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="ml-auto h-full w-full max-w-[560px] overflow-y-auto bg-white p-5"
-      >
-        <div className="mb-5 flex justify-between">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <button onClick={close}>
-            <X />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <OperationDrawer open title={title} description="Choisissez les informations existantes de l’agence puis confirmez." close={close}>{children}</OperationDrawer>;
 }
 function Badge({ value }: { value: string }) {
   return (

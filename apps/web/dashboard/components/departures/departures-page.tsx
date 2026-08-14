@@ -11,6 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { getReferenceCatalog, type ReferenceItem } from "@/services/references";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { catalog, type Service } from "@/services/route-catalog";
 import {
@@ -171,32 +173,33 @@ export function DeparturesPage() {
                 ["delays", "Retards"],
                 ["history", "Historique"],
               ] as const
-            ).map(([k, l]) => (
+            ).slice(0,4).map(([k, l]) => (
               <button
                 key={k}
                 onClick={() => setView(k)}
-                className={`h-9 border-b-2 px-3 text-[12px] ${view === k ? "border-[#15935a] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
+                className={`h-10 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
               >
                 {l}
               </button>
             ))}
+            <select aria-label="Autres vues" value={["delays","history"].includes(view)?view:""} onChange={(e)=>setView(e.target.value as typeof view)} className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option><option value="delays">Retards</option><option value="history">Historique</option></select>
           </>
         }
       />
       <main>
-        <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          {cards.map(([l, v]) => (
+        <section className="bg-white px-5 py-4"><div className="grid grid-cols-2 lg:grid-cols-4">
+          {cards.slice(0,4).map(([l, v]) => (
             <Metric key={l} label={String(l)} value={v} />
           ))}
-        </section>
+        </div></section>
         <div className="flex flex-wrap gap-2 border-b bg-white p-4">
-          <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-md border px-3">
+          <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
             <Search size={15} />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher un départ, une route..."
-              className="ml-2 flex-1 outline-none"
+              className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
             />
           </label>
           <select
@@ -289,9 +292,9 @@ function exportPlanning(items: Departure[]) {
 }
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="min-h-[86px] border-r p-4">
+    <div className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
       <small className="text-[#69727d]">{label}</small>
-      <b className="mt-2 block text-[22px]">{value}</b>
+      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">{value}</b>
     </div>
   );
 }
@@ -804,8 +807,17 @@ function Create({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [routeId, setRouteId] = useState("");
-  const routes = Array.from(new Map(services.map((service) => [service.route_id, { id: service.route_id, label: service.route_name }])).values());
+    [routeId, setRouteId] = useState(""),
+    [offices, setOffices] = useState<ReferenceItem[]>([]);
+  useEffect(()=>{getReferenceCatalog().then((data)=>setOffices(data.offices)).catch(()=>setOffices([]))},[]);
+  const routes = Array.from(
+    new Map(
+      services.map((service) => [
+        service.route_id,
+        { id: service.route_id, label: service.route_name },
+      ]),
+    ).values(),
+  );
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -832,34 +844,41 @@ function Create({
     }
   }
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end bg-black/25">
-      <form
-        onSubmit={submit}
-        className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl"
-      >
-        <div className="flex justify-between">
-          <h2 className="text-xl font-semibold">Nouveau départ</h2>
-          <button type="button" onClick={close}>
-            <X />
-          </button>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+    <OperationDrawer open title="Nouveau départ" description="Sélectionnez une route et un service déjà configurés par l’agence." close={close}>
+      <form onSubmit={submit} className="bg-white p-5">
+        <div className="grid gap-4 md:grid-cols-2">
           <label>
             Route existante
-            <select required value={routeId} onChange={(event) => setRouteId(event.target.value)} className={input}>
+            <select
+              required
+              value={routeId}
+              onChange={(event) => setRouteId(event.target.value)}
+              className={input}
+            >
               <option value="">Choisir une route</option>
-              {routes.map((route) => <option key={route.id} value={route.id}>{route.label}</option>)}
+              {routes.map((route) => (
+                <option key={route.id} value={route.id}>
+                  {route.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>
             Service disponible sur cette route
-            <select required name="shipping_service_id" disabled={!routeId} className={input}>
+            <select
+              required
+              name="shipping_service_id"
+              disabled={!routeId}
+              className={input}
+            >
               <option value="">Choisir un service</option>
-              {services.filter((service) => service.route_id === routeId).map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.service_name}
-                </option>
-              ))}
+              {services
+                .filter((service) => service.route_id === routeId)
+                .map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.service_name}
+                  </option>
+                ))}
             </select>
           </label>
           <Field
@@ -868,13 +887,13 @@ function Create({
             type="datetime-local"
             required
           />
-          <Field name="cutoff_at" label="Cut-off" type="datetime-local" />
+          <Field name="cutoff_at" label="Date limite de réception des colis" type="datetime-local" />
           <Field
             name="estimated_arrival_at"
-            label="ETA"
+            label="Arrivée estimée"
             type="datetime-local"
           />
-          <Field name="timezone" label="Fuseau horaire" defaultValue="UTC" />
+          <input type="hidden" name="timezone" value="UTC" />
           <Field
             name="capacity_weight_kg"
             label="Capacité poids kg"
@@ -889,7 +908,7 @@ function Create({
           <Field name="carrier_name" label="Transporteur" />
           <Field name="transport_reference" label="Vol / navire / véhicule" />
           <Field name="responsible_name" label="Responsable" />
-          <Field name="destination_office" label="Bureau destination" />
+          <label className="grid gap-1 text-[12px] font-medium text-[#555e58]">Bureau chargé de l’arrivée<select name="destination_office" className={input}><option value="">Aucun bureau sélectionné</option>{offices.map((office)=><option key={office.id} value={office.id}>{office.label}{office.secondary?` · ${office.secondary}`:""}</option>)}</select></label>
           <label className="flex items-center gap-2">
             <input type="checkbox" name="published" value="true" />
             Publier aux clients
@@ -905,7 +924,7 @@ function Create({
           </button>
         </div>
       </form>
-    </div>
+    </OperationDrawer>
   );
 }
 function Field(p: {

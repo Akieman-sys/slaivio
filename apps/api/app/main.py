@@ -94,6 +94,7 @@ from app.api.support import router as support_router
 from app.api.platform_admin import router as platform_admin_router
 from app.api.service_catalog import router as service_catalog_router
 from app.api.references import router as references_router
+from app.api.batch_center import router as batch_center_router
 
 
 app = FastAPI(title="Slaivio")
@@ -132,6 +133,7 @@ async def request_context_middleware(
 
 app.include_router(webhook_router)
 app.include_router(batches_router)
+app.include_router(batch_center_router)
 app.include_router(notifications_router)
 app.include_router(knowledge_router)
 app.include_router(dossiers_router)

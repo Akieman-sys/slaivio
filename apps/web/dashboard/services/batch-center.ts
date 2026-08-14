@@ -1,0 +1,15 @@
+import {api} from './api';
+export type Batch={id:string;batch_code:string;batch_type:string;route_name:string;service_name:string;shipping_mode:string;warehouse_name?:string;status:string;package_count:number;client_count:number;total_weight_kg:number;total_cbm:number;occupancy_percent:number;cutoff_at?:string;planned_departure_at?:string;responsible_name?:string;row_version:number;capacity_weight_kg?:number;capacity_cbm?:number;capacity_packages?:number};
+export type Dashboard={items:Batch[];stats:Record<string,number>;pagination:{page:number;page_size:number;total:number;total_pages:number}};
+export type BatchDetail={batch:Batch;packages:Array<Record<string,unknown>>;checklist:Record<string,boolean>;alerts:Array<Record<string,unknown>>;events:Array<Record<string,unknown>>;notes:Array<Record<string,unknown>>};
+export const listBatches=async(params:Record<string,string|number|undefined>={})=>(await api.get<Dashboard>('/batch-center',{params})).data;
+export const createBatch=async(p:Record<string,unknown>)=>(await api.post<Batch>('/batch-center',p)).data;
+export const getBatch=async(id:string)=>(await api.get<BatchDetail>(`/batch-center/${id}`)).data;
+export const compatiblePackages=async(id:string)=>(await api.get<{items:Array<Record<string,unknown>>}>(`/batch-center/${id}/compatible`)).data.items;
+export const addBatchPackages=async(id:string,ids:string[])=>(await api.post(`/batch-center/${id}/packages`,{package_ids:ids})).data;
+export const removeBatchPackage=async(id:string,pid:string,reason:string)=>(await api.delete(`/batch-center/${id}/packages/${pid}`,{data:{reason}})).data;
+export const updateBatchChecklist=async(id:string,p:Record<string,boolean>)=>(await api.patch(`/batch-center/${id}/checklist`,p)).data;
+export const transitionBatch=async(id:string,status:string,expected_version?:number)=>(await api.post(`/batch-center/${id}/transition`,{status,expected_version})).data;
+export const scanBatchPackage=async(id:string,value:string)=>(await api.post(`/batch-center/${id}/scan`,{value})).data;
+export const convertBatch=async(id:string)=>(await api.post(`/batch-center/${id}/convert`)).data;
+export const exportBatches=async()=>(await api.get('/batch-center/export.csv',{responseType:'blob'})).data as Blob;

@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { listClients, type ClientRecord } from "@/services/clients";
 
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
@@ -53,6 +54,7 @@ export function CopilotPage() {
   const [tab, setTab] = useState<Tab>("conversation");
   const [prompt, setPrompt] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -64,14 +66,16 @@ export function CopilotPage() {
     setLoading(true);
     setError("");
     try {
-      const [messageData, workflowData, escalationData] = await Promise.all([
+      const [messageData, workflowData, escalationData, clientData] = await Promise.all([
         getCopilotMessages(),
         getCopilotWorkflows(),
         getCopilotEscalations(),
+        listClients({ page: 1, page_size: 100, sort: "recent" }),
       ]);
       setMessages(messageData);
       setWorkflows(workflowData);
       setEscalations(escalationData);
+      setClients(clientData.items);
     } catch {
       setError("L’espace IA n’a pas pu être chargé.");
     } finally {
@@ -151,14 +155,13 @@ export function CopilotPage() {
   if (error && !messages.length && !workflows.length) return <ErrorState title="Assistant indisponible" description={error} retry={load} />;
 
   return (
-    <div className="flex min-h-full flex-col bg-[#f7f7f6] text-[#282c30]">
+    <div className="flex h-[calc(100dvh-56px)] min-h-[620px] flex-col overflow-hidden bg-[#f7f7f6] text-[#282c30]">
       <header className="border-b border-[#dfe1e3] bg-white px-5 py-3.5 sm:px-6">
         <div className="flex min-h-[44px] items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2"><Sparkles size={18} className="text-[#087a46]" /><h1 className="text-[20px] font-semibold">Assistant Slaivio</h1></div>
             <p className="mt-1 text-[12px] text-[#69717a]">Préparez les opérations, contrôlez les actions et reprenez les conversations sensibles.</p>
           </div>
-          <span className="hidden items-center gap-2 text-[11px] text-[#69717a] sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-500" />Validation humaine active</span>
         </div>
       </header>
 
@@ -172,17 +175,21 @@ export function CopilotPage() {
 
       {tab === "conversation" && (
         <main className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="flex min-h-[620px] flex-col bg-white">
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-8">
+          <section className="flex min-h-0 flex-col bg-white">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
               {!messages.length && <WelcomeMessage setPrompt={setPrompt} />}
               {messages.map((message) => <MessageBubble key={message.id} message={message} />)}
               {sending && <div className="flex items-center gap-2 text-[12px] text-[#737a82]"><span className="h-2 w-2 animate-pulse rounded-full bg-[#087a46]" />Slaivio analyse la demande…</div>}
               <div ref={endRef} />
             </div>
             <div className="border-t border-[#dfe1e3] bg-[#fafafa] p-4 sm:px-8">
-              <div className="mb-2 flex items-center gap-2">
-                <label htmlFor="client-phone" className="text-[11px] font-medium text-[#60676f]">Contexte client</label>
-                <input id="client-phone" value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="Numéro WhatsApp (facultatif)" className="h-7 w-56 rounded-[5px] border border-[#d3d6d9] bg-white px-2 text-[11px] outline-none focus:border-[#16855f]" />
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <label htmlFor="client-phone" className="text-[11px] font-medium text-[#60676f]">Travailler pour</label>
+                <select id="client-phone" value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} className="h-8 min-w-64 rounded-[5px] border border-[#d3d6d9] bg-white px-2 text-[11px] outline-none focus:border-[#16855f]">
+                  <option value="">Aucun client — action générale</option>
+                  {clients.map((client)=><option key={client.id} value={client.whatsapp_phone||client.phone||""}>{client.display_name||client.company_name||client.name||client.phone||"Client"}{client.phone?` · ${client.phone}`:""}</option>)}
+                </select>
+                <span className="text-[10px] text-[#858b92]">À choisir seulement si la demande concerne le dossier, les colis ou le suivi d’un client.</span>
               </div>
               <div className="flex items-end gap-2 rounded-[7px] border border-[#cfd3d6] bg-white p-2 focus-within:border-[#16855f] focus-within:ring-1 focus-within:ring-[#16855f]/15">
                 <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} rows={2} placeholder="Décrivez l’action à effectuer…" className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13px] leading-5 outline-none" />

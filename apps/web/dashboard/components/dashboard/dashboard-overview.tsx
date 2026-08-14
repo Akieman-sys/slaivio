@@ -7,15 +7,20 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { getDashboardHome, type DashboardHome, type HomeAttentionItem, type HomeResource } from "@/services/dashboard";
 
 export function DashboardOverviewPage() {
-  const [data, setData] = useState<DashboardHome | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DashboardHome | null>(() => {
+    if (typeof window === "undefined") return null;
+    try { return JSON.parse(sessionStorage.getItem("slaivio:dashboard-home") || "null") as DashboardHome | null; } catch { return null; }
+  });
+  const [loading, setLoading] = useState(!data);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setData(await getDashboardHome());
+      const next = await getDashboardHome();
+      setData(next);
+      sessionStorage.setItem("slaivio:dashboard-home", JSON.stringify(next));
     } catch {
       setError("Le tableau de bord n’a pas pu être chargé.");
     } finally {
@@ -31,7 +36,7 @@ export function DashboardOverviewPage() {
         <div className="flex min-h-[44px] items-center justify-between gap-4">
           <div>
             <h1 className="text-[20px] font-semibold text-[#24282d]">
-              {data?.workspace.name ? `Bonjour, bienvenue chez ${data.workspace.name}` : "Bonjour, bienvenue sur Slaivio"}
+              {data?.workspace.name ? `Vue d’ensemble · ${data.workspace.name}` : "Vue d’ensemble de l’agence"}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#69717a]">
               <span>Les priorités opérationnelles de votre agence, au même endroit.</span>
@@ -163,5 +168,6 @@ function NoWorkspace() {
 }
 
 function DashboardSkeleton() {
-  return <div className="space-y-5"><div className="grid overflow-hidden rounded-[7px] border bg-white sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 animate-pulse border-r bg-[#f1f2f2]" />)}</div><div className="h-80 animate-pulse rounded-[7px] border bg-white" /></div>;
+  return <div className="space-y-4" aria-label="Chargement du tableau de bord"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Array.from({length:6}).map((_,i)=><div key={i} className="h-[92px] rounded-[7px] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.06)]"><span className="block h-2.5 w-20 animate-pulse rounded bg-[#e6e9e7]"/><span className="mt-4 block h-6 w-12 animate-pulse rounded bg-[#dfe4e1]"/></div>)}</div><div className="grid gap-4 xl:grid-cols-[1.6fr_.8fr]"><div className="h-72 rounded-[7px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.06)]"><LoadingDots/></div><div className="h-72 rounded-[7px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.06)]"/></div></div>;
 }
+function LoadingDots(){return <span className="flex items-center gap-1" aria-hidden>{[0,1,2].map(i=><span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#16855f]" style={{animationDelay:`${i*120}ms`}}/>)}</span>}

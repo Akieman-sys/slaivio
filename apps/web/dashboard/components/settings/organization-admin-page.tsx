@@ -1,48 +1,1269 @@
-'use client';
-import {FormEvent,useCallback,useEffect,useMemo,useState} from 'react';
-import {Bell,Building2,CreditCard,Database,FileText,History,KeyRound,Languages,MapPin,MessageCircle,Plug,RefreshCcw,ShieldCheck,UserPlus,Users,Webhook} from 'lucide-react';
-import Link from 'next/link';
-import {useRouter,useSearchParams} from 'next/navigation';
-import {archiveWorkspace,createApiKey,getAdmin,inviteMember,requestDataOperation,revokeApiKey,revokeInvitation,saveIntegration,saveLocation,saveNumbering,saveRole,saveWorkspace,updateMember,updateOrganization,updateSettings,type AdminData,type Member} from '@/services/organization-admin';
-import {PermissionGuard} from '@/components/permissions/permission-guard';
-const input='h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]';
-const button='h-9 rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] font-medium';
-const primary='h-9 rounded-[5px] bg-[#16855f] px-4 text-[13px] font-semibold text-white hover:bg-[#126f50]';
-const tabs=[['general','Général',Languages],['agency','Agence',Building2],['workspaces','Workspaces',Building2],['locations','Bureaux & établissements',MapPin],['team','Utilisateurs & équipe',Users],['roles','Rôles & permissions',KeyRound],['notifications','Notifications',Bell],['integrations','Intégrations',Plug],['whatsapp','WhatsApp Business',MessageCircle],['pricing','Tarification & règles',CreditCard],['documents','Documents & numérotation',FileText],['billing','Abonnement Slaivio',CreditCard],['security','Sécurité',ShieldCheck],['data','Données & confidentialité',Database],['developers','Développeurs & API',Webhook],['audit','Journal d’audit',History]] as const;
-type Section=(typeof tabs)[number][0];
-const sectionTitles=Object.fromEntries(tabs.map(([id,label])=>[id,[label,`${label} de l’agence et du workspace actif.`]])) as Record<Section,[string,string]>;
-function val(f:FormData,k:string){return String(f.get(k)||'').trim()||null}
-export function OrganizationAdminPage(){
- const router=useRouter(),params=useSearchParams();
- const [data,setData]=useState<AdminData|null>(null),[tab,setTab]=useState<Section>('general'),[error,setError]=useState(''),[notice,setNotice]=useState('');
- useEffect(()=>{const requested=params.get('section');if(tabs.some(([id])=>id===requested))setTab(requested as Section)},[params]);
- const load=useCallback(async()=>{try{setError('');setData(await getAdmin())}catch{setError("Le centre d’administration est indisponible.")}},[]);useEffect(()=>{load()},[load]);
- async function run(action:()=>Promise<unknown>,message:string){try{setError('');await action();setNotice(message);await load()}catch(e){const detail=(e as {response?:{data?:{detail?:string}}})?.response?.data?.detail;setError(detail==='organization_requires_an_active_owner'?"Une organisation doit toujours conserver au moins un propriétaire actif.":detail||"L’opération n’a pas abouti.")}}
- function select(section:Section){setTab(section);router.replace(`/app/settings?section=${section}`,{scroll:false})}
- if(!data)return <div className="p-6 text-[13px]">{error||'Chargement de l’administration…'}</div>;
- return <div className="min-h-full bg-white"><header className="flex h-[72px] items-center border-b border-[#e0e2e4] px-5 lg:px-7"><div><p className="text-[11px] text-[#7b8289]">Administration</p><h1 className="text-[21px] font-semibold">Paramètres</h1></div><button className={`${button} ml-auto`} onClick={load}><RefreshCcw className="mr-2 inline" size={14}/>Actualiser</button></header>
- <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[272px_minmax(0,1fr)]"><aside className="border-b border-[#e0e2e4] bg-[#fafafa] p-3 lg:border-b-0 lg:border-r"><SettingsGroup label="Administration">{tabs.map(([id,label,Icon])=><SettingsItem key={id} active={tab===id} icon={<Icon size={15}/>} label={label} onClick={()=>select(id)}/>)}</SettingsGroup><SettingsGroup label="Plateforme"><SettingsLink href="/app/platform" icon={<ShieldCheck size={15}/>} label="Console Super Admin"/></SettingsGroup></aside>
- <main className="min-w-0 p-5 lg:p-7"><div className="mx-auto max-w-[1120px]"><div className="mb-5 border-b border-[#e5e6e7] pb-4"><h2 className="text-[20px] font-semibold">{sectionTitles[tab][0]}</h2><p className="mt-1 text-[13px] text-[#69707d]">{sectionTitles[tab][1]}</p></div>{notice&&<div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">{notice}</div>}{error&&<div className="mb-3 rounded-[5px] bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</div>}
- {tab==='general'&&<Preferences data={data} run={run}/>} {tab==='agency'&&<Organization data={data} run={run}/>} {tab==='workspaces'&&<Workspaces data={data} run={run}/>} {tab==='locations'&&<Locations data={data} run={run}/>} {tab==='team'&&<Team data={data} run={run}/>} {tab==='roles'&&<Roles data={data} run={run}/>} {tab==='notifications'&&<SettingsLinkCard href="/app/notifications?preferences=1" title="Matrice de notifications" text="Configurez chaque événement et ses canaux In-app, Email et WhatsApp."/>} {tab==='integrations'&&<Integrations data={data} run={run}/>} {tab==='whatsapp'&&<SettingsLinkCard href="/app/settings?section=integrations" title="WhatsApp Business" text="Compte Meta, routage des numéros et état de la connexion officielle."/>} {tab==='pricing'&&<SettingsLinkCard href="/app/routes" title="Moteur tarifaire" text="Routes, services, catégories, prix au kg/CBM, minimums et règles versionnées."/>} {tab==='documents'&&<DocumentsSettings data={data} run={run}/>} {tab==='billing'&&<BillingSettings data={data}/>} {tab==='security'&&<Security data={data} run={run}/>} {tab==='data'&&<DataSettings data={data} run={run}/>} {tab==='developers'&&<DeveloperSettings data={data} run={run}/>} {tab==='audit'&&<Audit data={data}/>}</div></main></div></div>
+"use client";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Bell,
+  Building2,
+  CreditCard,
+  Database,
+  FileText,
+  KeyRound,
+  Languages,
+  MapPin,
+  MessageCircle,
+  Plug,
+  RefreshCcw,
+  ShieldCheck,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  archiveWorkspace,
+  createApiKey,
+  getAdmin,
+  inviteMember,
+  requestDataOperation,
+  revokeApiKey,
+  revokeInvitation,
+  saveIntegration,
+  saveLocation,
+  saveNumbering,
+  saveRole,
+  saveWorkspace,
+  updateMember,
+  updateOrganization,
+  updateSettings,
+  type AdminData,
+  type Member,
+} from "@/services/organization-admin";
+import { PermissionGuard } from "@/components/permissions/permission-guard";
+const input =
+  "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
+const button =
+  "h-9 rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] font-medium";
+const primary =
+  "h-9 rounded-[5px] bg-[#16855f] px-4 text-[13px] font-semibold text-white hover:bg-[#126f50]";
+const tabs = [
+  ["general", "Général", Languages],
+  ["agency", "Agence", Building2],
+  ["workspaces", "Workspaces", Building2],
+  ["locations", "Bureaux & établissements", MapPin],
+  ["team", "Utilisateurs & équipe", Users],
+  ["roles", "Rôles & permissions", KeyRound],
+  ["notifications", "Notifications", Bell],
+  ["integrations", "Intégrations", Plug],
+  ["whatsapp", "Canaux de communication", MessageCircle],
+  ["documents", "Documents & numérotation", FileText],
+  ["billing", "Abonnement Slaivio", CreditCard],
+  ["security", "Sécurité", ShieldCheck],
+  ["data", "Données & confidentialité", Database],
+] as const;
+type Section = (typeof tabs)[number][0];
+const sectionTitles = Object.fromEntries(
+  tabs.map(([id, label]) => [
+    id,
+    [label, `${label} de l’agence et du workspace actif.`],
+  ]),
+) as Record<Section, [string, string]>;
+function val(f: FormData, k: string) {
+  return String(f.get(k) || "").trim() || null;
 }
-function SettingsGroup({label,children}:{label:string;children:React.ReactNode}){return <section className="mb-5"><div className="px-2 pb-1.5 text-[10px] font-semibold uppercase text-[#8a9097]">{label}</div><div className="space-y-0.5">{children}</div></section>}
-const settingsItemClass='flex min-h-9 w-full items-center gap-2.5 rounded-[5px] px-2.5 text-left text-[13px]';
-function SettingsItem({active,icon,label,onClick}:{active:boolean;icon:React.ReactNode;label:string;onClick:()=>void}){return <button type="button" onClick={onClick} className={`${settingsItemClass} ${active?'bg-[#e4f4ee] font-medium text-[#145f49]':'text-[#444b52] hover:bg-[#eeeeed]'}`}>{icon}<span className="truncate">{label}</span></button>}
-function SettingsLink({href,icon,label}:{href:string;icon:React.ReactNode;label:string}){return <Link href={href} className={`${settingsItemClass} text-[#444b52] hover:bg-[#eeeeed]`}>{icon}<span className="truncate">{label}</span></Link>}
-function Card({title,description,children}:{title:string;description:string;children:React.ReactNode}){return <section className="overflow-hidden border border-[#dfe3e4] bg-white"><div className="border-b border-[#e5e8e9] bg-[#fafbfb] px-5 py-4"><h2 className="text-[15px] font-semibold text-[#293034]">{title}</h2><p className="text-[12px] text-[#697178]">{description}</p></div><div className="p-5">{children}</div></section>}
-function Organization({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){const o=data.organization;async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>updateOrganization({expected_version:o.row_version,organization_name:val(f,'name'),legal_name:val(f,'legal'),country:val(f,'country'),city:val(f,'city'),address:val(f,'address'),phone:val(f,'phone'),email:val(f,'email'),website:val(f,'website'),registration_number:val(f,'registration'),tax_number:val(f,'tax')}),'Profil de l’agence mis à jour.')}return <Card title="Profil de l’agence" description="Informations officielles réutilisées dans les factures, documents et communications."><PermissionGuard permission="organization.manage" fallback={<ReadOnly/>}><form onSubmit={submit} className="grid gap-4 md:grid-cols-2">{[['name','Nom commercial','organization_name'],['legal','Raison sociale','legal_name'],['registration','Numéro d’enregistrement','registration_number'],['tax','Identifiant fiscal','tax_number'],['country','Pays','country'],['city','Ville','city'],['phone','Téléphone','phone'],['email','Email','email'],['website','Site web','website'],['address','Adresse','address']].map(([n,l,k])=><label key={n} className="text-[12px] text-[#555d68]">{l}<input className={`${input} mt-1`} name={n} defaultValue={String(o[k]||'')}/></label>)}<div className="md:col-span-2"><button className={primary}>Enregistrer le profil</button></div></form></PermissionGuard></Card>}
-function Team({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){async function invite(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>inviteMember(String(f.get('email')),String(f.get('role'))),'Invitation envoyée.')}return <div className="grid gap-4"><Card title="Inviter un collaborateur" description="L’invitation est envoyée par Clerk et expire automatiquement."><PermissionGuard permission="team.write"><form onSubmit={invite} className="flex flex-wrap gap-2"><input required type="email" name="email" className={`${input} max-w-sm`} placeholder="collaborateur@agence.com"/><select name="role" className={`${input} max-w-[220px]`}>{data.roles.map(r=><option key={r.id} value={r.role_code}>{r.role_name}</option>)}</select><button className={primary}><UserPlus className="mr-2 inline" size={14}/>Inviter</button></form></PermissionGuard></Card><Card title={`Membres (${data.members.length})`} description="Suspendre un accès prend effet côté API sans supprimer l’historique."><div className="divide-y">{data.members.map(m=><MemberRow key={m.id} member={m} roles={data.roles} run={run}/>)}</div></Card>{data.invitations.length>0&&<Card title="Invitations" description="Invitations en attente, acceptées ou révoquées."><div className="divide-y">{data.invitations.map(x=><div className="flex items-center justify-between py-3 text-[13px]" key={String(x.id)}><div><b>{String(x.email)}</b><p className="text-[12px] text-[#69707d]">{String(x.role_code)} · {String(x.status)}</p></div>{x.status==='PENDING'&&<PermissionGuard permission="team.manage"><button className={button} onClick={()=>run(()=>revokeInvitation(String(x.id)),'Invitation révoquée.')}>Révoquer</button></PermissionGuard>}</div>)}</div></Card>}</div>}
-function MemberRow({member,roles,run}:{member:Member;roles:AdminData['roles'];run:(a:()=>Promise<unknown>,m:string)=>void}){const [role,setRole]=useState(member.role_code),[status,setStatus]=useState(member.status);return <div className="flex flex-wrap items-center justify-between gap-3 py-3 text-[13px]"><div><b>{member.member_display_name||member.member_email||'Membre'}</b><p className="text-[12px] text-[#69707d]">{member.member_email||member.id}</p></div><PermissionGuard permission="team.manage" fallback={<span>{member.role_name} · {member.status}</span>}><div className="flex gap-2"><select className={input} value={role} onChange={e=>setRole(e.target.value)}>{roles.map(r=><option key={r.id} value={r.role_code}>{r.role_name}</option>)}</select><select className={input} value={status} onChange={e=>setStatus(e.target.value)}><option value="ACTIVE">Actif</option><option value="SUSPENDED">Suspendu</option></select><button className={button} onClick={()=>run(()=>updateMember(member.id,{role_code:role,status,expected_version:member.row_version}),'Accès du membre mis à jour.')}>Appliquer</button></div></PermissionGuard></div>}
-function Roles({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){const groups=useMemo(()=>data.permissions.reduce<Record<string,AdminData['permissions']>>((all,p)=>{const key=p.permission_code.split('.')[0]||'other';(all[key]??=[]).push(p);return all},{}),[data.permissions]);async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>saveRole({code:String(f.get('code')).toUpperCase(),name:f.get('name'),description:f.get('description'),permissions:f.getAll('permissions')}),'Rôle enregistré.')}return <div className="grid gap-4 lg:grid-cols-[.8fr_1.2fr]"><Card title="Rôles existants" description="Les rôles système forment le socle; les rôles personnalisés répondent à votre organisation.">{data.roles.map(r=><div className="border-b py-3 text-[13px]" key={r.id}><b>{r.role_name}</b><p className="text-[12px] text-[#69707d]">{r.permission_count} droits · {r.member_count} membres {r.system_role?'· Système':''}</p></div>)}</Card><Card title="Nouveau rôle personnalisé" description="Accordez uniquement les capacités nécessaires."><PermissionGuard permission="roles.manage" fallback={<ReadOnly/>}><form onSubmit={submit} className="grid gap-3"><div className="grid grid-cols-2 gap-2"><input required name="code" className={input} placeholder="SUPERVISEUR_PAYS"/><input required name="name" className={input} placeholder="Superviseur pays"/></div><input name="description" className={input} placeholder="Description"/><div className="max-h-[400px] overflow-y-auto rounded-[5px] border p-3">{Object.entries(groups).map(([group,permissions])=><div key={group} className="mb-4"><b className="text-[12px] uppercase text-[#69707d]">{group}</b><div className="mt-2 grid gap-2 sm:grid-cols-2">{permissions.map(p=><label className="flex gap-2 text-[12px]" key={p.id}><input type="checkbox" name="permissions" value={p.permission_code}/><span><b>{p.permission_code}</b><small className="block text-[#69707d]">{p.description}</small></span></label>)}</div></div>)}</div><button className={primary}>Créer le rôle</button></form></PermissionGuard></Card></div>}
-function Preferences({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){const s=data.settings||{row_version:1};async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>updateSettings({expected_version:s.row_version,timezone:val(f,'timezone'),currency_code:val(f,'currency'),country_code:val(f,'country'),language_code:val(f,'language'),date_format:val(f,'date'),weight_unit:val(f,'weight'),volume_unit:val(f,'volume'),notification_email:val(f,'email'),settings:s.settings||{},security:s.security||{}}),'Préférences enregistrées.')}return <Card title="Préférences de l’espace" description="Formats appliqués à tous les collaborateurs de l’agence."><PermissionGuard permission="settings.write" fallback={<ReadOnly/>}><form onSubmit={submit} className="grid gap-4 md:grid-cols-2">{[['timezone','Fuseau horaire','timezone'],['currency','Devise','currency_code'],['country','Code pays','country_code'],['language','Langue','language_code'],['date','Format de date','date_format'],['weight','Unité de poids','weight_unit'],['volume','Unité de volume','volume_unit'],['email','Email notifications','notification_email']].map(([n,l,k])=><label className="text-[12px]" key={n}>{l}<input name={n} className={`${input} mt-1`} defaultValue={String(s[k]||'')}/></label>)}<button className={primary}>Enregistrer</button></form></PermissionGuard></Card>}
-function Security({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){const s=data.settings||{row_version:1},sec=(s.security||{}) as Record<string,unknown>;async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>updateSettings({...s,expected_version:s.row_version,security:{require_mfa:f.get('mfa')==='on',session_timeout_minutes:Number(f.get('timeout'))}}),'Politique de sécurité mise à jour.')}return <Card title="Politique de sécurité" description="Ces règles complètent l’authentification Clerk et le contrôle RBAC des API."><PermissionGuard permission="security.manage" fallback={<ReadOnly/>}><form onSubmit={submit} className="grid max-w-xl gap-4"><label className="flex items-center gap-3 text-[13px]"><input name="mfa" type="checkbox" defaultChecked={Boolean(sec.require_mfa)}/>Exiger l’authentification multifacteur pour l’agence</label><label className="text-[12px]">Expiration de session (minutes)<input name="timeout" type="number" min="15" max="10080" className={`${input} mt-1`} defaultValue={Number(sec.session_timeout_minutes||480)}/></label><p className="rounded-[5px] bg-amber-50 p-3 text-[12px] text-amber-900">L’application de la MFA au niveau de la connexion nécessite aussi son activation dans Clerk Dashboard.</p><button className={primary}>Enregistrer la politique</button></form></PermissionGuard></Card>}
-function Audit({data}:{data:AdminData}){return <Card title="Journal d’audit" description="Dernières mutations administratives de l’organisation."><div className="overflow-x-auto"><table className="w-full text-left text-[12px]"><thead><tr className="border-b text-[#69707d]"><th className="py-2">Date</th><th>Action</th><th>Objet</th><th>Acteur</th></tr></thead><tbody>{data.audit.map(x=><tr className="border-b" key={String(x.id)}><td className="py-3">{new Date(String(x.created_at)).toLocaleString('fr-FR')}</td><td>{String(x.action)}</td><td>{String(x.entity_type)} · {String(x.entity_id)}</td><td>{String(x.actor_name||x.actor_id||'Système')}</td></tr>)}</tbody></table>{!data.audit.length&&<p className="py-8 text-center text-[#69707d]">Aucune mutation administrative enregistrée.</p>}</div></Card>}
-function Workspaces({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>saveWorkspace({name:val(f,'name'),code:val(f,'code'),country_code:val(f,'country'),currency_code:val(f,'currency')||'USD',timezone:val(f,'timezone')||'UTC',language_code:val(f,'language')||'fr'}),'Workspace enregistré.')}return <div className="grid gap-4"><Card title="Nouveau workspace" description="Un périmètre opérationnel isolé par pays ou activité."><form onSubmit={submit} className="grid gap-2 md:grid-cols-3"><input required name="name" className={input} placeholder="Workspace RDC"/><input required name="code" className={input} placeholder="RDC"/><input name="country" className={input} placeholder="CD"/><input name="currency" className={input} placeholder="USD"/><input name="timezone" className={input} placeholder="Africa/Kinshasa"/><select name="language" className={input}><option value="fr">Français</option><option value="en">English</option></select><button className={primary}>Enregistrer</button></form></Card><Card title="Workspaces" description="Les archives restent auditables et ne suppriment aucune donnée.">{data.workspaces.map(x=><div key={String(x.id)} className="flex items-center justify-between border-b py-3 text-[13px]"><div><b>{String(x.name)}</b><p className="text-[#69707d]">{String(x.code)} · {String(x.country_code||'—')} · {String(x.currency_code)} · {String(x.status)}</p></div>{x.status==='ACTIVE'&&<button className={button} onClick={()=>run(()=>archiveWorkspace(String(x.id),Number(x.row_version)),'Workspace archivé.')}>Archiver</button>}</div>)}{!data.workspaces.length&&<p className="text-[13px] text-[#69707d]">Aucun workspace configuré.</p>}</Card></div>}
-function Locations({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);run(()=>saveLocation({workspace_id:val(f,'workspace'),name:val(f,'name'),code:val(f,'code'),location_type:val(f,'type'),country:val(f,'country'),city:val(f,'city'),address:val(f,'address'),phone:val(f,'phone'),whatsapp:val(f,'whatsapp'),email:val(f,'email'),manager_name:val(f,'manager'),timezone:val(f,'timezone')||'UTC',opening_hours:{text:val(f,'hours')},services:String(f.get('services')||'').split(',').map(x=>x.trim()).filter(Boolean)}),'Établissement enregistré.')}return <div className="grid gap-4"><Card title="Ajouter un établissement" description="Bureau, entrepôt, hub ou point de retrait."><form onSubmit={submit} className="grid gap-2 md:grid-cols-3"><input required name="name" className={input} placeholder="Bureau Kinshasa"/><input required name="code" className={input} placeholder="KIN-01"/><select required name="type" className={input}><option value="OFFICE">Bureau</option><option value="WAREHOUSE">Entrepôt</option><option value="HUB">Hub</option><option value="PICKUP_POINT">Point de retrait</option></select><select name="workspace" className={input}><option value="">Organisation entière</option>{data.workspaces.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x.name)}</option>)}</select>{['country','city','address','phone','whatsapp','email','manager','timezone','hours','services'].map(n=><input required={n==='country'||n==='city'} key={n} name={n} className={input} placeholder={n}/>) }<button className={primary}>Enregistrer</button></form></Card><Card title="Établissements" description="Structure physique de l’agence.">{data.locations.map(x=><div key={String(x.id)} className="border-b py-3 text-[13px]"><b>{String(x.name)}</b><p className="text-[#69707d]">{String(x.location_type)} · {String(x.city)}, {String(x.country)} · {String(x.status)}</p></div>)}</Card></div>}
-function Integrations({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){async function connect(provider:'WHATSAPP'|'GMAIL'){const label=prompt('Nom du compte connecté');if(!label)return;run(()=>saveIntegration({provider,account_label:label,status:'CONNECTING',granted_permissions:[],configuration:{}}),'Connexion initialisée. Finalisez le consentement OAuth du fournisseur.')}return <div className="grid gap-4 md:grid-cols-2">{(['WHATSAPP','GMAIL'] as const).map(provider=>{const current=data.integrations.find(x=>x.provider===provider);return <Card key={provider} title={provider==='WHATSAPP'?'WhatsApp Business':'Gmail'} description="Connexion officielle, permissions et synchronisation auditées."><p className="mb-4 text-[13px]">État : <b>{String(current?.status||'DISCONNECTED')}</b>{current?.last_sync_at?` · Sync ${new Date(String(current.last_sync_at)).toLocaleString('fr-FR')}`:''}</p><button className={primary} onClick={()=>connect(provider)}>{current?'Reconnecter':'Connecter'}</button></Card>})}</div>}
-function DocumentsSettings({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){return <Card title="Documents & numérotation" description="Formats versionnés, jamais codés en dur."><div className="divide-y">{data.numbering.map(x=><form key={String(x.id)} className="flex flex-wrap items-center gap-3 py-3" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);run(()=>saveNumbering(String(x.document_type),String(f.get('format')),Number(x.row_version)),'Format enregistré.')}}><b className="w-28 text-[12px]">{String(x.document_type)}</b><input name="format" className={`${input} max-w-md`} defaultValue={String(x.prefix_format)}/><button className={button}>Enregistrer</button></form>)}</div></Card>}
-function BillingSettings({data}:{data:AdminData}){const b=data.billing||{};const usage=(b.usage||{}) as Record<string,number>,limits=(b.limits||{}) as Record<string,number>;return <div className="grid gap-4"><Card title="Plan actuel" description="Abonnement Slaivio, distinct des factures clients."><h3 className="text-xl font-semibold">{String(b.plan_code||'TRIAL')}</h3><p className="text-[13px]">{String(b.status||'TRIAL')} · {String(b.monthly_amount||0)} {String(b.billing_currency||'USD')} / mois</p><p className="mt-2 text-[12px] text-[#69707d]">Prochaine facturation : {b.next_billing_at?new Date(String(b.next_billing_at)).toLocaleDateString('fr-FR'):'Non planifiée'}</p></Card><Card title="Usage" description="Mesures utilisées par le futur moteur d’abonnement.">{Object.keys({...limits,...usage}).map(k=><div className="mb-3" key={k}><div className="flex justify-between text-[12px]"><span>{k}</span><b>{usage[k]||0} / {limits[k]||'∞'}</b></div><div className="mt-1 h-1.5 bg-[#e6e8e8]"><div className="h-full bg-[#16855f]" style={{width:`${Math.min(100,(usage[k]||0)/(limits[k]||Infinity)*100)}%`}}/></div></div>)}</Card></div>}
-function DataSettings({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){async function exportData(){run(()=>requestDataOperation({request_type:'EXPORT',scope:{modules:['clients','dossiers','packages','shipments','finance'],format:'JSON'}}),'Export demandé.')}async function deleteOrg(){const name=String(data.organization.organization_name||data.organization.name||'');const confirmation=prompt(`Tapez exactement « ${name} » pour confirmer la demande`);if(confirmation!==name)return;run(()=>requestDataOperation({request_type:'DELETE_ORGANIZATION',scope:{},confirmation}),'Demande sensible enregistrée pour validation.')}return <div className="grid gap-4"><Card title="Export et conservation" description="Les exports sont préparés en arrière-plan et restent auditables."><button className={primary} onClick={exportData}>Demander un export complet</button><p className="mt-3 text-[12px] text-[#69707d]">Demandes récentes : {data.data_requests.length}</p></Card><section className="border border-red-200 bg-red-50 p-5"><h3 className="font-semibold text-red-800">Zone sensible</h3><p className="my-3 text-[12px] text-red-700">La suppression n’est jamais immédiate : confirmation forte, audit et validation sont requis.</p><button className="h-9 bg-red-700 px-4 text-[13px] font-semibold text-white" onClick={deleteOrg}>Demander la suppression</button></section></div>}
-function DeveloperSettings({data,run}:{data:AdminData;run:(a:()=>Promise<unknown>,m:string)=>void}){const[secret,setSecret]=useState('');async function create(){const name=prompt('Nom de la clé API');if(!name)return;try{const result=await createApiKey({name,scopes:['api.read']});setSecret(String(result.api_key.secret));await run(async()=>undefined,'Clé créée. Copiez-la maintenant : elle ne sera plus affichée.')}catch{setSecret('Erreur de création.')}}return <Card title="Clés API" description="Secrets hachés en base, scopes minimaux et révocation immédiate."><button className={primary} onClick={create}>Créer une clé</button>{secret&&<code className="my-3 block break-all bg-[#f2f3f3] p-3 text-[12px]">{secret}</code>}<div className="divide-y">{data.api_keys.map(x=><div key={String(x.id)} className="flex items-center justify-between py-3 text-[12px]"><span><b>{String(x.name)}</b> · {String(x.key_prefix)}… · {String(x.status)}</span>{x.status==='ACTIVE'&&<button className={button} onClick={()=>run(()=>revokeApiKey(String(x.id)),'Clé révoquée.')}>Révoquer</button>}</div>)}</div></Card>}
-function SettingsLinkCard({href,title,text}:{href:string;title:string;text:string}){return <Card title={title} description={text}><Link className={primary} href={href}>Ouvrir le module</Link></Card>}
-function ReadOnly(){return <p className="rounded-[5px] bg-[#f2f2f1] p-3 text-[12px] text-[#69707d]">Consultation seule : votre rôle ne permet pas cette modification.</p>}
+export function OrganizationAdminPage() {
+  const router = useRouter(),
+    params = useSearchParams();
+  const [data, setData] = useState<AdminData | null>(null),
+    [tab, setTab] = useState<Section>("general"),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  useEffect(() => {
+    const requested = params.get("section");
+    if (tabs.some(([id]) => id === requested)) setTab(requested as Section);
+  }, [params]);
+  const load = useCallback(async () => {
+    try {
+      setError("");
+      setData(await getAdmin());
+    } catch {
+      setError("Le centre d’administration est indisponible.");
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  async function run(action: () => Promise<unknown>, message: string) {
+    try {
+      setError("");
+      await action();
+      setNotice(message);
+      await load();
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: string } } })
+        ?.response?.data?.detail;
+      setError(
+        detail === "organization_requires_an_active_owner"
+          ? "Une organisation doit toujours conserver au moins un propriétaire actif."
+          : detail || "L’opération n’a pas abouti.",
+      );
+    }
+  }
+  function select(section: Section) {
+    setTab(section);
+    router.replace(`/app/settings?section=${section}`, { scroll: false });
+  }
+  if (!data)
+    return (
+      <div className="p-6 text-[13px]">
+        {error || "Chargement de l’administration…"}
+      </div>
+    );
+  return (
+    <div className="min-h-full bg-white">
+      <header className="flex h-[72px] items-center border-b border-[#e0e2e4] px-5 lg:px-7">
+        <div>
+          <p className="text-[11px] text-[#7b8289]">Administration</p>
+          <h1 className="text-[21px] font-semibold">Paramètres</h1>
+        </div>
+        <button className={`${button} ml-auto`} onClick={load}>
+          <RefreshCcw className="mr-2 inline" size={14} />
+          Actualiser
+        </button>
+      </header>
+      <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[272px_minmax(0,1fr)]">
+        <aside className="border-b border-[#e0e2e4] bg-[#fafafa] p-3 lg:border-b-0 lg:border-r">
+          <SettingsGroup label="Administration">
+            {tabs.map(([id, label, Icon]) => (
+              <SettingsItem
+                key={id}
+                active={tab === id}
+                icon={<Icon size={15} />}
+                label={label}
+                onClick={() => select(id)}
+              />
+            ))}
+          </SettingsGroup>
+          <SettingsGroup label="Plateforme">
+            <SettingsLink
+              href="/app/platform"
+              icon={<ShieldCheck size={15} />}
+              label="Console Super Admin"
+            />
+          </SettingsGroup>
+        </aside>
+        <main className="min-w-0 p-5 lg:p-7">
+          <div className="mx-auto max-w-[1120px]">
+            <div className="mb-5 border-b border-[#e5e6e7] pb-4">
+              <h2 className="text-[20px] font-semibold">
+                {sectionTitles[tab][0]}
+              </h2>
+              <p className="mt-1 text-[13px] text-[#69707d]">
+                {sectionTitles[tab][1]}
+              </p>
+            </div>
+            {notice && (
+              <div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
+                {notice}
+              </div>
+            )}
+            {error && (
+              <div className="mb-3 rounded-[5px] bg-red-50 px-4 py-3 text-[13px] text-red-700">
+                {error}
+              </div>
+            )}
+            {tab === "general" && <Preferences data={data} run={run} />}{" "}
+            {tab === "agency" && <Organization data={data} run={run} />}{" "}
+            {tab === "workspaces" && <Workspaces data={data} run={run} />}{" "}
+            {tab === "locations" && <Locations data={data} run={run} />}{" "}
+            {tab === "team" && <Team data={data} run={run} />}{" "}
+            {tab === "roles" && <Roles data={data} run={run} />}{" "}
+            {tab === "notifications" && (
+              <SettingsLinkCard
+                href="/app/notifications?preferences=1"
+                title="Matrice de notifications"
+                text="Configurez chaque événement et ses canaux In-app, Email et WhatsApp."
+              />
+            )}{" "}
+            {tab === "integrations" && <Integrations data={data} run={run} />}{" "}
+            {tab === "whatsapp" && (
+              <SettingsLinkCard
+                href="/app/settings?section=integrations"
+                title="WhatsApp Business"
+                text="Compte Meta, routage des numéros et état de la connexion officielle."
+              />
+            )}{" "}
+            {tab === "documents" && <DocumentsSettings data={data} run={run} />}{" "}
+            {tab === "billing" && <BillingSettings data={data} />}{" "}
+            {tab === "security" && <Security data={data} run={run} />}{" "}
+            {tab === "data" && <DataSettings data={data} run={run} />}{" "}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+function SettingsGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-5">
+      <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase text-[#8a9097]">
+        {label}
+      </div>
+      <div className="space-y-0.5">{children}</div>
+    </section>
+  );
+}
+const settingsItemClass =
+  "flex min-h-9 w-full items-center gap-2.5 rounded-[5px] px-2.5 text-left text-[13px]";
+function SettingsItem({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${settingsItemClass} ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#444b52] hover:bg-[#eeeeed]"}`}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+function SettingsLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`${settingsItemClass} text-[#444b52] hover:bg-[#eeeeed]`}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </Link>
+  );
+}
+function Card({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden border border-[#dfe3e4] bg-white">
+      <div className="border-b border-[#e5e8e9] bg-[#fafbfb] px-5 py-4">
+        <h2 className="text-[15px] font-semibold text-[#293034]">{title}</h2>
+        <p className="text-[12px] text-[#697178]">{description}</p>
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
+function Organization({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const o = data.organization;
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        updateOrganization({
+          expected_version: o.row_version,
+          organization_name: val(f, "name"),
+          legal_name: val(f, "legal"),
+          country: val(f, "country"),
+          city: val(f, "city"),
+          address: val(f, "address"),
+          phone: val(f, "phone"),
+          email: val(f, "email"),
+          website: val(f, "website"),
+          registration_number: val(f, "registration"),
+          tax_number: val(f, "tax"),
+        }),
+      "Profil de l’agence mis à jour.",
+    );
+  }
+  return (
+    <Card
+      title="Profil de l’agence"
+      description="Informations officielles réutilisées dans les factures, documents et communications."
+    >
+      <PermissionGuard permission="organization.manage" fallback={<ReadOnly />}>
+        <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
+          {[
+            ["name", "Nom commercial", "organization_name"],
+            ["legal", "Raison sociale", "legal_name"],
+            ["registration", "Numéro d’enregistrement", "registration_number"],
+            ["tax", "Identifiant fiscal", "tax_number"],
+            ["country", "Pays", "country"],
+            ["city", "Ville", "city"],
+            ["phone", "Téléphone", "phone"],
+            ["email", "Email", "email"],
+            ["website", "Site web", "website"],
+            ["address", "Adresse", "address"],
+          ].map(([n, l, k]) => (
+            <label key={n} className="text-[12px] text-[#555d68]">
+              {l}
+              <input
+                className={`${input} mt-1`}
+                name={n}
+                defaultValue={String(o[k] || "")}
+              />
+            </label>
+          ))}
+          <div className="md:col-span-2">
+            <button className={primary}>Enregistrer le profil</button>
+          </div>
+        </form>
+      </PermissionGuard>
+    </Card>
+  );
+}
+function Team({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  async function invite(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () => inviteMember(String(f.get("email")), String(f.get("role"))),
+      "Invitation envoyée.",
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Inviter un collaborateur"
+        description="L’invitation est envoyée par Clerk et expire automatiquement."
+      >
+        <PermissionGuard permission="team.write">
+          <form onSubmit={invite} className="flex flex-wrap gap-2">
+            <input
+              required
+              type="email"
+              name="email"
+              className={`${input} max-w-sm`}
+              placeholder="collaborateur@agence.com"
+            />
+            <select name="role" className={`${input} max-w-[220px]`}>
+              {data.roles.map((r) => (
+                <option key={r.id} value={r.role_code}>
+                  {r.role_name}
+                </option>
+              ))}
+            </select>
+            <button className={primary}>
+              <UserPlus className="mr-2 inline" size={14} />
+              Inviter
+            </button>
+          </form>
+        </PermissionGuard>
+      </Card>
+      <Card
+        title={`Membres (${data.members.length})`}
+        description="Suspendre un accès prend effet côté API sans supprimer l’historique."
+      >
+        <div className="divide-y">
+          {data.members.map((m) => (
+            <MemberRow key={m.id} member={m} roles={data.roles} run={run} />
+          ))}
+        </div>
+      </Card>
+      {data.invitations.length > 0 && (
+        <Card
+          title="Invitations"
+          description="Invitations en attente, acceptées ou révoquées."
+        >
+          <div className="divide-y">
+            {data.invitations.map((x) => (
+              <div
+                className="flex items-center justify-between py-3 text-[13px]"
+                key={String(x.id)}
+              >
+                <div>
+                  <b>{String(x.email)}</b>
+                  <p className="text-[12px] text-[#69707d]">
+                    {String(x.role_code)} · {String(x.status)}
+                  </p>
+                </div>
+                {x.status === "PENDING" && (
+                  <PermissionGuard permission="team.manage">
+                    <button
+                      className={button}
+                      onClick={() =>
+                        run(
+                          () => revokeInvitation(String(x.id)),
+                          "Invitation révoquée.",
+                        )
+                      }
+                    >
+                      Révoquer
+                    </button>
+                  </PermissionGuard>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+function MemberRow({
+  member,
+  roles,
+  run,
+}: {
+  member: Member;
+  roles: AdminData["roles"];
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const [role, setRole] = useState(member.role_code),
+    [status, setStatus] = useState(member.status);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 py-3 text-[13px]">
+      <div>
+        <b>{member.member_display_name || member.member_email || "Membre"}</b>
+        <p className="text-[12px] text-[#69707d]">
+          {member.member_email || member.id}
+        </p>
+      </div>
+      <PermissionGuard
+        permission="team.manage"
+        fallback={
+          <span>
+            {member.role_name} · {member.status}
+          </span>
+        }
+      >
+        <div className="flex gap-2">
+          <select
+            className={input}
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            {roles.map((r) => (
+              <option key={r.id} value={r.role_code}>
+                {r.role_name}
+              </option>
+            ))}
+          </select>
+          <select
+            className={input}
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="ACTIVE">Actif</option>
+            <option value="SUSPENDED">Suspendu</option>
+          </select>
+          <button
+            className={button}
+            onClick={() =>
+              run(
+                () =>
+                  updateMember(member.id, {
+                    role_code: role,
+                    status,
+                    expected_version: member.row_version,
+                  }),
+                "Accès du membre mis à jour.",
+              )
+            }
+          >
+            Appliquer
+          </button>
+        </div>
+      </PermissionGuard>
+    </div>
+  );
+}
+function Roles({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const groups = useMemo(
+    () =>
+      data.permissions.reduce<Record<string, AdminData["permissions"]>>(
+        (all, p) => {
+          const key = p.permission_code.split(".")[0] || "other";
+          (all[key] ??= []).push(p);
+          return all;
+        },
+        {},
+      ),
+    [data.permissions],
+  );
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        saveRole({
+          code: String(f.get("code")).toUpperCase(),
+          name: f.get("name"),
+          description: f.get("description"),
+          permissions: f.getAll("permissions"),
+        }),
+      "Rôle enregistré.",
+    );
+  }
+  return (
+    <div className="grid gap-4 lg:grid-cols-[.8fr_1.2fr]">
+      <Card
+        title="Rôles existants"
+        description="Les rôles système forment le socle; les rôles personnalisés répondent à votre organisation."
+      >
+        {data.roles.map((r) => (
+          <div className="border-b py-3 text-[13px]" key={r.id}>
+            <b>{r.role_name}</b>
+            <p className="text-[12px] text-[#69707d]">
+              {r.permission_count} droits · {r.member_count} membres{" "}
+              {r.system_role ? "· Système" : ""}
+            </p>
+          </div>
+        ))}
+      </Card>
+      <Card
+        title="Nouveau rôle personnalisé"
+        description="Accordez uniquement les capacités nécessaires."
+      >
+        <PermissionGuard permission="roles.manage" fallback={<ReadOnly />}>
+          <form onSubmit={submit} className="grid gap-3">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                required
+                name="code"
+                className={input}
+                placeholder="SUPERVISEUR_PAYS"
+              />
+              <input
+                required
+                name="name"
+                className={input}
+                placeholder="Superviseur pays"
+              />
+            </div>
+            <input
+              name="description"
+              className={input}
+              placeholder="Description"
+            />
+            <div className="max-h-[400px] overflow-y-auto rounded-[5px] border p-3">
+              {Object.entries(groups).map(([group, permissions]) => (
+                <div key={group} className="mb-4">
+                  <b className="text-[12px] uppercase text-[#69707d]">
+                    {group}
+                  </b>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {permissions.map((p) => (
+                      <label className="flex gap-2 text-[12px]" key={p.id}>
+                        <input
+                          type="checkbox"
+                          name="permissions"
+                          value={p.permission_code}
+                        />
+                        <span>
+                          <b>{p.permission_code}</b>
+                          <small className="block text-[#69707d]">
+                            {p.description}
+                          </small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className={primary}>Créer le rôle</button>
+          </form>
+        </PermissionGuard>
+      </Card>
+    </div>
+  );
+}
+function Preferences({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const s = data.settings || { row_version: 1 };
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        updateSettings({
+          expected_version: s.row_version,
+          timezone: val(f, "timezone"),
+          currency_code: val(f, "currency"),
+          country_code: val(f, "country"),
+          language_code: val(f, "language"),
+          date_format: val(f, "date"),
+          weight_unit: val(f, "weight"),
+          volume_unit: val(f, "volume"),
+          notification_email: val(f, "email"),
+          settings: s.settings || {},
+          security: s.security || {},
+        }),
+      "Préférences enregistrées.",
+    );
+  }
+  return (
+    <Card
+      title="Préférences de l’espace"
+      description="Formats appliqués à tous les collaborateurs de l’agence."
+    >
+      <PermissionGuard permission="settings.write" fallback={<ReadOnly />}>
+        <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
+          {[
+            ["timezone", "Fuseau horaire", "timezone"],
+            ["currency", "Devise", "currency_code"],
+            ["country", "Code pays", "country_code"],
+            ["language", "Langue", "language_code"],
+            ["date", "Format de date", "date_format"],
+            ["weight", "Unité de poids", "weight_unit"],
+            ["volume", "Unité de volume", "volume_unit"],
+            ["email", "Email notifications", "notification_email"],
+          ].map(([n, l, k]) => (
+            <label className="text-[12px]" key={n}>
+              {l}
+              <input
+                name={n}
+                className={`${input} mt-1`}
+                defaultValue={String(s[k] || "")}
+              />
+            </label>
+          ))}
+          <button className={primary}>Enregistrer</button>
+        </form>
+      </PermissionGuard>
+    </Card>
+  );
+}
+function Security({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const s = data.settings || { row_version: 1 },
+    sec = (s.security || {}) as Record<string, unknown>;
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        updateSettings({
+          ...s,
+          expected_version: s.row_version,
+          security: {
+            require_mfa: f.get("mfa") === "on",
+            session_timeout_minutes: Number(f.get("timeout")),
+          },
+        }),
+      "Politique de sécurité mise à jour.",
+    );
+  }
+  return (
+    <Card
+      title="Politique de sécurité"
+      description="Ces règles complètent l’authentification Clerk et le contrôle RBAC des API."
+    >
+      <PermissionGuard permission="security.manage" fallback={<ReadOnly />}>
+        <form onSubmit={submit} className="grid max-w-xl gap-4">
+          <label className="flex items-center gap-3 text-[13px]">
+            <input
+              name="mfa"
+              type="checkbox"
+              defaultChecked={Boolean(sec.require_mfa)}
+            />
+            Exiger l’authentification multifacteur pour l’agence
+          </label>
+          <label className="text-[12px]">
+            Expiration de session (minutes)
+            <input
+              name="timeout"
+              type="number"
+              min="15"
+              max="10080"
+              className={`${input} mt-1`}
+              defaultValue={Number(sec.session_timeout_minutes || 480)}
+            />
+          </label>
+          <p className="rounded-[5px] bg-amber-50 p-3 text-[12px] text-amber-900">
+            L’application de la MFA au niveau de la connexion nécessite aussi
+            son activation dans Clerk Dashboard.
+          </p>
+          <button className={primary}>Enregistrer la politique</button>
+        </form>
+      </PermissionGuard>
+    </Card>
+  );
+}
+export function Audit({ data }: { data: AdminData }) {
+  return (
+    <Card
+      title="Journal d’audit"
+      description="Dernières mutations administratives de l’organisation."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-[12px]">
+          <thead>
+            <tr className="border-b text-[#69707d]">
+              <th className="py-2">Date</th>
+              <th>Action</th>
+              <th>Objet</th>
+              <th>Acteur</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.audit.map((x) => (
+              <tr className="border-b" key={String(x.id)}>
+                <td className="py-3">
+                  {new Date(String(x.created_at)).toLocaleString("fr-FR")}
+                </td>
+                <td>{String(x.action)}</td>
+                <td>
+                  {String(x.entity_type)} · {String(x.entity_id)}
+                </td>
+                <td>{String(x.actor_name || x.actor_id || "Système")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!data.audit.length && (
+          <p className="py-8 text-center text-[#69707d]">
+            Aucune mutation administrative enregistrée.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+function Workspaces({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        saveWorkspace({
+          name: val(f, "name"),
+          code: val(f, "code"),
+          country_code: val(f, "country"),
+          currency_code: val(f, "currency") || "USD",
+          timezone: val(f, "timezone") || "UTC",
+          language_code: val(f, "language") || "fr",
+        }),
+      "Workspace enregistré.",
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Nouveau workspace"
+        description="Un périmètre opérationnel isolé par pays ou activité."
+      >
+        <form onSubmit={submit} className="grid gap-2 md:grid-cols-3">
+          <input
+            required
+            name="name"
+            className={input}
+            placeholder="Workspace RDC"
+          />
+          <input required name="code" className={input} placeholder="RDC" />
+          <input name="country" className={input} placeholder="CD" />
+          <input name="currency" className={input} placeholder="USD" />
+          <input
+            name="timezone"
+            className={input}
+            placeholder="Africa/Kinshasa"
+          />
+          <select name="language" className={input}>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+          <button className={primary}>Enregistrer</button>
+        </form>
+      </Card>
+      <Card
+        title="Workspaces"
+        description="Les archives restent auditables et ne suppriment aucune donnée."
+      >
+        {data.workspaces.map((x) => (
+          <div
+            key={String(x.id)}
+            className="flex items-center justify-between border-b py-3 text-[13px]"
+          >
+            <div>
+              <b>{String(x.name)}</b>
+              <p className="text-[#69707d]">
+                {String(x.code)} · {String(x.country_code || "—")} ·{" "}
+                {String(x.currency_code)} · {String(x.status)}
+              </p>
+            </div>
+            {x.status === "ACTIVE" && (
+              <button
+                className={button}
+                onClick={() =>
+                  run(
+                    () => archiveWorkspace(String(x.id), Number(x.row_version)),
+                    "Workspace archivé.",
+                  )
+                }
+              >
+                Archiver
+              </button>
+            )}
+          </div>
+        ))}
+        {!data.workspaces.length && (
+          <p className="text-[13px] text-[#69707d]">
+            Aucun workspace configuré.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+function Locations({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    run(
+      () =>
+        saveLocation({
+          workspace_id: val(f, "workspace"),
+          name: val(f, "name"),
+          code: val(f, "code"),
+          location_type: val(f, "type"),
+          country: val(f, "country"),
+          city: val(f, "city"),
+          address: val(f, "address"),
+          phone: val(f, "phone"),
+          whatsapp: val(f, "whatsapp"),
+          email: val(f, "email"),
+          manager_name: val(f, "manager"),
+          timezone: val(f, "timezone") || "UTC",
+          opening_hours: { text: val(f, "hours") },
+          services: String(f.get("services") || "")
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+        }),
+      "Établissement enregistré.",
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Ajouter un établissement"
+        description="Bureau, entrepôt, hub ou point de retrait."
+      >
+        <form onSubmit={submit} className="grid gap-2 md:grid-cols-3">
+          <input
+            required
+            name="name"
+            className={input}
+            placeholder="Bureau Kinshasa"
+          />
+          <input required name="code" className={input} placeholder="KIN-01" />
+          <select required name="type" className={input}>
+            <option value="OFFICE">Bureau</option>
+            <option value="WAREHOUSE">Entrepôt</option>
+            <option value="HUB">Hub</option>
+            <option value="PICKUP_POINT">Point de retrait</option>
+          </select>
+          <select name="workspace" className={input}>
+            <option value="">Organisation entière</option>
+            {data.workspaces.map((x) => (
+              <option key={String(x.id)} value={String(x.id)}>
+                {String(x.name)}
+              </option>
+            ))}
+          </select>
+          {[
+            "country",
+            "city",
+            "address",
+            "phone",
+            "whatsapp",
+            "email",
+            "manager",
+            "timezone",
+            "hours",
+            "services",
+          ].map((n) => (
+            <input
+              required={n === "country" || n === "city"}
+              key={n}
+              name={n}
+              className={input}
+              placeholder={n}
+            />
+          ))}
+          <button className={primary}>Enregistrer</button>
+        </form>
+      </Card>
+      <Card
+        title="Établissements"
+        description="Structure physique de l’agence."
+      >
+        {data.locations.map((x) => (
+          <div key={String(x.id)} className="border-b py-3 text-[13px]">
+            <b>{String(x.name)}</b>
+            <p className="text-[#69707d]">
+              {String(x.location_type)} · {String(x.city)}, {String(x.country)}{" "}
+              · {String(x.status)}
+            </p>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+function Integrations({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  async function connect(provider: "WHATSAPP" | "GMAIL") {
+    const label = prompt("Nom du compte connecté");
+    if (!label) return;
+    run(
+      () =>
+        saveIntegration({
+          provider,
+          account_label: label,
+          status: "CONNECTING",
+          granted_permissions: [],
+          configuration: {},
+        }),
+      "Connexion initialisée. Finalisez le consentement OAuth du fournisseur.",
+    );
+  }
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {(["WHATSAPP", "GMAIL"] as const).map((provider) => {
+        const current = data.integrations.find((x) => x.provider === provider);
+        return (
+          <Card
+            key={provider}
+            title={provider === "WHATSAPP" ? "WhatsApp Business" : "Gmail"}
+            description="Connexion officielle, permissions et synchronisation auditées."
+          >
+            <p className="mb-4 text-[13px]">
+              État : <b>{String(current?.status || "DISCONNECTED")}</b>
+              {current?.last_sync_at
+                ? ` · Sync ${new Date(String(current.last_sync_at)).toLocaleString("fr-FR")}`
+                : ""}
+            </p>
+            <button className={primary} onClick={() => connect(provider)}>
+              {current ? "Reconnecter" : "Connecter"}
+            </button>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+function DocumentsSettings({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  return (
+    <Card
+      title="Documents & numérotation"
+      description="Formats versionnés, jamais codés en dur."
+    >
+      <div className="divide-y">
+        {data.numbering.map((x) => (
+          <form
+            key={String(x.id)}
+            className="flex flex-wrap items-center gap-3 py-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              run(
+                () =>
+                  saveNumbering(
+                    String(x.document_type),
+                    String(f.get("format")),
+                    Number(x.row_version),
+                  ),
+                "Format enregistré.",
+              );
+            }}
+          >
+            <b className="w-28 text-[12px]">{String(x.document_type)}</b>
+            <input
+              name="format"
+              className={`${input} max-w-md`}
+              defaultValue={String(x.prefix_format)}
+            />
+            <button className={button}>Enregistrer</button>
+          </form>
+        ))}
+      </div>
+    </Card>
+  );
+}
+function BillingSettings({ data }: { data: AdminData }) {
+  const b = data.billing || {};
+  const usage = (b.usage || {}) as Record<string, number>,
+    limits = (b.limits || {}) as Record<string, number>;
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Plan actuel"
+        description="Abonnement Slaivio, distinct des factures clients."
+      >
+        <h3 className="text-xl font-semibold">
+          {String(b.plan_code || "TRIAL")}
+        </h3>
+        <p className="text-[13px]">
+          {String(b.status || "TRIAL")} · {String(b.monthly_amount || 0)}{" "}
+          {String(b.billing_currency || "USD")} / mois
+        </p>
+        <p className="mt-2 text-[12px] text-[#69707d]">
+          Prochaine facturation :{" "}
+          {b.next_billing_at
+            ? new Date(String(b.next_billing_at)).toLocaleDateString("fr-FR")
+            : "Non planifiée"}
+        </p>
+      </Card>
+      <Card
+        title="Usage"
+        description="Mesures utilisées par le futur moteur d’abonnement."
+      >
+        {Object.keys({ ...limits, ...usage }).map((k) => (
+          <div className="mb-3" key={k}>
+            <div className="flex justify-between text-[12px]">
+              <span>{k}</span>
+              <b>
+                {usage[k] || 0} / {limits[k] || "∞"}
+              </b>
+            </div>
+            <div className="mt-1 h-1.5 bg-[#e6e8e8]">
+              <div
+                className="h-full bg-[#16855f]"
+                style={{
+                  width: `${Math.min(100, ((usage[k] || 0) / (limits[k] || Infinity)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+function DataSettings({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  async function exportData() {
+    run(
+      () =>
+        requestDataOperation({
+          request_type: "EXPORT",
+          scope: {
+            modules: [
+              "clients",
+              "dossiers",
+              "packages",
+              "shipments",
+              "finance",
+            ],
+            format: "JSON",
+          },
+        }),
+      "Export demandé.",
+    );
+  }
+  async function deleteOrg() {
+    const name = String(
+      data.organization.organization_name || data.organization.name || "",
+    );
+    const confirmation = prompt(
+      `Tapez exactement « ${name} » pour confirmer la demande`,
+    );
+    if (confirmation !== name) return;
+    run(
+      () =>
+        requestDataOperation({
+          request_type: "DELETE_ORGANIZATION",
+          scope: {},
+          confirmation,
+        }),
+      "Demande sensible enregistrée pour validation.",
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Export et conservation"
+        description="Les exports sont préparés en arrière-plan et restent auditables."
+      >
+        <button className={primary} onClick={exportData}>
+          Demander un export complet
+        </button>
+        <p className="mt-3 text-[12px] text-[#69707d]">
+          Demandes récentes : {data.data_requests.length}
+        </p>
+      </Card>
+      <section className="border border-red-200 bg-red-50 p-5">
+        <h3 className="font-semibold text-red-800">Zone sensible</h3>
+        <p className="my-3 text-[12px] text-red-700">
+          La suppression n’est jamais immédiate : confirmation forte, audit et
+          validation sont requis.
+        </p>
+        <button
+          className="h-9 bg-red-700 px-4 text-[13px] font-semibold text-white"
+          onClick={deleteOrg}
+        >
+          Demander la suppression
+        </button>
+      </section>
+    </div>
+  );
+}
+export function DeveloperSettings({
+  data,
+  run,
+}: {
+  data: AdminData;
+  run: (a: () => Promise<unknown>, m: string) => void;
+}) {
+  const [secret, setSecret] = useState("");
+  async function create() {
+    const name = prompt("Nom de la clé API");
+    if (!name) return;
+    try {
+      const result = await createApiKey({ name, scopes: ["api.read"] });
+      setSecret(String(result.api_key.secret));
+      await run(
+        async () => undefined,
+        "Clé créée. Copiez-la maintenant : elle ne sera plus affichée.",
+      );
+    } catch {
+      setSecret("Erreur de création.");
+    }
+  }
+  return (
+    <Card
+      title="Clés API"
+      description="Secrets hachés en base, scopes minimaux et révocation immédiate."
+    >
+      <button className={primary} onClick={create}>
+        Créer une clé
+      </button>
+      {secret && (
+        <code className="my-3 block break-all bg-[#f2f3f3] p-3 text-[12px]">
+          {secret}
+        </code>
+      )}
+      <div className="divide-y">
+        {data.api_keys.map((x) => (
+          <div
+            key={String(x.id)}
+            className="flex items-center justify-between py-3 text-[12px]"
+          >
+            <span>
+              <b>{String(x.name)}</b> · {String(x.key_prefix)}… ·{" "}
+              {String(x.status)}
+            </span>
+            {x.status === "ACTIVE" && (
+              <button
+                className={button}
+                onClick={() =>
+                  run(() => revokeApiKey(String(x.id)), "Clé révoquée.")
+                }
+              >
+                Révoquer
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+function SettingsLinkCard({
+  href,
+  title,
+  text,
+}: {
+  href: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <Card title={title} description={text}>
+      <Link className={primary} href={href}>
+        Ouvrir le module
+      </Link>
+    </Card>
+  );
+}
+function ReadOnly() {
+  return (
+    <p className="rounded-[5px] bg-[#f2f2f1] p-3 text-[12px] text-[#69707d]">
+      Consultation seule : votre rôle ne permet pas cette modification.
+    </p>
+  );
+}

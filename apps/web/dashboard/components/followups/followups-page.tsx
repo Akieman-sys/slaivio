@@ -64,6 +64,8 @@ export function FollowupsPage() {
     [stats, setStats] = useState<FollowupStats | null>(null),
     [view, setView] = useState("all"),
     [q, setQ] = useState(""),
+    [channel, setChannel] = useState(""),
+    [priority, setPriority] = useState(""),
     [selected, setSelected] = useState<Followup | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -73,7 +75,12 @@ export function FollowupsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await listFollowups({ q, ...current[2] });
+      const r = await listFollowups({
+        q,
+        channel: channel || undefined,
+        priority: priority || undefined,
+        ...current[2],
+      });
       setItems(r.items);
       setStats(r.stats);
       setError("");
@@ -82,7 +89,7 @@ export function FollowupsPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, current]);
+  }, [q, channel, priority, current]);
   useEffect(() => {
     const t = setTimeout(load, 180);
     return () => clearTimeout(t);
@@ -207,6 +214,28 @@ export function FollowupsPage() {
             placeholder="Client, téléphone, dossier, facture, colis..."
           />
         </label>
+        <select
+          className={`${input} w-44`}
+          value={channel}
+          onChange={(event) => setChannel(event.target.value)}
+        >
+          <option value="">Tous les canaux</option>
+          <option value="WHATSAPP">WhatsApp</option>
+          <option value="IN_APP">Tâches internes</option>
+          <option value="PHONE">Appels manuels</option>
+        </select>
+        <select
+          className={`${input} w-40`}
+          value={priority}
+          onChange={(event) => setPriority(event.target.value)}
+        >
+          <option value="">Toutes priorités</option>
+          {Object.entries(priorityLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">

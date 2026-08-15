@@ -52,6 +52,7 @@ export function BroadcastsPage() {
   const [items, setItems] = useState<Campaign[]>([]),
     [stats, setStats] = useState<Record<string, number>>({}),
     [status, setStatus] = useState(""),
+    [channel, setChannel] = useState(""),
     [q, setQ] = useState(""),
     [selected, setSelected] = useState<Campaign | null>(null),
     [modal, setModal] = useState<"campaign" | "audience" | null>(null),
@@ -59,13 +60,13 @@ export function BroadcastsPage() {
     [error, setError] = useState("");
   const load = useCallback(
     () =>
-      listCampaigns({ q, status })
+      listCampaigns({ q, status, channel })
         .then((r) => {
           setItems(r.items);
           setStats(r.stats);
         })
         .catch(() => setError("Campaign Engine indisponible.")),
-    [q, status],
+    [q, status, channel],
   );
   useEffect(() => {
     load();
@@ -180,6 +181,20 @@ export function BroadcastsPage() {
             placeholder="Rechercher une campagne..."
           />
         </label>
+        <select
+          className={`${field} w-44`}
+          value={channel}
+          onChange={(event) => setChannel(event.target.value)}
+        >
+          <option value="">Tous les canaux</option>
+          {Array.from(
+            new Set(items.flatMap((item) => item.channels || [])),
+          ).map((value) => (
+            <option key={value} value={value}>
+              {channelLabels[value] || value}
+            </option>
+          ))}
+        </select>
       </div>
       {error && <p className="m-4 bg-red-50 p-3 text-red-700">{error}</p>}
       <table className="w-full bg-white text-left text-[12px]">

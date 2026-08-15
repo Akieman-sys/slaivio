@@ -620,7 +620,16 @@ function Detail({
 }
 function Create({ close, done }: { close: () => void; done: () => void }) {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [sourceType, setSourceType] = useState("MANUAL"),
+    [liveCatalog, setLiveCatalog] = useState<
+      Record<string, Array<Record<string, unknown>>>
+    >({});
+  useEffect(() => {
+    getKnowledgeLiveCatalog()
+      .then(setLiveCatalog)
+      .catch(() => setLiveCatalog({}));
+  }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -635,6 +644,8 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
         audiences: [String(f.get("audiences") || "EMPLOYEES")],
         ai_scope: f.get("ai_scope"),
         source_type: f.get("source_type"),
+        source_entity_type: f.get("source_entity_type") || null,
+        source_entity_id: f.get("source_entity_id") || null,
         tags: String(f.get("tags") || "")
           .split(",")
           .filter(Boolean)
@@ -681,7 +692,12 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
         </label>
         <label className="text-[12px] font-medium">
           D’où vient cette information ?
-          <select name="source_type" className={`${input} mt-1`}>
+          <select
+            name="source_type"
+            value={sourceType}
+            onChange={(event) => setSourceType(event.target.value)}
+            className={`${input} mt-1`}
+          >
             {[
               "MANUAL",
               "ROUTE",
@@ -697,6 +713,48 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
             ))}
           </select>
         </label>
+        {["ROUTE", "SERVICE", "WAREHOUSE", "OFFICE"].includes(sourceType) && (
+          <label className="text-[12px] font-medium">
+            Information configurée dans l’agence
+            <input type="hidden" name="source_entity_type" value={sourceType} />
+            <select
+              required
+              name="source_entity_id"
+              className={`${input} mt-1`}
+            >
+              <option value="">Choisir l’élément existant</option>
+              {(
+                liveCatalog[
+                  (
+                    {
+                      ROUTE: "routes",
+                      SERVICE: "services",
+                      WAREHOUSE: "warehouses",
+                      OFFICE: "offices",
+                    } as Record<string, string>
+                  )[sourceType]
+                ] || []
+              ).map((row) => (
+                <option key={String(row.id)} value={String(row.id)}>
+                  {String(
+                    row.route_name ||
+                      row.service_name ||
+                      row.name ||
+                      row.title ||
+                      row.code ||
+                      "Élément configuré",
+                  )}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {sourceType === "PRICING" && (
+          <p className="rounded-md bg-blue-50 p-3 text-[11px] text-blue-800">
+            Le tarif ne sera pas copié ici. L’assistant consultera toujours le
+            moteur Tarification au moment de calculer un prix.
+          </p>
+        )}
         <label className="text-[12px] font-medium">
           Qui peut la consulter ?
           <select className={`${input} mt-1`} name="audiences">

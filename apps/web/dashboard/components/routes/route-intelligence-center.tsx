@@ -57,6 +57,7 @@ export function RouteIntelligenceCenter() {
     [view, setView] = useState<View>("ALL"),
     [selected, setSelected] = useState<Detail | null>(null),
     [createOpen, setCreateOpen] = useState(false),
+    [allMetrics, setAllMetrics] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -194,10 +195,26 @@ export function RouteIntelligenceCenter() {
           </>
         }
       />
-      <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {cards.slice(0, 4).map(([l, v]) => (
-          <Metric key={String(l)} label={String(l)} value={v} />
-        ))}
+      <section className="bg-white px-5 py-4">
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
+            <Metric
+              key={String(l)}
+              label={String(l)}
+              value={v}
+              divided={index > 0}
+              onClick={() => setAllMetrics((current) => !current)}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
       </section>
       {view === "ENGINE" ? (
         <Engine />
@@ -279,10 +296,10 @@ function RouteTable({
   open: (r: Route) => void;
 }) {
   return (
-    <div className="overflow-x-auto bg-white">
-      <table className="w-full min-w-[1250px] text-left text-[12px]">
-        <thead className="bg-[#f5f6f6]">
-          <tr>
+    <div className="min-h-[460px] overflow-x-auto bg-white">
+      <table className="w-full min-w-[1250px] border-collapse text-left text-[13px]">
+        <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+          <tr className="border-b border-[#e6e9ee]">
             {[
               "Route",
               "Origine",
@@ -297,7 +314,7 @@ function RouteTable({
               "Statut",
               "",
             ].map((h) => (
-              <th key={h} className="p-3 font-medium text-[#5d6670]">
+              <th key={h} className="px-4 py-3 font-medium">
                 {h}
               </th>
             ))}
@@ -308,9 +325,9 @@ function RouteTable({
             <tr
               key={r.id}
               onClick={() => open(r)}
-              className="cursor-pointer border-t hover:bg-[#fafafa]"
+              className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
             >
-              <td className="p-3">
+              <td className="px-4 py-3">
                 <b>{r.route_code}</b>
                 <small className="block text-[#737b84]">{r.route_name}</small>
               </td>
@@ -778,79 +795,149 @@ function Analytics() {
   );
 }
 function CreateRoute({ done }: { done: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await createRoute({
-      route_code: f.get("route_code"),
-      route_name: f.get("route_name"),
-      origin_country: f.get("origin_country"),
-      origin_city: f.get("origin_city"),
-      destination_country: f.get("destination_country"),
-      destination_city: f.get("destination_city"),
-      transport_mode: f.get("transport_mode"),
-      eta_min_days: Number(f.get("eta_min_days")),
-      eta_max_days: Number(f.get("eta_max_days")),
-      metadata: {},
-    });
-    await done();
+    try {
+      await createRoute({
+        route_code: f.get("route_code"),
+        route_name: f.get("route_name"),
+        origin_country: f.get("origin_country"),
+        origin_city: f.get("origin_city"),
+        destination_country: f.get("destination_country"),
+        destination_city: f.get("destination_city"),
+        transport_mode: f.get("transport_mode"),
+        eta_min_days: Number(f.get("eta_min_days")),
+        eta_max_days: Number(f.get("eta_max_days")),
+        metadata: {},
+      });
+      await done();
+    } catch {
+      setError(
+        "La route n’a pas été créée. Vérifiez les informations obligatoires.",
+      );
+      setBusy(false);
+    }
   }
   return (
-    <form onSubmit={submit} className="grid gap-4 p-5">
-      <input
-        required
-        className={input}
-        name="route_code"
-        placeholder="Code interne (ex. CHN-KIN-AIR)"
-      />
-      <input
-        required
-        className={input}
-        name="route_name"
-        placeholder="Nom visible (ex. Guangzhou → Kinshasa — Air)"
-      />
-      <input
-        required
-        className={input}
-        name="origin_country"
-        placeholder="Pays origine"
-      />
-      <input className={input} name="origin_city" placeholder="Ville origine" />
-      <input
-        required
-        className={input}
-        name="destination_country"
-        placeholder="Pays destination"
-      />
-      <input
-        className={input}
-        name="destination_city"
-        placeholder="Ville destination"
-      />
-      <select className={input} name="transport_mode">
-        <option value="AIR">Avion</option>
-        <option value="SEA">Bateau</option>
-        <option value="EXPRESS">Express</option>
-        <option value="ROAD">Route</option>
-        <option value="RAIL">Rail</option>
-        <option value="MULTIMODAL">Plusieurs modes</option>
-      </select>
-      <input
-        required
-        type="number"
-        className={input}
-        name="eta_min_days"
-        placeholder="Délai minimum"
-      />
-      <input
-        required
-        type="number"
-        className={input}
-        name="eta_max_days"
-        placeholder="Délai maximum"
-      />
-      <button className={primary}>Créer la route</button>
+    <form onSubmit={submit} className="grid gap-5">
+      <section className="grid gap-4 md:grid-cols-2">
+        <RouteFormField label="Code interne" hint="Ex. CHN-KIN-AIR">
+          <input
+            required
+            className={input}
+            name="route_code"
+            placeholder="Code court de la route"
+          />
+        </RouteFormField>
+        <RouteFormField
+          label="Nom visible"
+          hint="Nom compris par l’équipe et les clients"
+        >
+          <input
+            required
+            className={input}
+            name="route_name"
+            placeholder="Guangzhou → Kinshasa — Air"
+          />
+        </RouteFormField>
+      </section>
+      <section className="grid gap-4 border-t border-[#eceef1] pt-5 md:grid-cols-2">
+        <RouteFormField label="Pays de départ">
+          <input
+            required
+            className={input}
+            name="origin_country"
+            placeholder="Choisir ou saisir le pays"
+          />
+        </RouteFormField>
+        <RouteFormField label="Ville de départ">
+          <input
+            className={input}
+            name="origin_city"
+            placeholder="Ville d’origine"
+          />
+        </RouteFormField>
+        <RouteFormField label="Pays de destination">
+          <input
+            required
+            className={input}
+            name="destination_country"
+            placeholder="Choisir ou saisir le pays"
+          />
+        </RouteFormField>
+        <RouteFormField label="Ville de destination">
+          <input
+            className={input}
+            name="destination_city"
+            placeholder="Ville de destination"
+          />
+        </RouteFormField>
+      </section>
+      <section className="grid gap-4 border-t border-[#eceef1] pt-5 md:grid-cols-3">
+        <RouteFormField label="Mode de transport">
+          <select className={input} name="transport_mode">
+            <option value="AIR">Avion</option>
+            <option value="SEA">Bateau</option>
+            <option value="EXPRESS">Express</option>
+            <option value="ROAD">Route</option>
+            <option value="RAIL">Rail</option>
+            <option value="MULTIMODAL">Plusieurs modes</option>
+          </select>
+        </RouteFormField>
+        <RouteFormField label="Délai minimum">
+          <input
+            required
+            min="0"
+            type="number"
+            className={input}
+            name="eta_min_days"
+            placeholder="Nombre de jours"
+          />
+        </RouteFormField>
+        <RouteFormField label="Délai maximum">
+          <input
+            required
+            min="0"
+            type="number"
+            className={input}
+            name="eta_max_days"
+            placeholder="Nombre de jours"
+          />
+        </RouteFormField>
+      </section>
+      {error && (
+        <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end border-t border-[#eceef1] pt-4">
+        <button disabled={busy} className={primary}>
+          {busy ? "Création…" : "Créer la route"}
+        </button>
+      </div>
     </form>
+  );
+}
+function RouteFormField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-1 text-[12px] font-medium text-[#414950]">
+      <span>{label}</span>
+      {children}
+      {hint && <small className="font-normal text-[#7a838c]">{hint}</small>}
+    </label>
   );
 }
 function Children({
@@ -910,12 +997,28 @@ function Info({ l, v }: { l: string; v: unknown }) {
     </p>
   );
 }
-function Metric({ label, value }: { label: string; value: unknown }) {
+function Metric({
+  label,
+  value,
+  divided,
+  onClick,
+}: {
+  label: string;
+  value: unknown;
+  divided: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="min-h-[82px] border-r p-4">
-      <small className="text-[#68717a]">{label}</small>
-      <b className="mt-2 block text-xl">{String(value)}</b>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-1 text-left ${divided ? "border-l border-[#eceef1]" : ""}`}
+    >
+      <span className="text-[12px] text-[#6b7580]">{label}</span>
+      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+        {String(value)}
+      </b>
+    </button>
   );
 }
 function Badge({ value }: { value: string }) {

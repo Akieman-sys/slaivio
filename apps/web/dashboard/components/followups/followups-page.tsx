@@ -275,10 +275,10 @@ function Table({
   open: (x: Followup) => void;
 }) {
   return (
-    <div className="overflow-x-auto bg-white">
-      <table className="w-full min-w-[1100px] text-left text-[12px]">
-        <thead className="bg-[#f5f6f6]">
-          <tr>
+    <div className="min-h-[460px] overflow-x-auto bg-white">
+      <table className="w-full min-w-[1100px] border-collapse text-left text-[13px]">
+        <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+          <tr className="border-b border-[#e6e9ee]">
             {[
               "Client",
               "Objet / motif",
@@ -291,7 +291,7 @@ function Table({
               "Statut",
               "",
             ].map((h) => (
-              <th className="p-3" key={h}>
+              <th className="px-4 py-3 font-medium" key={h}>
                 {h}
               </th>
             ))}
@@ -301,10 +301,12 @@ function Table({
           {items.map((x) => (
             <tr
               onClick={() => open(x)}
-              className="cursor-pointer border-t hover:bg-[#fafafa]"
+              className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
               key={x.id}
             >
-              <td className="p-3 font-semibold">{x.client_name || "Client"}</td>
+              <td className="px-4 py-3 font-semibold">
+                {x.client_name || "Client"}
+              </td>
               <td>
                 {followupTypeLabels[x.followup_type] || x.followup_type}
                 <small className="block text-[#6b7280]">{x.reason}</small>

@@ -415,10 +415,10 @@ function KnowledgeTable({
   select: (i: KnowledgeEntry) => void;
 }) {
   return (
-    <div className="overflow-x-auto bg-white">
-      <table className="w-full min-w-[1050px] text-left text-[12px]">
-        <thead className="bg-[#f5f6f6]">
-          <tr>
+    <div className="min-h-[460px] overflow-x-auto bg-white">
+      <table className="w-full min-w-[1050px] border-collapse text-left text-[13px]">
+        <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+          <tr className="border-b border-[#e6e9ee]">
             {[
               "Connaissance",
               "Type / catégorie",
@@ -430,7 +430,7 @@ function KnowledgeTable({
               "Mise à jour",
               "",
             ].map((h) => (
-              <th key={h} className="p-3 font-medium text-[#5d6670]">
+              <th key={h} className="px-4 py-3 font-medium">
                 {h}
               </th>
             ))}
@@ -441,9 +441,9 @@ function KnowledgeTable({
             <tr
               key={x.id}
               onClick={() => select(x)}
-              className="cursor-pointer border-t hover:bg-[#fafafa]"
+              className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
             >
-              <td className="max-w-[330px] p-3">
+              <td className="max-w-[330px] px-4 py-3">
                 <b className="block truncate">{x.title}</b>
                 <small className="block truncate text-[#737b84]">
                   {x.content}
@@ -663,10 +663,7 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
   }
   return (
     <Modal title="Ajouter une connaissance" close={close}>
-      <form
-        onSubmit={submit}
-        className="grid gap-4 bg-white p-5 md:grid-cols-2"
-      >
+      <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
         <Field name="title" label="Titre visible par l’équipe" required />
         <label className="text-[12px] font-medium">
           Quel contenu ajoutez-vous ?

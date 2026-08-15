@@ -99,6 +99,7 @@ export function ServiceCatalogCenter() {
     [query, setQuery] = useState(""),
     [selected, setSelected] = useState<Detail | null>(null),
     [createOpen, setCreateOpen] = useState(false),
+    [allMetrics, setAllMetrics] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -240,10 +241,26 @@ export function ServiceCatalogCenter() {
           </>
         }
       />
-      <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {cards.slice(0, 4).map(([l, v]) => (
-          <Metric key={String(l)} label={String(l)} value={v} />
-        ))}
+      <section className="bg-white px-5 py-4">
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
+            <Metric
+              key={String(l)}
+              label={String(l)}
+              value={v}
+              divided={index > 0}
+              onClick={() => setAllMetrics((current) => !current)}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
       </section>
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
@@ -324,10 +341,10 @@ function Table({
   open: (s: Service) => void;
 }) {
   return (
-    <div className="overflow-x-auto bg-white">
-      <table className="w-full min-w-[1120px] text-left text-[12px]">
-        <thead className="bg-[#f5f6f6]">
-          <tr>
+    <div className="min-h-[460px] overflow-x-auto bg-white">
+      <table className="w-full min-w-[1120px] border-collapse text-left text-[13px]">
+        <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+          <tr className="border-b border-[#e6e9ee]">
             {[
               "Service",
               "Type",
@@ -342,7 +359,7 @@ function Table({
               "Statut",
               "",
             ].map((x) => (
-              <th key={x} className="p-3 font-medium text-[#5d6670]">
+              <th key={x} className="px-4 py-3 font-medium">
                 {x}
               </th>
             ))}
@@ -353,9 +370,9 @@ function Table({
             <tr
               key={s.id}
               onClick={() => open(s)}
-              className="cursor-pointer border-t hover:bg-[#fafafa]"
+              className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
             >
-              <td className="p-3">
+              <td className="px-4 py-3">
                 <b>{s.service_name}</b>
                 <small className="block text-[#737b84]">{s.service_code}</small>
               </td>
@@ -402,42 +419,53 @@ function Table({
   );
 }
 function Create({ done }: { done: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await createService({
-      service_code: f.get("code"),
-      service_name: f.get("name"),
-      description: f.get("description"),
-      category: f.get("category"),
-      service_type: f.get("type"),
-      shipping_mode: f.get("mode"),
-      eta_min_days: Number(f.get("eta_min")) || null,
-      eta_max_days: Number(f.get("eta_max")) || null,
-      volumetric_divisor: Number(f.get("divisor")) || 6000,
-      maximum_weight_kg: Number(f.get("max_weight")) || null,
-      maximum_volume_cbm: Number(f.get("max_cbm")) || null,
-      currency_code: "USD",
-      priority: 100,
-      public_visible: f.get("public") === "on",
-      quote_only: f.get("quote_only") === "on",
-      minimum_weight_kg: Number(f.get("min_weight")) || null,
-      cutoff_hours: Number(f.get("cutoff")) || null,
-      sla_target_percent: Number(f.get("sla")) || 90,
-      maximum_dimensions_cm: {},
-      workflow: [
-        "REQUESTED",
-        "ACCEPTED",
-        "IN_PROGRESS",
-        "COMPLETED",
-        "CANCELLED",
-      ],
-      metadata: {},
-    });
-    await done();
+    try {
+      await createService({
+        service_code: f.get("code"),
+        service_name: f.get("name"),
+        description: f.get("description"),
+        category: f.get("category"),
+        service_type: f.get("type"),
+        shipping_mode: f.get("mode"),
+        eta_min_days: Number(f.get("eta_min")) || null,
+        eta_max_days: Number(f.get("eta_max")) || null,
+        volumetric_divisor: Number(f.get("divisor")) || 6000,
+        maximum_weight_kg: Number(f.get("max_weight")) || null,
+        maximum_volume_cbm: Number(f.get("max_cbm")) || null,
+        currency_code: "USD",
+        priority: 100,
+        public_visible: f.get("public") === "on",
+        quote_only: f.get("quote_only") === "on",
+        minimum_weight_kg: Number(f.get("min_weight")) || null,
+        cutoff_hours: Number(f.get("cutoff")) || null,
+        sla_target_percent: Number(f.get("sla")) || 90,
+        maximum_dimensions_cm: {},
+        workflow: [
+          "REQUESTED",
+          "ACCEPTED",
+          "IN_PROGRESS",
+          "COMPLETED",
+          "CANCELLED",
+        ],
+        metadata: {},
+      });
+      await done();
+    } catch {
+      setError(
+        "Le service n’a pas été créé. Vérifiez son nom, son code et ses conditions.",
+      );
+      setBusy(false);
+    }
   }
   return (
-    <form onSubmit={submit} className="grid gap-4 p-5">
+    <form onSubmit={submit} className="grid gap-4">
       <Field
         label="Nom visible par les clients"
         hint="Exemple : Air Cargo Standard"
@@ -562,7 +590,16 @@ function Create({ done }: { done: () => Promise<void> }) {
         <input name="public" type="checkbox" /> Ce service peut être présenté
         aux clients
       </label>
-      <button className={primary}>Créer le service</button>
+      {error && (
+        <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end border-t border-[#eceef1] pt-4">
+        <button disabled={busy} className={primary}>
+          {busy ? "Création…" : "Créer le service"}
+        </button>
+      </div>
     </form>
   );
 }
@@ -1101,12 +1138,28 @@ function Info({ l, v }: { l: string; v: unknown }) {
     </p>
   );
 }
-function Metric({ label, value }: { label: string; value: unknown }) {
+function Metric({
+  label,
+  value,
+  divided,
+  onClick,
+}: {
+  label: string;
+  value: unknown;
+  divided: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="min-h-[78px] border-r p-4">
-      <small className="text-[#68717a]">{label}</small>
-      <b className="mt-2 block text-xl">{String(value)}</b>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-1 text-left ${divided ? "border-l border-[#eceef1]" : ""}`}
+    >
+      <span className="text-[12px] text-[#6b7580]">{label}</span>
+      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+        {String(value)}
+      </b>
+    </button>
   );
 }
 function Badge({ value }: { value: string }) {

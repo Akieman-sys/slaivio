@@ -197,61 +197,68 @@ export function BroadcastsPage() {
         </select>
       </div>
       {error && <p className="m-4 bg-red-50 p-3 text-red-700">{error}</p>}
-      <table className="w-full bg-white text-left text-[12px]">
-        <thead>
-          <tr>
-            {[
-              "Campagne",
-              "Canaux",
-              "Audience",
-              "Statut",
-              "Programmation",
-              "Performance",
-              "",
-            ].map((x) => (
-              <th className="border-b p-3" key={x}>
-                {x}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((x) => (
-            <tr
-              onClick={() => open(x)}
-              className="cursor-pointer border-b hover:bg-[#fafafa]"
-              key={x.id}
-            >
-              <td className="p-3">
-                <b>{x.title}</b>
-                <small className="block">{x.reference}</small>
-              </td>
-              <td>
-                {x.channels
-                  ?.map((channel) => channelLabels[channel] || channel)
-                  .join(" + ")}
-              </td>
-              <td>{x.recipients || 0}</td>
-              <td>
-                <span className="rounded-full bg-[#eef2f1] px-2 py-1 text-[11px] font-medium">
-                  {campaignStatusLabels[x.status] || x.status}
-                </span>
-              </td>
-              <td>
-                {x.scheduled_at
-                  ? new Date(x.scheduled_at).toLocaleString("fr-FR")
-                  : "—"}
-              </td>
-              <td>
-                {x.reads || 0} lus · {x.replies || 0} réponses
-              </td>
-              <td className="pr-4 text-right text-[#7b848d]">
-                <ChevronRight size={17} />
-              </td>
+      <div className="min-h-[460px] overflow-x-auto bg-white">
+        <table className="w-full min-w-[980px] border-collapse bg-white text-left text-[13px]">
+          <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+            <tr className="border-b border-[#e6e9ee]">
+              {[
+                "Campagne",
+                "Canaux",
+                "Audience",
+                "Statut",
+                "Programmation",
+                "Performance",
+                "",
+              ].map((x) => (
+                <th className="px-4 py-3 font-medium" key={x}>
+                  {x}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.map((x) => (
+              <tr
+                onClick={() => open(x)}
+                className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
+                key={x.id}
+              >
+                <td className="px-4 py-3">
+                  <b>{x.title}</b>
+                  <small className="block">{x.reference}</small>
+                </td>
+                <td>
+                  {x.channels
+                    ?.map((channel) => channelLabels[channel] || channel)
+                    .join(" + ")}
+                </td>
+                <td>{x.recipients || 0}</td>
+                <td>
+                  <span className="rounded-full bg-[#eef2f1] px-2 py-1 text-[11px] font-medium">
+                    {campaignStatusLabels[x.status] || x.status}
+                  </span>
+                </td>
+                <td>
+                  {x.scheduled_at
+                    ? new Date(x.scheduled_at).toLocaleString("fr-FR")
+                    : "—"}
+                </td>
+                <td>
+                  {x.reads || 0} lus · {x.replies || 0} réponses
+                </td>
+                <td className="pr-4 text-right text-[#7b848d]">
+                  <ChevronRight size={17} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!items.length && (
+          <div className="flex h-[360px] items-center justify-center text-[13px] text-[#64748b]">
+            Aucune campagne dans cette vue.
+          </div>
+        )}
+      </div>
       {selected && (
         <OperationDrawer
           open

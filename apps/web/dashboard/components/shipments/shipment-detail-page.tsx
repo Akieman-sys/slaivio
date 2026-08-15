@@ -103,12 +103,14 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
     setLoading(true);
     setError("");
     try {
-      const [detail, packageList] = await Promise.all([
-        getShipment(shipmentId),
-        listPackages({ page_size: 100, sort: "updated_desc" }),
-      ]);
+      const detail = await getShipment(shipmentId);
       setShipment(detail);
-      setAvailablePackages(packageList.items);
+      // La fiche reste accessible si le sélecteur secondaire de colis échoue.
+      const packageList = await listPackages({
+        page_size: 100,
+        sort: "updated_desc",
+      }).catch(() => null);
+      setAvailablePackages(packageList?.items || []);
     } catch (err) {
       setError(axios.isAxiosError(err) ? String(err.response?.data?.detail || `Erreur API (${err.response?.status || "réseau"})`) : "Impossible de charger cette expédition.");
     } finally {

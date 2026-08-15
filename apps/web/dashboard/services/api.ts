@@ -2,7 +2,10 @@ import axios from "axios";
 
 type TokenOptions = { skipCache?: boolean };
 type AccessTokenProvider = (options?: TokenOptions) => Promise<string | null>;
-type RetriableRequest = { _slaivioAuthRetried?: boolean };
+type RetriableRequest = {
+  _slaivioAuthRetried?: boolean;
+  _slaivioNetworkRetries?: number;
+};
 let accessTokenProvider: AccessTokenProvider | null = null;
 export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
 export const API_MUTATION_FAILED_EVENT = "slaivio:api-mutation-failed";
@@ -55,6 +58,18 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
+    if (axios.isAxiosError(error) && !error.response && error.config) {
+      const config = error.config as typeof error.config & RetriableRequest;
+      const method = String(config.method || "get").toUpperCase();
+      const retries = config._slaivioNetworkRetries || 0;
+      if (["GET", "HEAD", "OPTIONS"].includes(method) && retries < 2) {
+        config._slaivioNetworkRetries = retries + 1;
+        await new Promise((resolve) =>
+          setTimeout(resolve, retries === 0 ? 500 : 1200),
+        );
+        return api.request(config);
+      }
+    }
     if (
       typeof window !== "undefined" &&
       axios.isAxiosError(error) &&

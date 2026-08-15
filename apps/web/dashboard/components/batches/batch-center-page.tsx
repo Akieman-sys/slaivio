@@ -59,12 +59,17 @@ const checks: Record<string, string> = {
 const n = (v: unknown) =>
   Number(v || 0).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 const errorText = (e: unknown) => {
-  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response
-    ?.data?.detail;
+  const requestError = e as {
+    response?: { data?: { detail?: unknown }; status?: number };
+  };
+  const detail = requestError?.response?.data?.detail;
   if (typeof detail === "string") return detail;
   if (detail && typeof detail === "object") {
     const code = (detail as { code?: string }).code;
     return code ? `Action impossible : ${code}.` : JSON.stringify(detail);
+  }
+  if (!requestError.response && e instanceof Error) {
+    return "Le serveur n’a pas répondu. Vérifiez que l’API est déployée, puis réessayez.";
   }
   return e instanceof Error ? e.message : "Une erreur est survenue.";
 };

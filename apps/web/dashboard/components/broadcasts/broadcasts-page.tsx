@@ -321,25 +321,36 @@ function CampaignModal({
   close: () => void;
   done: () => void;
 }) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await createCampaign({
-      title: f.get("title"),
-      message: f.get("message"),
-      campaign_type: f.get("type"),
-      objective: f.get("objective"),
-      channels: [f.get("channel")],
-      audience_id: f.get("audience") || null,
-      scheduled_at: f.get("date")
-        ? new Date(String(f.get("date"))).toISOString()
-        : null,
-      timezone_mode: "WORKSPACE",
-      language_versions: {},
-      media: [],
-      variable_defaults: { client_name: "Client" },
-    });
-    done();
+    try {
+      await createCampaign({
+        title: f.get("title"),
+        message: f.get("message"),
+        campaign_type: f.get("type"),
+        objective: f.get("objective"),
+        channels: [f.get("channel")],
+        audience_id: f.get("audience") || null,
+        scheduled_at: f.get("date")
+          ? new Date(String(f.get("date"))).toISOString()
+          : null,
+        timezone_mode: "WORKSPACE",
+        language_versions: {},
+        media: [],
+        variable_defaults: { client_name: "Client" },
+      });
+      done();
+    } catch {
+      setError(
+        "La campagne n’a pas été enregistrée. Vérifiez le groupe de destinataires et les informations obligatoires.",
+      );
+      setBusy(false);
+    }
   }
   return (
     <Modal title="Nouvelle campagne" close={close}>
@@ -412,7 +423,14 @@ function CampaignModal({
           Programmer l’envoi (facultatif)
           <input name="date" type="datetime-local" className={field} />
         </label>
-        <button className={primary}>Créer la campagne</button>
+        {error && (
+          <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">
+            {error}
+          </p>
+        )}
+        <button disabled={busy} className={primary}>
+          {busy ? "Enregistrement…" : "Créer la campagne"}
+        </button>
       </form>
     </Modal>
   );
@@ -424,7 +442,9 @@ function AudienceModal({
   close: () => void;
   done: () => void;
 }) {
-  const [countries, setCountries] = useState<string[]>([]);
+  const [countries, setCountries] = useState<string[]>([]),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   useEffect(() => {
     listClients({ page_size: 500 })
       .then((data) =>
@@ -442,18 +462,27 @@ function AudienceModal({
   }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await saveAudience({
-      name: f.get("name"),
-      audience_type: "DYNAMIC",
-      workspace_id: null,
-      filter_config: {
-        country: f.get("country") || undefined,
-        language: f.get("language") || undefined,
-        status: f.get("status") || undefined,
-      },
-    });
-    done();
+    try {
+      await saveAudience({
+        name: f.get("name"),
+        audience_type: "DYNAMIC",
+        workspace_id: null,
+        filter_config: {
+          country: f.get("country") || undefined,
+          language: f.get("language") || undefined,
+          status: f.get("status") || undefined,
+        },
+      });
+      done();
+    } catch {
+      setError(
+        "Ce groupe n’a pas été enregistré. Vérifiez son nom et les filtres choisis.",
+      );
+      setBusy(false);
+    }
   }
   return (
     <Modal title="Créer un groupe de destinataires" close={close}>
@@ -485,7 +514,14 @@ function AudienceModal({
           <option value="ACTIVE">Clients avec activité</option>
           <option value="LEAD">Nouveaux contacts</option>
         </select>
-        <button className={primary}>Enregistrer</button>
+        {error && (
+          <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">
+            {error}
+          </p>
+        )}
+        <button disabled={busy} className={primary}>
+          {busy ? "Enregistrement…" : "Enregistrer le groupe"}
+        </button>
       </form>
     </Modal>
   );

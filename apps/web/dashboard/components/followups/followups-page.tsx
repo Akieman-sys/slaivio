@@ -422,7 +422,8 @@ function Detail({
   );
 }
 function Create({ close, done }: { close: () => void; done: () => void }) {
-  const [error, setError] = useState("");
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
   const [references, setReferences] = useState<ReferenceCatalog | null>(null);
   const [clientId, setClientId] = useState("");
   useEffect(() => {
@@ -434,6 +435,8 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
   }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
     try {
       await createFollowup({
@@ -455,6 +458,7 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
       setError(
         "Création impossible. Vérifiez le client, la date et les permissions.",
       );
+      setBusy(false);
     }
   }
   return (
@@ -543,7 +547,9 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
           className="min-h-28 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]"
           placeholder="Message au nom de l’agence"
         />
-        <button className={primary}>Programmer</button>
+        <button disabled={busy} className={primary}>
+          {busy ? "Programmation…" : "Programmer la relance"}
+        </button>
         {error && <p className="text-red-600">{error}</p>}
       </form>
     </Modal>
@@ -551,43 +557,65 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
 }
 function Rules({ close }: { close: () => void }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null),
-    [tab, setTab] = useState<"sequence" | "rule">("sequence");
+    [tab, setTab] = useState<"sequence" | "rule">("sequence"),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   useEffect(() => {
     followupRules().then(setData);
   }, []);
   async function submitSequence(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await saveFollowupSequence({
-      name: f.get("name"),
-      followup_type: f.get("type"),
-      exit_conditions: ["CLIENT_RESPONDED", "BUSINESS_CONDITION_RESOLVED"],
-      steps: [
-        {
-          delay_minutes: Number(f.get("delay_days")) * 1440,
-          channel: f.get("channel"),
-          message_template: f.get("message"),
-          condition_config: {},
-          action_type: "SEND",
-        },
-      ],
-    });
-    setData(await followupRules());
+    try {
+      await saveFollowupSequence({
+        name: f.get("name"),
+        followup_type: f.get("type"),
+        exit_conditions: ["CLIENT_RESPONDED", "BUSINESS_CONDITION_RESOLVED"],
+        steps: [
+          {
+            delay_minutes: Number(f.get("delay_days")) * 1440,
+            channel: f.get("channel"),
+            message_template: f.get("message"),
+            condition_config: {},
+            action_type: "SEND",
+          },
+        ],
+      });
+      setData(await followupRules());
+    } catch {
+      setError(
+        "La séquence n’a pas été enregistrée. Vérifiez le délai, le canal et le message.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   async function submitRule(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
+    setError("");
     const f = new FormData(e.currentTarget);
-    await saveFollowupRule({
-      name: f.get("name"),
-      followup_type: f.get("type"),
-      trigger_type: f.get("trigger"),
-      trigger_config: { delay_minutes: Number(f.get("delay_days")) * 1440 },
-      condition_config: {},
-      sequence_id: f.get("sequence") || null,
-      priority: f.get("priority"),
-      responsible_team: f.get("team") || null,
-    });
-    setData(await followupRules());
+    try {
+      await saveFollowupRule({
+        name: f.get("name"),
+        followup_type: f.get("type"),
+        trigger_type: f.get("trigger"),
+        trigger_config: { delay_minutes: Number(f.get("delay_days")) * 1440 },
+        condition_config: {},
+        sequence_id: f.get("sequence") || null,
+        priority: f.get("priority"),
+        responsible_team: f.get("team") || null,
+      });
+      setData(await followupRules());
+    } catch {
+      setError(
+        "La règle n’a pas été enregistrée. Vérifiez la situation et la séquence choisies.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Modal title="Règles & séquences" close={close}>
@@ -641,7 +669,9 @@ function Rules({ close }: { close: () => void }) {
             className="min-h-24 rounded-md border border-[#d2d7dc] bg-white p-3 text-[13px] outline-none focus:border-[#16855f]"
             placeholder="Écrivez le message au nom de l’agence. Le prénom sera ajouté automatiquement."
           />
-          <button className={primary}>Enregistrer la séquence</button>
+          <button disabled={busy} className={primary}>
+            {busy ? "Enregistrement…" : "Enregistrer la séquence"}
+          </button>
         </form>
       ) : (
         <form onSubmit={submitRule} className="grid gap-2">
@@ -695,8 +725,15 @@ function Rules({ close }: { close: () => void }) {
             className={input}
             placeholder="Équipe responsable"
           />
-          <button className={primary}>Enregistrer la règle</button>
+          <button disabled={busy} className={primary}>
+            {busy ? "Enregistrement…" : "Enregistrer la règle"}
+          </button>
         </form>
+      )}
+      {error && (
+        <p className="mt-3 rounded-md bg-red-50 p-3 text-[12px] text-red-700">
+          {error}
+        </p>
       )}
       <div className="mt-5 text-[12px] text-[#68717a]">
         {((data?.rules || []) as unknown[]).length} règle(s) ·{" "}

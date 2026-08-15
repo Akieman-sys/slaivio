@@ -2,6 +2,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Calculator,
+  ChevronRight,
   Download,
   Plus,
   RefreshCcw,
@@ -33,7 +34,15 @@ const btn =
     "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] bg-[#16855f] px-4 text-[12px] font-semibold text-white hover:bg-[#126f50]",
   input =
     "h-9 w-full rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] outline-none focus:border-[#16855f]";
-const calculationLabels: Record<string, string> = { PER_KG: "Par kilogramme", PER_CBM: "Par mètre cube (CBM)", PER_PACKAGE: "Par colis", PER_UNIT: "Par unité", PERCENT_VALUE: "Pourcentage de la valeur déclarée", FIXED: "Montant fixe", TIERED: "Selon des paliers" };
+const calculationLabels: Record<string, string> = {
+  PER_KG: "Par kilogramme",
+  PER_CBM: "Par mètre cube (CBM)",
+  PER_PACKAGE: "Par colis",
+  PER_UNIT: "Par unité",
+  PERCENT_VALUE: "Pourcentage de la valeur déclarée",
+  FIXED: "Montant fixe",
+  TIERED: "Selon des paliers",
+};
 type View =
   | "OVERVIEW"
   | "GRIDS"
@@ -137,17 +146,6 @@ export function PricingEnginePage() {
                 ["GRIDS", "Grilles"],
                 ["ROUTES", "Par route"],
                 ["SERVICES", "Par service"],
-                ["CATEGORIES", "Catégories"],
-                ["TIERS", "Paliers"],
-                ["FEES", "Frais"],
-                ["DISCOUNTS", "Remises"],
-                ["PROMOTIONS", "Promotions"],
-                ["CLIENTS", "Tarifs clients"],
-                ["COSTS", "Coûts & marges"],
-                ["SIMULATOR", "Simulateur"],
-                ["HISTORY", "Historique"],
-                ["ANALYTICS", "Analytics"],
-                ["SETTINGS", "Paramètres"],
               ] as const
             ).map(([k, l]) => (
               <button
@@ -158,11 +156,64 @@ export function PricingEnginePage() {
                 {l}
               </button>
             ))}
+            <select
+              aria-label="Autres vues Tarification"
+              value={
+                [
+                  "CATEGORIES",
+                  "TIERS",
+                  "FEES",
+                  "DISCOUNTS",
+                  "PROMOTIONS",
+                  "CLIENTS",
+                  "COSTS",
+                  "SIMULATOR",
+                  "HISTORY",
+                  "ANALYTICS",
+                  "SETTINGS",
+                ].includes(view)
+                  ? view
+                  : ""
+              }
+              onChange={(event) =>
+                event.target.value && setView(event.target.value as View)
+              }
+              className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+                [
+                  "CATEGORIES",
+                  "TIERS",
+                  "FEES",
+                  "DISCOUNTS",
+                  "PROMOTIONS",
+                  "CLIENTS",
+                  "COSTS",
+                  "SIMULATOR",
+                  "HISTORY",
+                  "ANALYTICS",
+                  "SETTINGS",
+                ].includes(view)
+                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
+                  : "border-[#d6dadd] bg-white text-[#69717a]"
+              }`}
+            >
+              <option value="">Plus</option>
+              <option value="CATEGORIES">Catégories</option>
+              <option value="TIERS">Paliers</option>
+              <option value="FEES">Frais</option>
+              <option value="DISCOUNTS">Remises</option>
+              <option value="PROMOTIONS">Promotions</option>
+              <option value="CLIENTS">Tarifs clients</option>
+              <option value="COSTS">Coûts et marges</option>
+              <option value="SIMULATOR">Simulateur</option>
+              <option value="HISTORY">Historique</option>
+              <option value="ANALYTICS">Analytics</option>
+              <option value="SETTINGS">Paramètres</option>
+            </select>
           </>
         }
       />
       <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {cards.map(([l, v]) => (
+        {cards.slice(0, 4).map(([l, v]) => (
           <Metric key={String(l)} label={String(l)} value={v} />
         ))}
       </section>
@@ -180,7 +231,7 @@ export function PricingEnginePage() {
       ) : (
         <>
           <div className="flex gap-2 border-b bg-white p-4">
-            <label className="flex h-9 flex-1 items-center rounded-[5px] border px-3">
+            <label className="flex h-9 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
               <Search size={14} />
               <input
                 className="ml-2 flex-1 outline-none"
@@ -257,6 +308,7 @@ function GridTable({
               "Validité",
               "Version",
               "Statut",
+              "",
             ].map((x) => (
               <th key={x} className="p-3 font-medium text-[#5d6670]">
                 {x}
@@ -297,6 +349,9 @@ function GridTable({
               <td>v{g.version}</td>
               <td>
                 <Badge value={g.status} />
+              </td>
+              <td className="w-10 pr-4 text-right text-[#8a929a]">
+                <ChevronRight className="ml-auto" size={16} />
               </td>
             </tr>
           ))}
@@ -382,7 +437,9 @@ function CreateGrid({
       <div className="grid grid-cols-2 gap-3">
         <select name="method" className={input}>
           {Object.entries(calculationLabels).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
         <input
@@ -859,7 +916,14 @@ function Metric({ label, value }: { label: string; value: unknown }) {
   );
 }
 function Badge({ value }: { value: string }) {
-  const labels: Record<string, string> = { DRAFT: "Brouillon", SCHEDULED: "Programmée", ACTIVE: "Active", EXPIRED: "Expirée", SUSPENDED: "Suspendue", ARCHIVED: "Archivée" };
+  const labels: Record<string, string> = {
+    DRAFT: "Brouillon",
+    SCHEDULED: "Programmée",
+    ACTIVE: "Active",
+    EXPIRED: "Expirée",
+    SUSPENDED: "Suspendue",
+    ARCHIVED: "Archivée",
+  };
   return (
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : value === "SUSPENDED" || value === "EXPIRED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}

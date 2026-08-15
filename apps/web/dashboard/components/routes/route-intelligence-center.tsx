@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ChevronRight,
   Copy,
   Download,
   Plus,
@@ -139,12 +140,6 @@ export function RouteIntelligenceCenter() {
                 ["ACTIVE", "Actives"],
                 ["AIR", "Air Cargo"],
                 ["SEA", "Sea Cargo"],
-                ["EXPRESS", "Express"],
-                ["LIMITED", "Capacité limitée"],
-                ["SUSPENDED", "Suspendues"],
-                ["INACTIVE", "Inactives"],
-                ["ARCHIVED", "Archivées"],
-                ["ANALYTICS", "Analytics"],
               ] as const
             ).map(([k, l]) => (
               <button
@@ -155,11 +150,52 @@ export function RouteIntelligenceCenter() {
                 {l}
               </button>
             ))}
+            <select
+              aria-label="Autres vues Routes"
+              value={
+                [
+                  "EXPRESS",
+                  "LIMITED",
+                  "SUSPENDED",
+                  "INACTIVE",
+                  "ARCHIVED",
+                  "ANALYTICS",
+                  "ENGINE",
+                ].includes(view)
+                  ? view
+                  : ""
+              }
+              onChange={(event) =>
+                event.target.value && setView(event.target.value as View)
+              }
+              className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+                [
+                  "EXPRESS",
+                  "LIMITED",
+                  "SUSPENDED",
+                  "INACTIVE",
+                  "ARCHIVED",
+                  "ANALYTICS",
+                  "ENGINE",
+                ].includes(view)
+                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
+                  : "border-[#d6dadd] bg-white text-[#69717a]"
+              }`}
+            >
+              <option value="">Plus</option>
+              <option value="EXPRESS">Express</option>
+              <option value="LIMITED">Capacité limitée</option>
+              <option value="SUSPENDED">Suspendues</option>
+              <option value="INACTIVE">Inactives</option>
+              <option value="ARCHIVED">Archivées</option>
+              <option value="ANALYTICS">Analytics</option>
+              <option value="ENGINE">Trouver une route</option>
+            </select>
           </>
         }
       />
       <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {cards.map(([l, v]) => (
+        {cards.slice(0, 4).map(([l, v]) => (
           <Metric key={String(l)} label={String(l)} value={v} />
         ))}
       </section>
@@ -170,7 +206,7 @@ export function RouteIntelligenceCenter() {
       ) : (
         <>
           <div className="flex flex-wrap gap-2 border-b bg-white p-4">
-            <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-[5px] border px-3">
+            <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
               <Search size={14} />
               <input
                 className="ml-2 flex-1 outline-none"
@@ -259,6 +295,7 @@ function RouteTable({
               "On-time",
               "Marge",
               "Statut",
+              "",
             ].map((h) => (
               <th key={h} className="p-3 font-medium text-[#5d6670]">
                 {h}
@@ -315,6 +352,9 @@ function RouteTable({
               <td>{r.margin_percent ?? "—"}%</td>
               <td>
                 <Badge value={r.status} />
+              </td>
+              <td className="w-10 pr-4 text-right text-[#8a929a]">
+                <ChevronRight className="ml-auto" size={16} />
               </td>
             </tr>
           ))}
@@ -879,7 +919,15 @@ function Metric({ label, value }: { label: string; value: unknown }) {
   );
 }
 function Badge({ value }: { value: string }) {
-  const labels: Record<string, string> = { DRAFT: "Brouillon", ACTIVE: "Active", LIMITED: "Capacité limitée", SUSPENDED: "Suspendue", MAINTENANCE: "Maintenance", INACTIVE: "Inactive", ARCHIVED: "Archivée" };
+  const labels: Record<string, string> = {
+    DRAFT: "Brouillon",
+    ACTIVE: "Active",
+    LIMITED: "Capacité limitée",
+    SUSPENDED: "Suspendue",
+    MAINTENANCE: "Maintenance",
+    INACTIVE: "Inactive",
+    ARCHIVED: "Archivée",
+  };
   return (
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : value === "SUSPENDED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}

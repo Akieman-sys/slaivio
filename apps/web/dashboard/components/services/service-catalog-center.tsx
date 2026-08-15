@@ -2,6 +2,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ChevronRight,
   Copy,
   Download,
   Plus,
@@ -182,14 +183,6 @@ export function ServiceCatalogCenter() {
                 ["TRANSPORT", "Transport"],
                 ["COMPLEMENTARY", "Complémentaires"],
                 ["ACTIVE", "Actifs"],
-                ["LIMITED", "Capacité limitée"],
-                ["SUSPENDED", "Suspendus"],
-                ["ARCHIVED", "Archivés"],
-                ["BUNDLES", "Bundles"],
-                ["COMPARE", "Comparateur"],
-                ["RECOMMEND", "Recommandation"],
-                ["ANALYTICS", "Analytics"],
-                ["SETTINGS", "Paramètres"],
               ] as const
             ).map(([k, l]) => (
               <button
@@ -200,11 +193,55 @@ export function ServiceCatalogCenter() {
                 {l}
               </button>
             ))}
+            <select
+              aria-label="Autres vues Services"
+              value={
+                [
+                  "LIMITED",
+                  "SUSPENDED",
+                  "ARCHIVED",
+                  "BUNDLES",
+                  "COMPARE",
+                  "RECOMMEND",
+                  "ANALYTICS",
+                  "SETTINGS",
+                ].includes(view)
+                  ? view
+                  : ""
+              }
+              onChange={(event) =>
+                event.target.value && setView(event.target.value as View)
+              }
+              className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+                [
+                  "LIMITED",
+                  "SUSPENDED",
+                  "ARCHIVED",
+                  "BUNDLES",
+                  "COMPARE",
+                  "RECOMMEND",
+                  "ANALYTICS",
+                  "SETTINGS",
+                ].includes(view)
+                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
+                  : "border-[#d6dadd] bg-white text-[#69717a]"
+              }`}
+            >
+              <option value="">Plus</option>
+              <option value="LIMITED">Capacité limitée</option>
+              <option value="SUSPENDED">Suspendus</option>
+              <option value="ARCHIVED">Archivés</option>
+              <option value="BUNDLES">Bundles</option>
+              <option value="COMPARE">Comparateur</option>
+              <option value="RECOMMEND">Recommandation</option>
+              <option value="ANALYTICS">Analytics</option>
+              <option value="SETTINGS">Paramètres</option>
+            </select>
           </>
         }
       />
       <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {cards.map(([l, v]) => (
+        {cards.slice(0, 4).map(([l, v]) => (
           <Metric key={String(l)} label={String(l)} value={v} />
         ))}
       </section>
@@ -224,7 +261,7 @@ export function ServiceCatalogCenter() {
       ) : (
         <>
           <div className="flex gap-2 border-b bg-white p-4">
-            <label className="flex h-9 flex-1 items-center rounded-[5px] border px-3">
+            <label className="flex h-9 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
               <Search size={14} />
               <input
                 className="ml-2 flex-1 outline-none"
@@ -303,6 +340,7 @@ function Table({
               "SLA",
               "Responsable",
               "Statut",
+              "",
             ].map((x) => (
               <th key={x} className="p-3 font-medium text-[#5d6670]">
                 {x}
@@ -347,6 +385,9 @@ function Table({
               <td>{s.owner_name || "Non assigné"}</td>
               <td>
                 <Badge value={s.status} />
+              </td>
+              <td className="w-10 pr-4 text-right text-[#8a929a]">
+                <ChevronRight className="ml-auto" size={16} />
               </td>
             </tr>
           ))}
@@ -1069,7 +1110,14 @@ function Metric({ label, value }: { label: string; value: unknown }) {
   );
 }
 function Badge({ value }: { value: string }) {
-  const labels: Record<string, string> = { DRAFT: "Brouillon", ACTIVE: "Actif", LIMITED: "Capacité limitée", SUSPENDED: "Suspendu", INACTIVE: "Inactif", ARCHIVED: "Archivé" };
+  const labels: Record<string, string> = {
+    DRAFT: "Brouillon",
+    ACTIVE: "Actif",
+    LIMITED: "Capacité limitée",
+    SUSPENDED: "Suspendu",
+    INACTIVE: "Inactif",
+    ARCHIVED: "Archivé",
+  };
   return (
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : value === "SUSPENDED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}

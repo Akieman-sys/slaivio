@@ -56,6 +56,7 @@ export function BroadcastsPage() {
     [q, setQ] = useState(""),
     [selected, setSelected] = useState<Campaign | null>(null),
     [modal, setModal] = useState<"campaign" | "audience" | null>(null),
+    [allMetrics, setAllMetrics] = useState(false),
     [resources, setResources] = useState<Record<string, unknown>>({}),
     [error, setError] = useState("");
   const load = useCallback(
@@ -159,17 +160,29 @@ export function BroadcastsPage() {
         }
       />
       <section className="bg-white px-5 py-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
-          {cards.map(([l, v]) => (
-            <div
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
+            <button
+              type="button"
+              onClick={() => setAllMetrics((current) => !current)}
               key={l}
-              className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
+              className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
             >
-              <small>{l}</small>
-              <b className="mt-2 block text-xl">{v || 0}</b>
-            </div>
+              <span className="text-[12px] text-[#6b7580]">{l}</span>
+              <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+                {v || 0}
+              </b>
+            </button>
           ))}
         </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
       </section>
       <div className="flex gap-2 border-b bg-white p-4">
         <label className="flex h-9 flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">

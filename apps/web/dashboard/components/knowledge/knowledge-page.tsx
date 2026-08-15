@@ -191,6 +191,7 @@ export function KnowledgePage() {
     [selected, setSelected] = useState<KnowledgeEntry | null>(null),
     [createOpen, setCreateOpen] = useState(false),
     [importOpen, setImportOpen] = useState(false),
+    [allMetrics, setAllMetrics] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -324,11 +325,19 @@ export function KnowledgePage() {
         }
       />
       <section className="bg-white px-5 py-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4">
-          {cards.slice(0, 4).map(([l, v]) => (
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-7" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 7 : 4).map(([l, v]) => (
             <Metric key={String(l)} label={String(l)} value={v} />
           ))}
         </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
       </section>
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -1373,7 +1382,10 @@ function EditKnowledge({
     }
   }
   return (
-    <form onSubmit={submit} className="grid gap-3 border p-4 md:grid-cols-2">
+    <form
+      onSubmit={submit}
+      className="grid gap-4 rounded-md border border-[#e4e7ea] bg-white p-4 md:grid-cols-2"
+    >
       <h3 className="md:col-span-2 text-[14px] font-semibold">
         Modifier {item.reference}
       </h3>
@@ -1617,7 +1629,7 @@ export function KnowledgeSettingsConsole() {
             à l’agence.
           </p>
         </header>
-        <form onSubmit={submit} className="grid gap-3 p-4 md:grid-cols-2">
+        <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
           <label>
             Langue par défaut
             <select

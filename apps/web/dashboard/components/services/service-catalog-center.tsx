@@ -9,7 +9,6 @@ import {
   RefreshCcw,
   Search,
   Sparkles,
-  X,
 } from "lucide-react";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -616,147 +615,133 @@ function DetailDrawer({
 }) {
   const [tab, setTab] = useState("overview");
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        className="ml-auto h-full w-full max-w-[920px] overflow-y-auto bg-[#f7f7f6]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="border-b bg-white p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>{item.service_code}</small>
-              <h2 className="text-xl font-semibold">{item.service_name}</h2>
-              <p className="text-[12px]">
-                {item.category} · {item.shipping_mode} · {item.eta_min_days}–
-                {item.eta_max_days} jours
-              </p>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Badge value={item.status} />
-            <PermissionGuard permission="services.suspend">
-              <button
-                className={btn}
-                onClick={async () => {
-                  await transitionService(
-                    item.id,
-                    item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
-                    "Décision opérationnelle",
-                  );
-                  await changed();
-                }}
-              >
-                {item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}
-              </button>
-            </PermissionGuard>
-            <PermissionGuard permission="services.create">
-              <button
-                className={btn}
-                onClick={async () => {
-                  await duplicateService(item.id);
-                  await changed();
-                }}
-              >
-                <Copy size={13} />
-                Dupliquer
-              </button>
-            </PermissionGuard>
-          </div>
-          <nav className="mt-4 flex overflow-x-auto border-b">
-            {[
-              "overview",
-              "routes",
-              "pricing",
-              "conditions",
-              "options",
-              "documents",
-              "performance",
-              "departures",
-              "timeline",
-              "audit",
-            ].map((x) => (
-              <button
-                key={x}
-                className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
-                onClick={() => setTab(x)}
-              >
-                {x}
-              </button>
-            ))}
-          </nav>
-        </header>
-        <main className="p-5">
-          {tab === "overview" ? (
-            <Overview item={item} />
-          ) : tab === "routes" ? (
-            <Section
-              title="Routes liées"
-              rows={item.routes}
-              action={
-                <AddRoute id={item.id} catalog={catalog} changed={changed} />
+    <OperationDrawer
+      open
+      title={item.service_name}
+      description={`${item.service_code} · ${item.category} · ${item.shipping_mode} · ${item.eta_min_days}–${item.eta_max_days} jours`}
+      close={close}
+      width="max-w-[920px]"
+    >
+      <div className="mt-3 flex gap-2">
+        <Badge value={item.status} />
+        <PermissionGuard permission="services.suspend">
+          <button
+            className={btn}
+            onClick={async () => {
+              await transitionService(
+                item.id,
+                item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
+                "Décision opérationnelle",
+              );
+              await changed();
+            }}
+          >
+            {item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}
+          </button>
+        </PermissionGuard>
+        <PermissionGuard permission="services.create">
+          <button
+            className={btn}
+            onClick={async () => {
+              await duplicateService(item.id);
+              await changed();
+            }}
+          >
+            <Copy size={13} />
+            Dupliquer
+          </button>
+        </PermissionGuard>
+      </div>
+      <nav className="mt-4 flex overflow-x-auto border-y border-[#eceef1]">
+        {[
+          "overview",
+          "routes",
+          "pricing",
+          "conditions",
+          "options",
+          "documents",
+          "performance",
+          "departures",
+          "timeline",
+          "audit",
+        ].map((x) => (
+          <button
+            key={x}
+            className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
+            onClick={() => setTab(x)}
+          >
+            {x}
+          </button>
+        ))}
+      </nav>
+      <main className="pt-5">
+        {tab === "overview" ? (
+          <Overview item={item} />
+        ) : tab === "routes" ? (
+          <Section
+            title="Routes liées"
+            rows={item.routes}
+            action={
+              <AddRoute id={item.id} catalog={catalog} changed={changed} />
+            }
+          />
+        ) : tab === "pricing" ? (
+          <Section
+            title="Grilles tarifaires — source Tarification"
+            rows={item.pricing}
+            action={
+              <Link className={btn} href="/app/pricing">
+                Ouvrir Tarification
+              </Link>
+            }
+          />
+        ) : tab === "conditions" ? (
+          <Section
+            title="Marchandises et restrictions"
+            rows={item.conditions}
+            action={<AddCondition id={item.id} changed={changed} />}
+          />
+        ) : tab === "options" ? (
+          <Section
+            title="Options et add-ons"
+            rows={item.options}
+            action={<AddOption id={item.id} changed={changed} />}
+          />
+        ) : tab === "documents" ? (
+          <Section
+            title="Documents requis"
+            rows={item.documents}
+            action={<AddDocument id={item.id} changed={changed} />}
+          />
+        ) : tab === "departures" ? (
+          <Section title="Calendrier lié" rows={item.departures} />
+        ) : tab === "timeline" || tab === "audit" ? (
+          <Section title="Historique audité" rows={item.audit} />
+        ) : (
+          <Performance item={item} />
+        )}
+        <PermissionGuard permission="services.update">
+          <button
+            className={`${btn} mt-4`}
+            onClick={async () => {
+              const eta = prompt(
+                "Nouveau délai maximum",
+                String(item.eta_max_days || ""),
+              );
+              if (eta) {
+                await updateService(item.id, {
+                  eta_max_days: Number(eta),
+                  change_reason: "Révision du délai annoncé",
+                });
+                await changed();
               }
-            />
-          ) : tab === "pricing" ? (
-            <Section
-              title="Grilles tarifaires — source Tarification"
-              rows={item.pricing}
-              action={
-                <Link className={btn} href="/app/pricing">
-                  Ouvrir Tarification
-                </Link>
-              }
-            />
-          ) : tab === "conditions" ? (
-            <Section
-              title="Marchandises et restrictions"
-              rows={item.conditions}
-              action={<AddCondition id={item.id} changed={changed} />}
-            />
-          ) : tab === "options" ? (
-            <Section
-              title="Options et add-ons"
-              rows={item.options}
-              action={<AddOption id={item.id} changed={changed} />}
-            />
-          ) : tab === "documents" ? (
-            <Section
-              title="Documents requis"
-              rows={item.documents}
-              action={<AddDocument id={item.id} changed={changed} />}
-            />
-          ) : tab === "departures" ? (
-            <Section title="Calendrier lié" rows={item.departures} />
-          ) : tab === "timeline" || tab === "audit" ? (
-            <Section title="Historique audité" rows={item.audit} />
-          ) : (
-            <Performance item={item} />
-          )}
-          <PermissionGuard permission="services.update">
-            <button
-              className={`${btn} mt-4`}
-              onClick={async () => {
-                const eta = prompt(
-                  "Nouveau délai maximum",
-                  String(item.eta_max_days || ""),
-                );
-                if (eta) {
-                  await updateService(item.id, {
-                    eta_max_days: Number(eta),
-                    change_reason: "Révision du délai annoncé",
-                  });
-                  await changed();
-                }
-              }}
-            >
-              Modifier le délai
-            </button>
-          </PermissionGuard>
-        </main>
-      </aside>
-    </div>
+            }}
+          >
+            Modifier le délai
+          </button>
+        </PermissionGuard>
+      </main>
+    </OperationDrawer>
   );
 }
 function Overview({ item }: { item: Detail }) {
@@ -1124,7 +1109,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-white p-4">
+    <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
       <h3 className="mb-3 text-[13px] font-semibold">{title}</h3>
       {children}
     </section>

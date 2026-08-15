@@ -70,6 +70,7 @@ export function FollowupsPage() {
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [create, setCreate] = useState(false),
+    [allMetrics, setAllMetrics] = useState(false),
     [rules, setRules] = useState(false);
   const current = views.find((x) => x[0] === view) || views[0];
   const load = useCallback(async () => {
@@ -192,17 +193,29 @@ export function FollowupsPage() {
         }
       />
       <section className="bg-white px-5 py-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          {cards.map(([l, v]) => (
-            <div
-              className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
+            <button
+              type="button"
+              onClick={() => setAllMetrics((current) => !current)}
+              className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
               key={l}
             >
-              <small className="text-[#69717a]">{l}</small>
-              <b className="mt-2 block text-xl">{v}</b>
-            </div>
+              <span className="text-[12px] text-[#6b7580]">{l}</span>
+              <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+                {v}
+              </b>
+            </button>
           ))}
         </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
       </section>
       <div className="flex gap-2 border-b bg-white p-4">
         <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
@@ -356,7 +369,7 @@ function Detail({
       <div className="mb-4">
         <Badge value={item.status} />
       </div>
-      <div className="grid gap-4 p-5">
+      <div className="grid gap-4">
         <section className="grid grid-cols-2 gap-3">
           {[
             ["Motif", item.reason],
@@ -371,17 +384,20 @@ function Detail({
                 : "—",
             ],
           ].map(([l, v]) => (
-            <div className="border p-3" key={l}>
+            <div
+              className="rounded-md border border-[#e4e7ea] bg-[#fbfcfd] p-3"
+              key={l}
+            >
               <small>{l}</small>
               <b className="mt-1 block">{v || "—"}</b>
             </div>
           ))}
         </section>
-        <section className="border p-4">
+        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Message</h3>
           <p className="mt-2 whitespace-pre-wrap text-[13px]">{item.message}</p>
         </section>
-        <section className="border p-4">
+        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Tentatives & réponses</h3>
           {[...(item.attempts || []), ...(item.responses || [])].map((x, i) => (
             <p key={i} className="mt-2 border-t pt-2 text-[12px]">
@@ -390,7 +406,7 @@ function Detail({
             </p>
           ))}
         </section>
-        <section className="border p-4">
+        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Timeline & audit</h3>
           {item.events?.map((x, i) => (
             <p key={i} className="mt-2 border-t pt-2 text-[12px]">

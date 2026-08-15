@@ -9,7 +9,6 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
-  X,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -396,74 +395,61 @@ function RouteDetail({
 }) {
   const [tab, setTab] = useState("overview");
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        className="ml-auto h-full w-full max-w-[920px] overflow-y-auto bg-[#f7f7f6]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="border-b bg-white p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>{item.route_code}</small>
-              <h2 className="text-xl font-semibold">
-                {item.origin_city || item.origin_country} →{" "}
-                {item.destination_city || item.destination_country}
-              </h2>
-              <div className="mt-2 flex gap-2">
-                <Badge value={item.status} />
-                <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] text-blue-700">
-                  {item.transport_mode}
-                </span>
-              </div>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <nav className="mt-5 flex overflow-x-auto border-b">
-            {[
-              "overview",
-              "services",
-              "departures",
-              "shipments",
-              "performance",
-              "restrictions",
-              "carriers",
-              "timeline",
-              "audit",
-            ].map((x) => (
-              <button
-                key={x}
-                className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
-                onClick={() => setTab(x)}
-              >
-                {x}
-              </button>
-            ))}
-          </nav>
-        </header>
-        <main className="p-5">
-          {tab === "overview" ? (
-            <Overview item={item} />
-          ) : tab === "restrictions" ? (
-            <Children title="Restrictions" rows={item.restrictions} />
-          ) : tab === "carriers" ? (
-            <Children title="Transporteurs" rows={item.carriers} />
-          ) : tab === "services" ? (
-            <Children title="Services liés" rows={item.services} />
-          ) : tab === "departures" ? (
-            <Children title="Départs liés" rows={item.departures} />
-          ) : tab === "shipments" ? (
-            <Children title="Expéditions liées" rows={item.shipments} />
-          ) : tab === "timeline" || tab === "audit" ? (
-            <Children title="Historique audité" rows={item.events} />
-          ) : (
-            <Performance item={item} />
-          )}
-          <RouteActions item={item} changed={changed} />
-        </main>
-      </aside>
-    </div>
+    <OperationDrawer
+      open
+      title={`${item.origin_city || item.origin_country} → ${item.destination_city || item.destination_country}`}
+      description={item.route_code}
+      close={close}
+      width="max-w-[920px]"
+    >
+      <div className="flex gap-2">
+        <Badge value={item.status} />
+        <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] text-blue-700">
+          {item.transport_mode}
+        </span>
+      </div>
+      <nav className="mt-4 flex overflow-x-auto border-y border-[#eceef1]">
+        {[
+          "overview",
+          "services",
+          "departures",
+          "shipments",
+          "performance",
+          "restrictions",
+          "carriers",
+          "timeline",
+          "audit",
+        ].map((x) => (
+          <button
+            key={x}
+            className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
+            onClick={() => setTab(x)}
+          >
+            {x}
+          </button>
+        ))}
+      </nav>
+      <main className="pt-5">
+        {tab === "overview" ? (
+          <Overview item={item} />
+        ) : tab === "restrictions" ? (
+          <Children title="Restrictions" rows={item.restrictions} />
+        ) : tab === "carriers" ? (
+          <Children title="Transporteurs" rows={item.carriers} />
+        ) : tab === "services" ? (
+          <Children title="Services liés" rows={item.services} />
+        ) : tab === "departures" ? (
+          <Children title="Départs liés" rows={item.departures} />
+        ) : tab === "shipments" ? (
+          <Children title="Expéditions liées" rows={item.shipments} />
+        ) : tab === "timeline" || tab === "audit" ? (
+          <Children title="Historique audité" rows={item.events} />
+        ) : (
+          <Performance item={item} />
+        )}
+        <RouteActions item={item} changed={changed} />
+      </main>
+    </OperationDrawer>
   );
 }
 function Overview({ item }: { item: Detail }) {
@@ -983,7 +969,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border bg-white p-4">
+    <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
       <h3 className="mb-3 text-[13px] font-semibold">{title}</h3>
       {children}
     </section>

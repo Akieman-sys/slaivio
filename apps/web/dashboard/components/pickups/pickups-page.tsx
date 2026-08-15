@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
+  ChevronRight,
   Download,
   HandCoins,
   Plus,
   RefreshCcw,
   Search,
-  X,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   checkInPickup,
   createPickup,
@@ -72,6 +73,7 @@ export function PickupsPage() {
     [createOpen, setCreateOpen] = useState(false),
     [settingsOpen, setSettingsOpen] = useState(false),
     [analyticsOpen, setAnalyticsOpen] = useState(false),
+    [allMetrics, setAllMetrics] = useState(false),
     [selected, setSelected] = useState<PickupDetail | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
@@ -172,23 +174,41 @@ export function PickupsPage() {
         }
       />
       <main>
-        <div className="grid grid-cols-2 bg-white px-5 py-4 xl:grid-cols-6">
-          {[
-            ["En attente", stats.waiting],
-            ["Au guichet", stats.at_counter],
-            ["Vérifiés", stats.verified],
-            ["Remis aujourd’hui", stats.released_today],
-            ["Non retirés > 7 j", stats.overdue],
-            ["Frais de garde", money(stats.storage_fees_due, "USD")],
-          ].map(([l, v]) => (
-            <div
-              key={l}
-              className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
-            >
-              <p className="text-[12px] text-[#68717d]">{l}</p>
-              <b className="mt-2 block text-[22px]">{v}</b>
-            </div>
-          ))}
+        <div className="bg-white px-5 py-4">
+          <div
+            className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}
+          >
+            {[
+              ["En attente", stats.waiting],
+              ["Au guichet", stats.at_counter],
+              ["Vérifiés", stats.verified],
+              ["Remis aujourd’hui", stats.released_today],
+              ["Non retirés > 7 j", stats.overdue],
+              ["Frais de garde", money(stats.storage_fees_due, "USD")],
+            ]
+              .slice(0, allMetrics ? 6 : 4)
+              .map(([l, v], index) => (
+                <button
+                  type="button"
+                  onClick={() => setAllMetrics((current) => !current)}
+                  key={l}
+                  className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
+                >
+                  <p className="text-[12px] text-[#68717d]">{l}</p>
+                  <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+                    {v}
+                  </b>
+                </button>
+              ))}
+          </div>
+          <button
+            onClick={() => setAllMetrics((current) => !current)}
+            className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          >
+            {allMetrics
+              ? "Réduire les indicateurs"
+              : "Voir tous les indicateurs"}
+          </button>
         </div>
         <section className="overflow-hidden bg-white">
           <div className="flex flex-wrap gap-2 border-b border-[#e5e7e8] p-3">
@@ -262,10 +282,10 @@ function Table({
 }) {
   if (!items.length) return <Empty />;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1050px] text-left text-[13px]">
-        <thead className="bg-[#f7f8f8] text-[#626b76]">
-          <tr>
+    <div className="min-h-[460px] overflow-x-auto">
+      <table className="w-full min-w-[1050px] border-collapse text-left text-[13px]">
+        <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+          <tr className="border-b border-[#e6e9ee]">
             {[
               "Retrait",
               "Client",
@@ -286,7 +306,8 @@ function Table({
           {items.map((p) => (
             <tr
               key={p.id}
-              className="border-t border-[#eceeed] hover:bg-[#fafafa]"
+              onClick={() => open(p.id)}
+              className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
             >
               <td className="p-3 font-semibold">{p.pickup_reference}</td>
               <td>
@@ -313,10 +334,8 @@ function Table({
                 </Badge>
               </td>
               <td>{age(p.ready_at)}</td>
-              <td>
-                <button onClick={() => open(p.id)} className={button}>
-                  Ouvrir
-                </button>
+              <td className="pr-4 text-right text-[#7b848d]">
+                <ChevronRight size={17} />
               </td>
             </tr>
           ))}
@@ -451,120 +470,107 @@ function PickupPanel({
     }
   }
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-950/25"
-      onMouseDown={(e) => {
-        if (e.currentTarget === e.target) close();
-      }}
+    <OperationDrawer
+      open
+      title={item.pickup_reference}
+      description="Retrait en agence"
+      close={close}
     >
-      <aside className="h-full w-full max-w-2xl overflow-y-auto bg-[#f7f7f6] shadow-2xl">
-        <header className="sticky top-0 z-10 border-b bg-white p-5">
-          <div className="flex justify-between">
-            <div>
-              <p className="text-[12px] text-[#68717d]">Retrait</p>
-              <h2 className="text-xl font-semibold">{item.pickup_reference}</h2>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Badge ok={item.status === "RELEASED"}>{labels[item.status]}</Badge>
-            <Badge ok={["PAID", "CLEARED"].includes(item.payment_status)}>
-              {item.payment_status}
-            </Badge>
-            {item.release_blocked_reason && (
-              <Badge>{item.release_blocked_reason}</Badge>
-            )}
-            {item.status === "RELEASED" && (
-              <button onClick={receipt} className={button}>
-                Reçu / PDF
-              </button>
-            )}
-          </div>
-        </header>
-        <div className="space-y-4 p-5">
-          {error && (
-            <p className="bg-red-50 p-3 text-[13px] text-red-700">{error}</p>
-          )}
-          <Section title="Résumé">
-            <Grid
-              rows={[
-                ["Client", item.recipient_name],
-                ["Téléphone", item.recipient_phone],
-                ["Colis", item.packages.length],
-                ["À payer", money(item.required_amount, item.currency)],
-                ["Payé", money(item.paid_amount, item.currency)],
-                ["Frais de garde", money(item.storage_fee, item.currency)],
-              ]}
-            />
-          </Section>
-          <Section title="Colis">
-            <div>
-              {item.packages.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex justify-between border-b py-3 text-[13px]"
-                >
-                  <div>
-                    <b>{p.package_reference}</b>
-                    <p className="text-[#68717d]">
-                      {p.description || p.tracking_id}
-                    </p>
-                  </div>
-                  <span>{p.weight_kg || 0} kg</span>
-                </div>
-              ))}
-            </div>
-          </Section>
-          <Workflow item={item} busy={busy} run={run} />
-          {["CHECKED_IN", "VERIFIED", "RELEASED"].includes(item.status) && (
-            <Section title="Preuves privées">
-              <ProofUpload item={item} busy={busy} run={run} />
-              <p className="mt-3 text-[12px] text-[#68717d]">
-                {item.proofs.length} preuve(s) enregistrée(s).
-              </p>
-            </Section>
-          )}
-          <Section title="Contrôles effectués">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {item.verifications.map((v) => (
-                <div
-                  key={v.id}
-                  className="rounded-[6px] bg-[#f5f6f6] p-3 text-[12px]"
-                >
-                  <b>{v.verification_type}</b>
-                  <p
-                    className={
-                      v.verification_status === "PASSED"
-                        ? "text-emerald-700"
-                        : "text-amber-700"
-                    }
-                  >
-                    {v.verification_status}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Section>
-          <Section title="Historique">
-            <div>
-              {item.events.map((e) => (
-                <div
-                  key={e.id}
-                  className="border-l border-[#cbd2d9] py-2 pl-4 text-[12px]"
-                >
-                  <b>{e.event_type}</b>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Badge ok={item.status === "RELEASED"}>{labels[item.status]}</Badge>
+        <Badge ok={["PAID", "CLEARED"].includes(item.payment_status)}>
+          {item.payment_status}
+        </Badge>
+        {item.release_blocked_reason && (
+          <Badge>{item.release_blocked_reason}</Badge>
+        )}
+        {item.status === "RELEASED" && (
+          <button onClick={receipt} className={button}>
+            Reçu / PDF
+          </button>
+        )}
+      </div>
+      <div className="space-y-4 pt-4">
+        {error && (
+          <p className="bg-red-50 p-3 text-[13px] text-red-700">{error}</p>
+        )}
+        <Section title="Résumé">
+          <Grid
+            rows={[
+              ["Client", item.recipient_name],
+              ["Téléphone", item.recipient_phone],
+              ["Colis", item.packages.length],
+              ["À payer", money(item.required_amount, item.currency)],
+              ["Payé", money(item.paid_amount, item.currency)],
+              ["Frais de garde", money(item.storage_fee, item.currency)],
+            ]}
+          />
+        </Section>
+        <Section title="Colis">
+          <div>
+            {item.packages.map((p) => (
+              <div
+                key={p.id}
+                className="flex justify-between border-b py-3 text-[13px]"
+              >
+                <div>
+                  <b>{p.package_reference}</b>
                   <p className="text-[#68717d]">
-                    {e.actor_name} · {date(e.created_at)}
+                    {p.description || p.tracking_id}
                   </p>
                 </div>
-              ))}
-            </div>
+                <span>{p.weight_kg || 0} kg</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+        <Workflow item={item} busy={busy} run={run} />
+        {["CHECKED_IN", "VERIFIED", "RELEASED"].includes(item.status) && (
+          <Section title="Preuves privées">
+            <ProofUpload item={item} busy={busy} run={run} />
+            <p className="mt-3 text-[12px] text-[#68717d]">
+              {item.proofs.length} preuve(s) enregistrée(s).
+            </p>
           </Section>
-        </div>
-      </aside>
-    </div>
+        )}
+        <Section title="Contrôles effectués">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {item.verifications.map((v) => (
+              <div
+                key={v.id}
+                className="rounded-[6px] bg-[#f5f6f6] p-3 text-[12px]"
+              >
+                <b>{v.verification_type}</b>
+                <p
+                  className={
+                    v.verification_status === "PASSED"
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                  }
+                >
+                  {v.verification_status}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Section>
+        <Section title="Historique">
+          <div>
+            {item.events.map((e) => (
+              <div
+                key={e.id}
+                className="border-l border-[#cbd2d9] py-2 pl-4 text-[12px]"
+              >
+                <b>{e.event_type}</b>
+                <p className="text-[#68717d]">
+                  {e.actor_name} · {date(e.created_at)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </OperationDrawer>
   );
 }
 function ProofUpload({
@@ -1015,24 +1021,14 @@ function Modal({
   wide?: boolean;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"
-      onMouseDown={(e) => {
-        if (e.currentTarget === e.target) close();
-      }}
+    <OperationDrawer
+      open
+      title={title}
+      close={close}
+      width={wide ? "max-w-2xl" : "max-w-lg"}
     >
-      <div
-        className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-[8px] bg-white p-6 shadow-2xl`}
-      >
-        <div className="mb-5 flex justify-between">
-          <h2 className="font-semibold">{title}</h2>
-          <button onClick={close}>
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+      {children}
+    </OperationDrawer>
   );
 }
 function Section({

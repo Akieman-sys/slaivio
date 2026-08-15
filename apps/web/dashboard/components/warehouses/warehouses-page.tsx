@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   createWarehouse,
   exportWarehouseInventory,
@@ -38,6 +39,7 @@ export function WarehousesPage() {
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [createOpen, setCreateOpen] = useState(false);
+  const [allMetrics, setAllMetrics] = useState(false);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -95,7 +97,9 @@ export function WarehousesPage() {
       />
       <main>
         <section className="bg-white px-5 py-4">
-          <div className="grid grid-cols-2 xl:grid-cols-6">
+          <div
+            className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}
+          >
             {[
               ["Entrepôts", stats.warehouses],
               ["Colis stockés", stats.packages],
@@ -103,16 +107,30 @@ export function WarehousesPage() {
               ["Volume", `${num(stats.volume_cbm)} m³`],
               ["Transferts", stats.transfers],
               ["Anomalies", stats.anomalies],
-            ].map(([label, value], i) => (
-              <div
-                key={label}
-                className={`border-l border-[#eceef1] px-4 py-1 first:border-l-0 ${i === 5 && Number(value) > 0 ? "text-amber-700" : ""}`}
-              >
-                <p className="text-[12px] text-[#68717d]">{label}</p>
-                <b className="mt-2 block text-[23px] font-semibold">{value}</b>
-              </div>
-            ))}
+            ]
+              .slice(0, allMetrics ? 6 : 4)
+              .map(([label, value], i) => (
+                <button
+                  type="button"
+                  onClick={() => setAllMetrics((current) => !current)}
+                  key={label}
+                  className={`border-l border-[#eceef1] px-4 py-1 first:border-l-0 ${i === 5 && Number(value) > 0 ? "text-amber-700" : ""}`}
+                >
+                  <p className="text-[12px] text-[#68717d]">{label}</p>
+                  <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
+                    {value}
+                  </b>
+                </button>
+              ))}
           </div>
+          <button
+            onClick={() => setAllMetrics((current) => !current)}
+            className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          >
+            {allMetrics
+              ? "Réduire les indicateurs"
+              : "Voir tous les indicateurs"}
+          </button>
         </section>
         <section className="overflow-hidden bg-white">
           <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e7e8] p-3">
@@ -138,9 +156,9 @@ export function WarehousesPage() {
             <Skeleton />
           ) : items.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-[13px]">
-                <thead className="bg-[#f8f8f7] text-[#5f6873]">
-                  <tr>
+              <table className="w-full min-w-[980px] border-collapse text-left text-[13px]">
+                <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
+                  <tr className="border-b border-[#e6e9ee]">
                     {[
                       "Entrepôt",
                       "Localisation",
@@ -161,7 +179,7 @@ export function WarehousesPage() {
                   {items.map((w) => (
                     <tr
                       key={w.id}
-                      className="border-t border-[#eceeed] hover:bg-[#fafafa]"
+                      className="border-b border-[#edf0f3] hover:bg-[#f7faf9]"
                     >
                       <td className="px-4 py-3">
                         <Link
@@ -260,21 +278,14 @@ function CreateModal({ close, done }: { close: () => void; done: () => void }) {
     }
   }
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"
-      onMouseDown={(e) => {
-        if (e.currentTarget === e.target) close();
-      }}
+    <OperationDrawer
+      open
+      title="Nouvel entrepôt"
+      description="Identité, localisation et capacité initiale."
+      close={close}
     >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-lg rounded-[8px] bg-white p-6 shadow-2xl"
-      >
-        <h2 className="text-lg font-semibold">Nouvel entrepôt</h2>
-        <p className="mt-1 text-[13px] text-[#68717d]">
-          Identité, localisation et capacité initiale.
-        </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <form onSubmit={submit} className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <input
             required
             name="code"
@@ -282,11 +293,11 @@ function CreateModal({ close, done }: { close: () => void; done: () => void }) {
             placeholder="Code (GZ-01)"
           />
           <input required name="name" className={input} placeholder="Nom" />
-          <select name="type" className={input}>
-            <option>STORAGE</option>
-            <option>HUB</option>
-            <option>OFFICE</option>
-            <option>TRANSIT</option>
+          <select name="type" className={input} aria-label="Type d’entrepôt">
+            <option value="STORAGE">Entrepôt de stockage</option>
+            <option value="HUB">Hub de groupage</option>
+            <option value="OFFICE">Bureau avec stockage</option>
+            <option value="TRANSIT">Zone de transit</option>
           </select>
           <input name="country" className={input} placeholder="Pays (CN)" />
           <input name="city" className={input} placeholder="Ville" />
@@ -301,7 +312,7 @@ function CreateModal({ close, done }: { close: () => void; done: () => void }) {
           <input name="address" className={input} placeholder="Adresse" />
         </div>
         {error && <p className="mt-3 text-[13px] text-red-600">{error}</p>}
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="flex justify-end gap-2 border-t border-[#eceef1] pt-4">
           <button type="button" onClick={close} className={button}>
             Annuler
           </button>
@@ -310,7 +321,7 @@ function CreateModal({ close, done }: { close: () => void; done: () => void }) {
           </button>
         </div>
       </form>
-    </div>
+    </OperationDrawer>
   );
 }
 function Capacity({ w }: { w: Warehouse }) {

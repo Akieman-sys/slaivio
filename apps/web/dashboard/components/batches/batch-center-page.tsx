@@ -254,7 +254,7 @@ export function BatchCenterPage() {
                     <tr
                       key={b.id}
                       onClick={() => open(b)}
-                      className="cursor-pointer border-t border-[#eceeec] hover:bg-[#f8fbf9]"
+                      className="cursor-pointer border-b border-[#edf0f3] hover:bg-[#f7faf9]"
                     >
                       <td className="px-4 py-3 font-semibold">
                         {b.batch_code}

@@ -12,7 +12,9 @@ export function OperationPageHeader({
   tabs?: ReactNode;
 }) {
   return (
-    <header className="border-b border-[#dfe1e3] bg-white">
+    <header
+      className={`bg-white ${tabs ? "" : "border-b border-[#dfe1e3]"}`}
+    >
       <div className="flex min-h-[72px] flex-col gap-3 px-5 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-[20px] font-semibold text-[#25292e]">{title}</h1>
@@ -21,13 +23,13 @@ export function OperationPageHeader({
           </p>
         </div>
         {actions && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="operation-actions flex shrink-0 flex-wrap items-center gap-2">
             {actions}
           </div>
         )}
       </div>
       {tabs && (
-        <div className="-mb-px flex min-h-[41px] items-end gap-1 overflow-x-auto border-t border-[#eceeef] bg-white px-5 pt-1 sm:px-6">
+        <div className="operation-tabs flex min-h-[42px] items-end gap-1 overflow-x-auto border-b border-[#d8dce2] bg-white px-5 sm:px-6">
           {tabs}
         </div>
       )}

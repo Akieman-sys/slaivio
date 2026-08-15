@@ -72,7 +72,7 @@ export function OperationDrawer({
             <X size={17} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5">
+        <div className="operation-form-surface min-h-0 flex-1 overflow-y-auto bg-white p-5">
           {children}
         </div>
       </aside>

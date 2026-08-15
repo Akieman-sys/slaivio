@@ -191,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {floatingPanel === "account" && <div className="absolute right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
         </header>
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
+        <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
       </section>
 
       {searchOpen && (

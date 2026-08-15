@@ -503,3 +503,140 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .slaivio-brand-cycle { animation: slaivioBrandCycle 15s ease-in-out infinite; overflow: hidden; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .slaivio-brand-cycle { animation: none; } }
+
+/* Operational design system — Expéditions is the visual reference. */
+.slaivio-operations {
+  color: #25292e;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.slaivio-operations button,
+.slaivio-operations input,
+.slaivio-operations select,
+.slaivio-operations textarea {
+  font: inherit;
+}
+
+/* The baseline belongs below the tabs. Active tab borders sit on that same
+   baseline, instead of creating a second dark line above the navigation. */
+.operation-tabs > button,
+.operation-tabs > div > button {
+  margin-bottom: -1px;
+  min-height: 41px;
+  border-bottom-width: 2px;
+  border-top: 0 !important;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 13px;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.operation-tabs > div {
+  display: flex;
+  min-height: 41px;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.operation-actions > button,
+.operation-actions > a,
+.operation-actions > details > summary {
+  min-height: 36px;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500;
+}
+
+/* Older operational pages used a darker green. Normalize their primary
+   actions and active tabs to the Expéditions green without changing meaning. */
+.slaivio-operations [class*="bg-[#16855f]"],
+.slaivio-operations [class*="bg-[#197653]"] {
+  background-color: #12c76f !important;
+}
+
+.slaivio-operations [class*="border-[#16855f]"],
+.slaivio-operations [class*="border-[#197653]"] {
+  border-color: #12c76f !important;
+}
+
+.slaivio-operations [class*="focus:border-[#16855f]"]:focus,
+.slaivio-operations [class*="focus:border-[#197653]"]:focus {
+  border-color: #12c76f !important;
+}
+
+/* Consistent operational tables: no heavy top rule, subtle separators only. */
+.slaivio-operations table {
+  border-top: 0 !important;
+  color: #25292e;
+}
+
+/* Legacy list containers used `border-y`, producing a dark rule above the
+   table. Keep only the quiet lower separator used by Expéditions. */
+.slaivio-operations .border-y {
+  border-top-color: transparent !important;
+  border-bottom-color: #e1e5e9 !important;
+}
+
+.slaivio-operations table thead {
+  border-top: 0 !important;
+  background: #f7f8fa;
+  color: #5f6b76;
+  font-size: 12px;
+}
+
+.slaivio-operations table thead tr:first-child,
+.slaivio-operations table thead tr:first-child > * {
+  border-top: 0 !important;
+}
+
+.slaivio-operations table tbody tr {
+  border-color: #edf0f3 !important;
+}
+
+.slaivio-operations table th {
+  font-weight: 500;
+}
+
+/* Forms opened in the shared right drawer use one field language everywhere. */
+.slaivio-operations form label,
+.operation-form-surface form label {
+  color: #3f4a56;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.slaivio-operations form input:not([type="checkbox"]):not([type="radio"]),
+.slaivio-operations form select,
+.slaivio-operations form textarea,
+.operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),
+.operation-form-surface form select,
+.operation-form-surface form textarea {
+  min-height: 36px;
+  border: 1px solid #cfd5dd !important;
+  border-radius: 6px !important;
+  background-color: #fff;
+  color: #25292e;
+  font-size: 13px !important;
+  outline: none;
+  box-shadow: none;
+}
+
+.slaivio-operations form input:focus,
+.slaivio-operations form select:focus,
+.slaivio-operations form textarea:focus,
+.operation-form-surface form input:focus,
+.operation-form-surface form select:focus,
+.operation-form-surface form textarea:focus {
+  border-color: #12c76f !important;
+  box-shadow: 0 0 0 3px rgba(18, 199, 111, 0.1);
+}
+
+.slaivio-operations form input::placeholder,
+.slaivio-operations form textarea::placeholder,
+.operation-form-surface form input::placeholder,
+.operation-form-surface form textarea::placeholder {
+  color: #8a949f;
+  font-weight: 400;
+}

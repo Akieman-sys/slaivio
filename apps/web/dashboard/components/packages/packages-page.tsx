@@ -31,6 +31,7 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { listDossiers, type DossierRecord } from "@/services/dossiers";
 import { getReferenceCatalog, type ReferenceItem } from "@/services/references";
@@ -3034,32 +3035,18 @@ function PackageFormModal({
     !dossiers.some((dossier) => dossier.id === item.dossier_id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-8">
-      <div className="ml-auto h-full w-full max-w-[760px] overflow-hidden bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">
-              {mode === "edit" ? "Modifier le colis" : "Nouveau colis"}
-            </h2>
-            <p className="mt-1 text-[13px] text-[#687584]">
-              Un colis doit être attaché à un dossier existant pour conserver la
-              traçabilité client.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className={iconButtonClass}
-            aria-label="Fermer"
-          >
-            <X size={17} />
-          </button>
-        </div>
-
+    <OperationDrawer
+      open
+      title={mode === "edit" ? "Modifier le colis" : "Nouveau colis"}
+      description="Un colis doit être attaché à un dossier existant pour conserver la traçabilité client."
+      close={onClose}
+      width="max-w-[760px]"
+    >
         <form
           onSubmit={onSubmit}
-          className="max-h-[calc(100dvh-150px)] overflow-y-auto"
+          className="grid gap-5"
         >
-          <div className="grid gap-5 p-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <FormSection title="Lien dossier">
               <label className="block">
                 <FormLabel>Dossier réel</FormLabel>
@@ -3422,8 +3409,7 @@ function PackageFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 
@@ -3487,20 +3473,13 @@ function PackageScannerModal({
     }
   }
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
-        <div className="mb-4 flex justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Scanner une étiquette</h2>
-            <p className="text-[13px] text-slate-500">
-              La photo est analysée puis validée par un opérateur avant
-              création.
-            </p>
-          </div>
-          <button onClick={onClose} className={iconButtonClass}>
-            <X size={17} />
-          </button>
-        </div>
+    <OperationDrawer
+      open
+      title="Scanner une étiquette"
+      description="La photo est analysée puis validée par un opérateur avant création."
+      close={onClose}
+      width="max-w-2xl"
+    >
         {!result ? (
           <div className="space-y-3">
             <input
@@ -3599,8 +3578,7 @@ function PackageScannerModal({
           </form>
         )}
         {error && <p className="mt-3 text-[13px] text-red-600">{error}</p>}
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 
@@ -3618,28 +3596,14 @@ function ImportPackagesModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-8">
-      <div className="w-full max-w-[620px] overflow-hidden rounded-xl border border-[#cfd5dd] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">
-              Importer des colis
-            </h2>
-            <p className="mt-1 text-[13px] leading-5 text-[#687584]">
-              CSV accepté. Colonnes recommandées : dossier_reference,
-              package_reference, package_type, description, weight_kg,
-              length_cm, width_cm, height_cm, warehouse_name.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className={iconButtonClass}
-            aria-label="Fermer"
-          >
-            <X size={17} />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="space-y-4 p-5">
+    <OperationDrawer
+      open
+      title="Importer des colis"
+      description="CSV accepté : dossier, référence, type, description, mesures et entrepôt."
+      close={onClose}
+      width="max-w-[620px]"
+    >
+        <form onSubmit={onSubmit} className="grid gap-4">
           <label className="block rounded-md border border-dashed border-[#cfd5dd] bg-[#fbfcfd] p-5">
             <FormLabel>Fichier CSV</FormLabel>
             <input
@@ -3673,8 +3637,7 @@ function ImportPackagesModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 

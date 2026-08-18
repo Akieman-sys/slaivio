@@ -6,6 +6,7 @@ import Link from "next/link";
 import {FormEvent,useCallback,useEffect,useState} from "react";
 import {PermissionGuard} from "@/components/permissions/permission-guard";
 import {OperationPageHeader} from "@/components/ui/operation-page-header";
+import {OperationDrawer} from "@/components/ui/operation-drawer";
 import {detectTrackingAlerts,exportTracking,getGlobalTrackingTimeline,getTrackingAnalytics,getTrackingStats,listTracking,listTrackingAlerts,listTrackingViews,notifyTrackingBulk,saveTrackingView,type TrackingAlert,type TrackingAnalytics,type TrackingEvent,type TrackingFilters,type TrackingItem,type TrackingSavedView,type TrackingStats} from "@/services/tracking";
 
 const button="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium shadow-sm hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:opacity-50";
@@ -63,7 +64,7 @@ function Status({item}:{item:TrackingItem}){return <span className={`rounded-ful
 function Empty({text}:{text:string}){return <div className="flex min-h-40 items-center justify-center p-8 text-center text-[13px] text-[#77828e]">{text}</div>}
 function Metric({title,value}:{title:string;value:string}){return <article className="rounded-lg bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.04)]"><p className="text-[12px] text-[#687584]">{title}</p><p className="mt-2 text-3xl">{value}</p></article>}
 function Rows({title,rows}:{title:string;rows:Array<{label:string;count:number}>}){return <article className="rounded-lg bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.04)]"><h3 className="mb-3 text-[14px] font-semibold">{title}</h3>{rows.map(r=><div key={r.label} className="flex justify-between border-b border-[#f0f1f3] py-2 text-[12px]"><span>{r.label}</span><b>{r.count}</b></div>)}{!rows.length&&<p className="text-[12px] text-[#77828e]">Aucune donnée.</p>}</article>}
-function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4"><div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"><div className="mb-4 flex justify-between"><h2 className="font-semibold">{title}</h2><button onClick={onClose}>×</button></div>{children}</div></div>}
+function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <OperationDrawer open title={title} close={onClose}>{children}</OperationDrawer>}
 function freshness(value:string){const minutes=(Date.now()-new Date(value).getTime())/60000;return minutes<15?'Temps réel':minutes<180?'Récent':minutes<1440?'Ancien':'Signal perdu'}
 function formatDate(value?:string|null){if(!value)return'—';return new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}
 function message(error:unknown){if(axios.isAxiosError(error))return String(error.response?.data?.detail||error.message);return error instanceof Error?error.message:'Erreur inattendue'}

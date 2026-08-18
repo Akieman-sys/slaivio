@@ -31,6 +31,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { usePermissions } from "@/components/permissions/permission-provider";
 import {
@@ -1385,26 +1386,14 @@ function ClientFormModal({
 }) {
   const title = mode === "edit" ? "Modifier le client" : "Nouveau client";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-[#d8dce2] bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-              {title}
-            </h2>
-            <p className="mt-1 text-[13px] text-[#687584]">
-              Renseignez uniquement les informations réelles disponibles.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className={`${iconButtonClass} disabled:opacity-40`}
-          >
-            <X size={17} />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="space-y-5 p-5">
+    <OperationDrawer
+      open
+      title={title}
+      description="Renseignez uniquement les informations réelles disponibles."
+      close={onClose}
+      width="max-w-3xl"
+    >
+        <form onSubmit={onSubmit}>
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
               {error}
@@ -1535,8 +1524,7 @@ function ClientFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 
@@ -1593,34 +1581,23 @@ function ImportClientsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-[#d8dce2] bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[20px] font-semibold tracking-[-0.02em]">
-              Importer des clients
-            </h2>
-            <p className="mt-1 text-[13px] text-[#687584]">
-              CSV supporté: nom, entreprise, téléphone, whatsapp, email, pays,
-              ville, statut, type.
-            </p>
+    <OperationDrawer
+      open
+      title="Importer des clients"
+      description="CSV supporté : nom, entreprise, téléphone, WhatsApp, email, pays, ville, statut et type."
+      close={onClose}
+      width="max-w-lg"
+    >
+        <div>
             <button
               type="button"
               onClick={downloadTemplate}
-              className="mt-2 text-[12px] font-semibold text-[#315fbc] underline"
+              className="text-[12px] font-semibold text-[#315fbc] underline"
             >
               Télécharger le modèle CSV
             </button>
-          </div>
-          <button
-            onClick={onClose}
-            disabled={importing}
-            className={`${iconButtonClass} disabled:opacity-40`}
-          >
-            <X size={17} />
-          </button>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4 p-5">
+        <form onSubmit={onSubmit} className="grid gap-4">
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
               {error}
@@ -1687,8 +1664,7 @@ function ImportClientsModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 

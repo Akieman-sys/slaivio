@@ -24,6 +24,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
@@ -1847,28 +1848,15 @@ function DossierFormModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
-      <div className="max-h-[90dvh] w-full max-w-4xl overflow-hidden rounded-xl border border-[#d8dce2] bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[20px] font-semibold">
-              {mode === "edit" ? "Modifier le dossier" : "Nouveau dossier"}
-            </h2>
-            <p className="mt-1 text-[13px] text-[#617083]">
-              Un dossier doit toujours être relié à un client réel de l’agence.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd5dd] bg-white hover:bg-[#f7f8fa]"
-            aria-label="Fermer"
-          >
-            <X size={17} />
-          </button>
-        </div>
+    <OperationDrawer
+      open
+      title={mode === "edit" ? "Modifier le dossier" : "Nouveau dossier"}
+      description="Un dossier doit toujours être relié à un client réel de l’agence."
+      close={onClose}
+      width="max-w-4xl"
+    >
         <form
           onSubmit={onSubmit}
-          className="max-h-[calc(90dvh-76px)] overflow-y-auto p-5"
         >
           {error && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -2090,8 +2078,7 @@ function DossierFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 

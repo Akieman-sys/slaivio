@@ -17,6 +17,12 @@ def build_proposed_actions(
             "package_id":entities.get("package_id"),"package_reference":entities.get("package_reference"),
             "current_status":entities.get("current_status"),"target_status":entities.get("target_status")}}]
 
+    if workflow_type == "UPDATE_FOLLOWUP":
+        return [{"type":"UPDATE_FOLLOWUP","label":entities.get("action_label") or "Modifier la relance","payload":{
+            "followup_id":entities.get("followup_id"),"reference":entities.get("followup_reference"),
+            "current_status":entities.get("current_status"),"mutation_action":entities.get("mutation_action"),
+            "due_at":entities.get("due_at")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

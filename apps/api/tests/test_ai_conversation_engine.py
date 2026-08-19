@@ -81,6 +81,14 @@ def test_followup_creation_has_its_own_control_workflow():
     assert _parse_due_at("demain à 16h") is not None
 
 
+def test_followup_mutations_have_a_controlled_versioned_workflow():
+    assert _fallback_intent("reporte FUP-2026-001284 à demain 16h") == ("FOLLOWUP_STATUS_UPDATE",0.95)
+    assert _fallback_intent("termine FUP-2026-001284") == ("FOLLOWUP_STATUS_UPDATE",0.95)
+    assert _missing_fields("UPDATE_FOLLOWUP",{"followup_id":"f-1","mutation_action":"COMPLETE","row_version":2},None)==[]
+    assert _missing_fields("UPDATE_FOLLOWUP",{"followup_id":"f-1","mutation_action":"COMPLETE"},None)==["row_version"]
+    assert _parse_due_at("reporte FUP-2026-001284 à demain 16h") is not None
+
+
 def test_package_status_change_is_controlled_and_delivery_needs_proof():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     assert _fallback_intent("marque COL-2026-00124 comme reçu") == ("PACKAGE_STATUS_UPDATE",0.95)

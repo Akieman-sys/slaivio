@@ -122,6 +122,8 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
     lookup_words = ("trouve", "cherche", "recherche", "affiche", "montre", "liste", "existe", "enregistre", "enregistré")
     if re.search(r"\bCOL-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("marque","passe","change","mets")):
         return None
+    if re.search(r"\bFUP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("reporte","decale","décale","pause","reprend","termine","escalade","annule")):
+        return None
 
     if "client" in normalized and any(word in normalized for word in lookup_words):
         _require(org_id,actor_id,channel,"clients.search")

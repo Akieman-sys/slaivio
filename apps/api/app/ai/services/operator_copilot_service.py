@@ -25,7 +25,7 @@ from app.ai.services.workflow_mapping import get_workflow_type
 from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
-from app.db.followup_repository import create_manual_followup
+from app.db.followup_repository import create_manual_followup,followup_dashboard,mutate_followup
 from app.packages.repository import create_package,list_packages,update_package
 from app.permissions.services.permission_service import assert_permission
 
@@ -49,6 +49,8 @@ PACKAGE_STATUS_LABELS={"recu":"RECEIVED","reçu":"RECEIVED","confirme":"CONFIRME
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if re.search(r"\bFUP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("reporte","décale","decale","pause","reprend","termine","escalade","annule")):
+        return "FOLLOWUP_STATUS_UPDATE",0.95
     if re.search(r"\b(?:COL)-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("marque","passe","change","mets")):
         return "PACKAGE_STATUS_UPDATE",0.95
     if any(word in normalized for word in create_words) and any(word in normalized for word in ("relance","rappel")):
@@ -74,6 +76,8 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type=="UPDATE_FOLLOWUP":
+        return [field for field in ("followup_id","mutation_action","row_version") if not entities.get(field)]
     if workflow_type=="UPDATE_PACKAGE_STATUS":
         return [field for field in ("package_id","target_status") if not entities.get(field)]
     if workflow_type == "CREATE_CLIENT":
@@ -418,8 +422,36 @@ def prepare_operator_message(
     confidence = float(intent_result.get("confidence") or 0.0)
     entities = intent_result.get("entities") or {}
     fallback_intent,fallback_confidence=_fallback_intent(clean_message)
-    if fallback_intent=="PACKAGE_STATUS_UPDATE" or intent == "UNKNOWN":
+    if fallback_intent in {"PACKAGE_STATUS_UPDATE","FOLLOWUP_STATUS_UPDATE"} or intent == "UNKNOWN":
         intent, confidence = fallback_intent,fallback_confidence
+
+    if intent=="FOLLOWUP_STATUS_UPDATE":
+        reference_match=re.search(r"\bFUP-[A-Z0-9-]+\b",clean_message.upper())
+        matches=followup_dashboard(org_id,q=reference_match.group(0) if reference_match else clean_message,page=1,page_size=5)["items"]
+        exact=next((x for x in matches if str(x.get("reference") or "").upper()==(reference_match.group(0) if reference_match else "")),None)
+        normalized=clean_message.lower();mutation=None;label=None
+        if any(x in normalized for x in ("reporte","décale","decale")):mutation,label="RESUME","Reporter la relance"
+        elif "pause" in normalized:mutation,label="PAUSE","Mettre la relance en pause"
+        elif "reprend" in normalized:mutation,label="RESUME","Reprendre la relance"
+        elif "termine" in normalized:mutation,label="COMPLETE","Terminer la relance"
+        elif "escalade" in normalized:mutation,label="ESCALATE","Escalader la relance"
+        elif "annule" in normalized:mutation,label="CANCEL","Annuler la relance"
+        due_at=_parse_due_at(clean_message) if mutation=="RESUME" and any(x in normalized for x in ("reporte","décale","decale")) else None
+        if not exact:
+            response="Je ne trouve pas cette relance dans l’agence. Vérifiez sa référence, par exemple FUP-2026-001284."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        if exact.get("status") in {"COMPLETED","CANCELLED"}:
+            response=f"La relance {exact.get('reference')} est déjà clôturée ({exact.get('status')}). Elle ne peut plus être modifiée."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"followup_closed"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        if mutation=="RESUME" and any(x in normalized for x in ("reporte","décale","decale")) and not due_at:
+            response="À quelle date faut-il reporter cette relance ? Exemple : « reporte "+str(exact.get("reference"))+" à demain 16 h »."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        entities.update({"followup_id":exact["id"],"followup_reference":exact.get("reference"),
+            "current_status":exact.get("status"),"mutation_action":mutation,"action_label":label,
+            "due_at":due_at,"row_version":exact.get("row_version")})
 
     if intent=="PACKAGE_STATUS_UPDATE":
         reference_match=re.search(r"\bCOL-[A-Z0-9-]+\b",clean_message.upper())
@@ -591,7 +623,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -641,6 +673,18 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
             if not package:raise HTTPException(404,"package_not_found")
             updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"package":package,"previous_status":entities.get("current_status")})
             return {"workflow":updated,"result":{"package":package},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="UPDATE_FOLLOWUP":
+        assert_permission(actor_id,org_id,"followups.update")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            followup=mutate_followup(org_id,entities["followup_id"],actor_id,entities["mutation_action"],
+                int(entities["row_version"]),entities.get("due_at"),"Modification confirmée depuis l’Assistant Slaivio")
+            if not followup:raise HTTPException(409,"followup_was_modified_or_closed")
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"followup":followup,"previous_status":entities.get("current_status")})
+            return {"workflow":updated,"result":{"followup":followup},"draft":None}
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
     assert_permission(actor_id,org_id,"clients.create")

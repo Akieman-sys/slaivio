@@ -131,6 +131,29 @@ def test_incomplete_dossier_cannot_be_approved(monkeypatch):
     assert created == []
 
 
+def test_followup_mutation_checks_permission_and_row_version(monkeypatch):
+    workflow=_workflow(
+        workflow_type="UPDATE_FOLLOWUP",
+        intent="FOLLOWUP_STATUS_UPDATE",
+        entities={"followup_id":"f-1","followup_reference":"FUP-1","mutation_action":"COMPLETE","row_version":4,"current_status":"DUE"},
+    )
+    calls={}
+    monkeypatch.setattr(service,"get_workflow_run",lambda *_:workflow)
+    monkeypatch.setattr(service,"assert_permission",lambda user,org,permission:calls.update(permission=permission))
+    monkeypatch.setattr(service,"claim_workflow_execution",lambda *_:workflow)
+    monkeypatch.setattr(service,"mutate_followup",lambda org,item,actor,action,version,due,reason: calls.update(
+        org=org,item=item,actor=actor,action=action,version=version,due=due,reason=reason
+    ) or {"id":"f-1","reference":"FUP-1","status":"COMPLETED","row_version":5})
+    monkeypatch.setattr(service,"update_workflow_status",lambda *_args,**_kwargs: {**workflow,"workflow_status":"APPROVED"})
+
+    result=service.approve_operator_workflow("org-1","workflow-1","manager-1")
+
+    assert calls["permission"]=="followups.update"
+    assert calls["action"]=="COMPLETE"
+    assert calls["version"]==4
+    assert result["result"]["followup"]["status"]=="COMPLETED"
+
+
 def test_copilot_schema_and_repositories_are_tenant_scoped():
     root = Path(__file__).parents[3]
     migration = (root / "infra/sql/059_ai_operator_copilot.sql").read_text(encoding="utf-8")

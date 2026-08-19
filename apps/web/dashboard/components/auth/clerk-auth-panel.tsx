@@ -4,6 +4,7 @@ import { SignIn, SignUp, useUser } from "@clerk/nextjs";
 
 import { AuthSessionState } from "@/components/auth/auth-session-state";
 import { clerkAppearance } from "@/components/auth/clerk-appearance";
+import { LoadingState } from "@/components/ui/page-state";
 
 export function ClerkAuthPanel({ mode }: { mode: "sign-in" | "sign-up" }) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -27,11 +28,7 @@ function ClerkAuthPanelContent({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { isLoaded, isSignedIn } = useUser();
 
   if (!isLoaded) {
-    return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
-        Chargement de l&apos;authentification...
-      </div>
-    );
+    return <LoadingState label="Préparation de votre espace sécurisé…" />;
   }
 
   if (isSignedIn) {

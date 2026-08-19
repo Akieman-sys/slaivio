@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   createRoute,
   routeAnalytics,
@@ -31,11 +32,11 @@ import {
   type Route,
 } from "@/services/route-catalog";
 const btn =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f6]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[13px] font-medium hover:bg-[#f5f6f6]",
   primary =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] bg-[#16855f] px-4 text-[12px] font-semibold text-white hover:bg-[#126f50]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] bg-[#16855f] px-4 text-[13px] font-semibold text-white hover:bg-[#126f50]",
   input =
-    "h-9 w-full rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] outline-none focus:border-[#16855f]";
+    "h-9 w-full rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 type Detail = Awaited<ReturnType<typeof routeDetail>>;
 type View =
   | "ALL"
@@ -132,7 +133,29 @@ export function RouteIntelligenceCenter() {
             </PermissionGuard>
           </>
         }
-        tabs={
+      />
+      <section className="bg-white px-5 py-4">
+        <div
+          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
+        >
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
+            <Metric
+              key={String(l)}
+              label={String(l)}
+              value={v}
+              divided={index > 0}
+              onClick={() => setAllMetrics((current) => !current)}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setAllMetrics((current) => !current)}
+          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+        >
+          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+        </button>
+      </section>
+      <OperationTabs>
           <>
             {(
               [
@@ -192,29 +215,7 @@ export function RouteIntelligenceCenter() {
               <option value="ENGINE">Trouver une route</option>
             </select>
           </>
-        }
-      />
-      <section className="bg-white px-5 py-4">
-        <div
-          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
-        >
-          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
-            <Metric
-              key={String(l)}
-              label={String(l)}
-              value={v}
-              divided={index > 0}
-              onClick={() => setAllMetrics((current) => !current)}
-            />
-          ))}
-        </div>
-        <button
-          onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
-        >
-          {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
-        </button>
-      </section>
+      </OperationTabs>
       {view === "ENGINE" ? (
         <Engine />
       ) : view === "ANALYTICS" ? (
@@ -251,9 +252,7 @@ export function RouteIntelligenceCenter() {
             </p>
           )}
           {loading ? (
-            <p className="p-16 text-center text-[13px]">
-              Chargement du réseau…
-            </p>
+            <LoadingState label="Chargement du réseau…" />
           ) : (
             <RouteTable items={filtered} open={open} />
           )}

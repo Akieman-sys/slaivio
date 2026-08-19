@@ -1,10 +1,12 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Archive, CheckCheck, Clock3, RotateCcw, Search, Settings2 } from "lucide-react";
+import { Archive, CheckCheck, Clock3, RotateCcw, Settings2 } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
+import { OperationContent, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { LoadingState } from "@/components/ui/page-state";
 import {
   getNotificationPreferences,
@@ -18,9 +20,9 @@ import {
   type NotificationPreference,
 } from "@/services/notification-center";
 
-const button = "inline-flex h-8 items-center gap-1.5 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f5f3]";
-const primary = "inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
-const input = "h-8 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] outline-none focus:border-[#167d57]";
+const button = "inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f6f6]";
+const primary = "inline-flex h-9 items-center gap-1.5 rounded-[5px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
+const input = "h-9 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] outline-none focus:border-[#167d57] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function NotificationCenterPage() {
   const [result, setResult] = useState<CenterResponse | null>(null);
@@ -60,11 +62,12 @@ export function NotificationCenterPage() {
   }
 
   return (
-    <div className="min-h-full bg-[#f8f8f7]">
-      <header className="border-b border-[#d9d9d6] bg-white">
-        <div className="flex min-h-[58px] items-center gap-4 px-6">
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[#202124]">Notifications</h1>
-          <div className="ml-auto flex items-center gap-2">
+    <div className="min-h-full bg-[#f7f8f8]">
+      <OperationPageHeader
+        title="Notifications"
+        description="Suivez les événements opérationnels et gérez les alertes qui demandent votre attention."
+        actions={
+          <>
             <button className={button} onClick={() => setSettings(true)}>
               <Settings2 size={15} />
               Préférences
@@ -75,43 +78,36 @@ export function NotificationCenterPage() {
                 Tout marquer comme lu
               </button>
             </PermissionGuard>
-          </div>
-        </div>
-        <div className="flex h-[48px] items-center gap-2 border-t border-[#eeeeeb] px-6">
-          <button onClick={() => setFilters({ ...filters, status: "UNREAD" })} className={`h-8 rounded-[4px] px-3 text-[13px] ${filters.status === "UNREAD" ? "bg-[#ecebf9] text-[#393579]" : "hover:bg-[#f0f0ef]"}`}>Non lues</button>
-          <button onClick={() => setFilters({ ...filters, status: "READ" })} className={`h-8 rounded-[4px] px-3 text-[13px] ${filters.status === "READ" ? "bg-[#ecebf9] text-[#393579]" : "hover:bg-[#f0f0ef]"}`}>Lues</button>
-          <label className="ml-2 flex h-8 w-[360px] max-w-[45vw] items-center gap-2 rounded-[4px] border border-[#d3d3d0] bg-white px-2 focus-within:border-[#1a73e8]">
-            <Search size={15} className="text-[#6b7075]" />
-            <input
-              value={filters.q}
-              onChange={(event) => setFilters({ ...filters, q: event.target.value })}
-              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-              placeholder="Rechercher une notification"
-            />
-          </label>
-          <select className={`${input} ml-auto`} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-            <option value="">Tous les statuts</option>
-            <option>UNREAD</option>
-            <option>READ</option>
-            <option>ARCHIVED</option>
-          </select>
-          <select className={input} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}>
-            <option value="">Toutes les sources</option>
-            <option value="IN_APP">Dans l’application</option>
-            <option value="DELIVERY">Canal externe</option>
-          </select>
-          <select className={input} value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}>
-            <option value="">Toutes les priorités</option>
-            <option>NORMAL</option>
-            <option>HIGH</option>
-            <option>CRITICAL</option>
-          </select>
-        </div>
-      </header>
+          </>
+        }
+      />
+      <OperationTabs>
+        <NotificationTab active={filters.status === "UNREAD"} onClick={() => setFilters({ ...filters, status: "UNREAD" })}>Non lues</NotificationTab>
+        <NotificationTab active={filters.status === "READ"} onClick={() => setFilters({ ...filters, status: "READ" })}>Lues</NotificationTab>
+        <NotificationTab active={!filters.status} onClick={() => setFilters({ ...filters, status: "" })}>Toutes</NotificationTab>
+      </OperationTabs>
+      <OperationToolbar
+        search={<OperationSearch value={filters.q} onChange={(q) => setFilters({ ...filters, q })} placeholder="Rechercher une notification" />}
+        filters={
+          <>
+            <select className={input} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}>
+              <option value="">Toutes les sources</option>
+              <option value="IN_APP">Dans l’application</option>
+              <option value="DELIVERY">Canal externe</option>
+            </select>
+            <select className={input} value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}>
+              <option value="">Toutes les priorités</option>
+              <option>NORMAL</option>
+              <option>HIGH</option>
+              <option>CRITICAL</option>
+            </select>
+          </>
+        }
+      />
 
-      <main className="px-6 py-5">
+      <OperationContent>
         {error && <p className="mb-3 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>}
-        <section className="overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
+        <OperationTable className="overflow-hidden rounded-[6px] border border-[#d3d8dd]">
           <div className="grid grid-cols-[1fr_120px_120px_150px_168px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
             <span>Notification</span>
             <span>Source</span>
@@ -126,11 +122,15 @@ export function NotificationCenterPage() {
           ) : (
             result.items.map((item) => <NotificationRow key={`${item.source}-${item.id}`} item={item} action={action} reload={load} />)
           )}
-        </section>
-      </main>
+        </OperationTable>
+      </OperationContent>
       {settings && <Preferences close={() => setSettings(false)} />}
     </div>
   );
+}
+
+function NotificationTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <button type="button" onClick={onClick} className={`h-[42px] border-b-2 px-3 text-[13px] ${active ? "border-[#167d57] font-medium text-[#126543]" : "border-transparent text-[#69717a] hover:text-[#25292e]"}`}>{children}</button>;
 }
 
 function NotificationRow({
@@ -144,9 +144,9 @@ function NotificationRow({
 }) {
   const unread = !item.read_at;
   return (
-    <article className={`grid grid-cols-[1fr_120px_120px_150px_168px] items-start border-b border-[#eeeeeb] px-4 py-3 text-[13px] last:border-0 ${unread ? "bg-[#f8fbff]" : "bg-white"}`}>
+    <article className={`grid min-h-11 grid-cols-[1fr_120px_120px_150px_168px] items-center border-b border-[#eeeeeb] px-4 py-2 text-[13px] last:border-0 ${unread ? "bg-[#f3fbf7]" : "bg-white"}`}>
       <div className="flex min-w-0 gap-3">
-        <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${item.priority === "CRITICAL" ? "bg-red-500" : item.priority === "HIGH" ? "bg-amber-500" : unread ? "bg-[#1a73e8]" : "bg-[#c7c7c3]"}`} />
+        <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${item.priority === "CRITICAL" ? "bg-red-500" : item.priority === "HIGH" ? "bg-amber-500" : unread ? "bg-[#167d57]" : "bg-[#c7c7c3]"}`} />
         <div className="min-w-0">
           <div className="truncate font-medium text-[#202124]">{item.title}</div>
           <p className="mt-1 line-clamp-2 text-[#5f6368]">{item.message}</p>
@@ -218,9 +218,9 @@ function Preferences({ close }: { close: () => void }) {
 
   return (
     <OperationDrawer open close={close} title="Préférences de notifications" description="Choisissez les canaux et la fréquence pour chaque activité." width="max-w-[720px]">
-        {error && <p className="m-5 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
+        {error && <p className="mb-4 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
         <form onSubmit={submit}>
-          <div className="overflow-hidden border border-[#d3d3d0] bg-white">
+          <div className="overflow-x-auto rounded-[6px] border border-[#d3d8dd] bg-white">
             <div className="grid grid-cols-[1fr_repeat(3,78px)_128px] border-b bg-[#f7f7f5] px-3 py-2 text-[12px] font-medium text-[#5f6368]">
               <span>Catégorie</span><span>App</span><span>Email</span><span>WhatsApp</span><span>Fréquence</span>
             </div>

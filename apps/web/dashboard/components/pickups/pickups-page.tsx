@@ -13,6 +13,7 @@ import {
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   checkInPickup,
   createPickup,
@@ -947,8 +948,10 @@ function SettingsModal({ close }: { close: () => void }) {
           </div>
           <button className={`${primary} sm:col-span-2`}>Enregistrer</button>
         </form>
+      ) : error ? (
+        <p className="rounded-[5px] bg-red-50 p-3 text-[12px] text-red-700">{error}</p>
       ) : (
-        <p>{error || "Chargement…"}</p>
+        <LoadingState label="Chargement des paramètres…" />
       )}
     </Modal>
   );
@@ -1004,7 +1007,7 @@ function AnalyticsModal({ close }: { close: () => void }) {
           </div>
         </div>
       ) : (
-        <p>Chargement…</p>
+        <LoadingState label="Chargement des performances…" />
       )}
     </Modal>
   );

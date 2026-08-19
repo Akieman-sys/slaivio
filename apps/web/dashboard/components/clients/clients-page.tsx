@@ -30,7 +30,10 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { usePermissions } from "@/components/permissions/permission-provider";
@@ -511,7 +514,7 @@ export function ClientsPage() {
                   className={buttonClass}
                 >
                   <Download size={14} />
-                  {exporting ? "Export…" : "Exporter"}
+                  {exporting ? "Export..." : "Exporter"}
                 </button>
               </PermissionGuard>
               <PermissionGuard permission="clients.create">
@@ -520,49 +523,6 @@ export function ClientsPage() {
                   Nouveau client
                 </button>
               </PermissionGuard>
-            </>
-          }
-          tabs={
-            <>
-              {views.slice(0, 4).map((view) => (
-                <button
-                  key={view.key}
-                  disabled={Boolean(view.archived && !archivedAllowed)}
-                  title={
-                    view.archived && !archivedAllowed
-                      ? "Permission clients.archive requise"
-                      : undefined
-                  }
-                  onClick={() => setActiveView(view.key)}
-                  className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
-                    activeView === view.key
-                      ? "border-[#12c76f] text-[#067a45]"
-                      : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
-                  } disabled:cursor-not-allowed disabled:opacity-45`}
-                >
-                  {view.label}
-                  {view.archived && !archivedAllowed ? " · verrouillé" : ""}
-                </button>
-              ))}
-              <select
-                aria-label="Autres vues clients"
-                value={
-                  views.slice(4).some((view) => view.key === activeView)
-                    ? activeView
-                    : ""
-                }
-                onChange={(event) =>
-                  setActiveView(event.target.value as ClientView["key"])
-                }
-                className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-              >
-                <option value="">Plus</option>
-                {views.slice(4).map((view) => (
-                  <option key={view.key} value={view.key}>
-                    {view.label}
-                  </option>
-                ))}
-              </select>
             </>
           }
         />
@@ -582,6 +542,58 @@ export function ClientsPage() {
             ))}
           </div>
         </section>
+
+        <OperationTabs>
+          {views.slice(0, 4).map((view) => (
+            <button
+              key={view.key}
+              disabled={Boolean(view.archived && !archivedAllowed)}
+              title={
+                view.archived && !archivedAllowed
+                  ? "Permission clients.archive requise"
+                  : undefined
+              }
+              onClick={() => setActiveView(view.key)}
+              className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
+                activeView === view.key
+                  ? "border-[#12c76f] text-[#067a45]"
+                  : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
+              } disabled:cursor-not-allowed disabled:opacity-45`}
+            >
+              {view.label}
+              {view.archived && !archivedAllowed ? " · verrouillé" : ""}
+            </button>
+          ))}
+          <button
+            disabled={!archivedAllowed}
+            title={
+              archivedAllowed ? undefined : "Permission clients.archive requise"
+            }
+            onClick={() => setActiveView("archived")}
+            className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
+              activeView === "archived"
+                ? "border-[#12c76f] text-[#067a45]"
+                : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
+            } disabled:cursor-not-allowed disabled:opacity-45`}
+          >
+            Archivés{archivedAllowed ? "" : " · verrouillé"}
+          </button>
+          <select
+            aria-label="Autres vues clients"
+            value={
+              activeView === "business"
+                ? activeView
+                : ""
+            }
+            onChange={(event) =>
+              setActiveView(event.target.value as ClientView["key"])
+            }
+            className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+          >
+            <option value="">Plus</option>
+            <option value="business">Entreprises</option>
+          </select>
+        </OperationTabs>
 
         <section>
           <div className="border-y border-[#eceef1] px-4 py-2.5">
@@ -934,18 +946,6 @@ function ClientDetails({
   onRestore: () => void;
   clientAction: "archive" | "restore" | null;
 }) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setVisible(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, [client.id]);
-
-  function close() {
-    setVisible(false);
-    window.setTimeout(onClose, 180);
-  }
-
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "summary", label: "Résumé" },
     { key: "operations", label: "Opérations" },
@@ -957,34 +957,14 @@ function ClientDetails({
   ];
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button
-        aria-label="Fermer la fiche client"
-        onClick={close}
-        className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
-      />
-      <aside
-        className={`absolute right-0 top-0 h-full w-full max-w-[560px] border-l border-[#cfd5dd] bg-white shadow-[-18px_0_42px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <div className="flex h-full flex-col">
-          <div className="border-b border-[#d8dce2] px-5 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-[#687584]">
-                  Fiche client
-                </p>
-                <h2 className="mt-1 truncate text-[22px] font-semibold tracking-[-0.02em]">
-                  {client.display_name ||
-                    client.name ||
-                    client.company_name ||
-                    "Sans nom"}
-                </h2>
-                <p className="mt-1 text-[13px] text-[#687584]">
-                  {typeLabels[client.customer_type]} ·{" "}
-                  {sourceLabels[client.source]}
-                </p>
-              </div>
-              <div className="flex gap-1">
+    <OperationDrawer
+      open
+      close={onClose}
+      width="max-w-[560px]"
+      title={client.display_name || client.name || client.company_name || "Sans nom"}
+      description={`Fiche client · ${typeLabels[client.customer_type]} · ${sourceLabels[client.source]}`}
+      headerActions={
+        <>
                 {!archived && (
                   <PermissionGuard permission="clients.update">
                     <button
@@ -1031,22 +1011,11 @@ function ClientDetails({
                     </button>
                   )}
                 </PermissionGuard>
-                <button
-                  onClick={close}
-                  className={iconButtonClass}
-                  aria-label="Fermer"
-                >
-                  <X size={17} />
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center gap-3">
-              <Initials name={client.display_name || client.name || "Client"} />
-              <StatusBadge status={client.lifecycle_status} />
-            </div>
-          </div>
-
-          <div className="flex gap-1 overflow-x-auto border-b border-[#d8dce2] px-4 py-2">
+        </>
+      }
+      headerMeta={<><Initials name={client.display_name || client.name || "Client"} /><StatusBadge status={client.lifecycle_status} /></>}
+      tabs={
+        <>
             {tabs.map((tab) => (
               <button
                 key={tab.key}
@@ -1065,11 +1034,10 @@ function ClientDetails({
                 ) : null}
               </button>
             ))}
-          </div>
-
-          <div
-            className={`flex-1 overflow-y-auto p-5 ${loading ? "opacity-60" : ""}`}
-          >
+        </>
+      }
+      bodyClassName={loading ? "opacity-60" : ""}
+    >
             {activeTab === "summary" && <SummaryTab client={client} />}
             {activeTab === "operations" && <OperationsTab client={client} />}
             {activeTab === "messages" && (
@@ -1099,10 +1067,7 @@ function ClientDetails({
               />
             )}
             {activeTab === "notes" && <NotesTab client={client} />}
-          </div>
-        </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 

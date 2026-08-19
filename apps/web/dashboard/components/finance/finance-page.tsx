@@ -3,7 +3,9 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ChevronRight, Download, Plus, RefreshCcw, Search } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
+import { OperationTable } from "@/components/ui/operation-primitives";
+import { LoadingState } from "@/components/ui/page-state";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
   createFinance,
@@ -126,28 +128,6 @@ export function FinancePage() {
             </PermissionGuard>
           </>
         }
-        tabs={
-          <>
-            {[
-              ["", "Tous"],
-              ["QUOTE", "Devis"],
-              ["INVOICE", "Factures"],
-              ["CREDIT_NOTE", "Avoirs"],
-            ].map(([value, label]) => (
-              <button
-                key={value || "all"}
-                onClick={() => setKind(value)}
-                className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${
-                  kind === value
-                    ? "border-[#16855f] font-semibold text-[#145f49]"
-                    : "border-transparent text-[#69717a]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </>
-        }
       />
       <main>
         <section className="grid border-b border-[#dfe1e3] bg-white sm:grid-cols-2 lg:grid-cols-4">
@@ -166,7 +146,23 @@ export function FinancePage() {
             </div>
           ))}
         </section>
-        <section className="overflow-x-auto border-b border-[#dfe1e3] bg-white">
+        <OperationTabs>
+          {[
+            ["", "Tous"],
+            ["QUOTE", "Devis"],
+            ["INVOICE", "Factures"],
+            ["CREDIT_NOTE", "Avoirs"],
+          ].map(([value, label]) => (
+            <button
+              key={value || "all"}
+              onClick={() => setKind(value)}
+              className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${kind === value ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </OperationTabs>
+        <OperationTable className="border-x-0">
           <div className="flex flex-wrap gap-2 border-b border-[#e5e7e8] p-3">
             <label className="flex h-9 min-w-64 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
               <Search size={14} className="text-[#69717a]" />
@@ -206,9 +202,7 @@ export function FinancePage() {
             </p>
           )}
           {loading ? (
-            <p className="p-8 text-center text-[13px] text-[#68717d]">
-              Chargement…
-            </p>
+            <LoadingState label="Chargement de la facturation…" />
           ) : items.length ? (
             <table className="w-full min-w-[900px] text-left text-[13px]">
               <thead className="bg-[#f6f7f7] text-[#5f6976]">
@@ -266,7 +260,7 @@ export function FinancePage() {
               l’agence.
             </p>
           )}
-        </section>
+        </OperationTable>
       </main>
       {create && (
         <CreateModal

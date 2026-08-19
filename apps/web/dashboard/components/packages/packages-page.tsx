@@ -25,14 +25,16 @@ import {
   Truck,
   Upload,
   Warehouse,
-  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
 import { listDossiers, type DossierRecord } from "@/services/dossiers";
 import { getReferenceCatalog, type ReferenceItem } from "@/services/references";
 import {
@@ -700,40 +702,6 @@ export function PackagesPage() {
               </button>
             </>
           }
-          tabs={
-            <>
-              {views.slice(0, 5).map((view) => (
-                <button
-                  key={view.key}
-                  onClick={() => setActiveView(view.key)}
-                  className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
-                    activeView === view.key
-                      ? "border-[#12c76f] text-[#067a45]"
-                      : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
-                  }`}
-                >
-                  {view.label}
-                </button>
-              ))}
-              <select
-                aria-label="Autres vues colis"
-                value={
-                  views.slice(5).some((view) => view.key === activeView)
-                    ? activeView
-                    : ""
-                }
-                onChange={(event) => setActiveView(event.target.value)}
-                className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-              >
-                <option value="">Plus</option>
-                {views.slice(5).map((view) => (
-                  <option key={view.key} value={view.key}>
-                    {view.label}
-                  </option>
-                ))}
-              </select>
-            </>
-          }
         />
 
         <section className="bg-white px-5 py-4">
@@ -751,6 +719,39 @@ export function PackagesPage() {
             ))}
           </div>
         </section>
+
+        <OperationTabs>
+          {views.slice(0, 5).map((view) => (
+            <button
+              key={view.key}
+              onClick={() => setActiveView(view.key)}
+              className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
+                activeView === view.key
+                  ? "border-[#12c76f] text-[#067a45]"
+                  : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
+              }`}
+            >
+              {view.label}
+            </button>
+          ))}
+          <select
+            aria-label="Autres vues colis"
+            value={
+              views.slice(5).some((view) => view.key === activeView)
+                ? activeView
+                : ""
+            }
+            onChange={(event) => setActiveView(event.target.value)}
+            className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+          >
+            <option value="">Plus</option>
+            {views.slice(5).map((view) => (
+              <option key={view.key} value={view.key}>
+                {view.label}
+              </option>
+            ))}
+          </select>
+        </OperationTabs>
 
         <section className={selected ? "xl:pr-[380px]" : ""}>
           <div className="border-y border-[#eceef1] px-4 py-2.5">
@@ -1505,18 +1506,6 @@ function PackageDetails({
   onEdit: () => void;
   onUpdated: (item: PackageRecord) => void;
 }) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setVisible(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, [item.id]);
-
-  function close() {
-    setVisible(false);
-    window.setTimeout(onClose, 180);
-  }
-
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "summary", label: "Résumé" },
     { key: "dossier", label: "Dossier" },
@@ -1538,79 +1527,37 @@ function PackageDetails({
   }
 
   return (
-    <div className="fixed inset-0 z-50 xl:pointer-events-none xl:left-auto xl:top-[138px] xl:w-[380px]">
-      <button
-        aria-label="Fermer la fiche colis"
-        onClick={close}
-        className={`absolute inset-0 bg-slate-950/20 transition-opacity duration-200 xl:hidden ${visible ? "opacity-100" : "opacity-0"}`}
-      />
-      <aside
-        className={`pointer-events-auto absolute right-0 top-0 h-full w-full max-w-[600px] border-l border-[#cfd5dd] bg-white shadow-[-18px_0_42px_rgba(15,23,42,0.16)] transition-transform duration-200 ease-out xl:max-w-[380px] xl:shadow-none ${visible ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <div className="flex h-full flex-col">
-          <div className="border-b border-[#d8dce2] px-5 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-[#687584]">
-                  Fiche colis
-                </p>
-                <h2 className="mt-1 truncate text-[22px] font-semibold tracking-[-0.02em]">
-                  {item.package_reference || item.tracking_id || "Colis"}
-                </h2>
-                <p className="mt-1 text-[13px] text-[#687584]">
-                  {item.client_name || "Client"} ·{" "}
-                  {item.dossier_reference || "Dossier non lié"}
-                </p>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={onEdit}
-                  className={iconButtonClass}
-                  aria-label="Modifier le colis"
-                >
-                  <Edit3 size={16} />
-                </button>
-                <button
-                  onClick={close}
-                  className={iconButtonClass}
-                  aria-label="Fermer"
-                >
-                  <X size={17} />
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <StatusBadge status={item.status} />
-              <InventoryBadge status={item.inventory_status} />
-              <ValidationBadge status={item.validation_status} />
-              <PaymentBadge status={item.payment_clearance_status} />
-              {loading && (
-                <span className="text-[12px] text-[#687584]">
-                  Actualisation…
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-1 overflow-x-auto border-b border-[#d8dce2] px-4 py-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => onTabChange(tab.key)}
-                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${
-                  activeTab === tab.key
-                    ? "bg-[#e9ecef] text-[#111827]"
-                    : "text-[#5f6b76] hover:bg-[#f4f6f8]"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div
-            className={`flex-1 overflow-y-auto p-5 ${loading ? "opacity-60" : ""}`}
-          >
+    <OperationDrawer
+      open
+      close={onClose}
+      title={item.package_reference || item.tracking_id || "Colis"}
+      description={`${item.client_name || "Client"} · ${item.dossier_reference || "Dossier non lié"}`}
+      width="max-w-[680px]"
+      headerActions={
+        <button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le colis" title="Modifier le colis">
+          <Edit3 size={16} />
+        </button>
+      }
+      headerMeta={
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={item.status} />
+          <InventoryBadge status={item.inventory_status} />
+          <ValidationBadge status={item.validation_status} />
+          <PaymentBadge status={item.payment_clearance_status} />
+          {loading && <span className="text-[12px] text-[#687584]">Actualisation…</span>}
+        </div>
+      }
+      tabs={tabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onTabChange(tab.key)}
+          className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${activeTab === tab.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#5f6b76] hover:bg-[#f4f6f8]"}`}
+        >
+          {tab.label}
+        </button>
+      ))}
+      bodyClassName={loading ? "opacity-60" : undefined}
+    >
             {activeTab === "summary" && (
               <SummaryTab item={item} onUpdated={refreshPackage} />
             )}
@@ -1642,12 +1589,9 @@ function PackageDetails({
               <HistoryTab events={timeline} loading={timelineLoading} />
             )}
             {activeTab === "settings" && (
-              <SettingsTab item={item} onArchived={close} />
+              <SettingsTab item={item} onArchived={onClose} />
             )}
-          </div>
-        </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 

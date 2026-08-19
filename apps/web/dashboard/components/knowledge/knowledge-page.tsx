@@ -13,14 +13,22 @@ import {
   RefreshCcw,
   RotateCcw,
   Save,
-  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import {
+  OperationSearch,
+  OperationTable,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { LoadingState } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   addKnowledgeRelation,
@@ -270,59 +278,6 @@ export function KnowledgePage() {
             </PermissionGuard>
           </>
         }
-        tabs={
-          <>
-            {(
-              [
-                ["overview", "Vue d’ensemble"],
-                ["all", "Toutes"],
-                ["faq", "FAQ clients"],
-                ["procedures", "Procédures"],
-                ["policies", "Règles"],
-                ["files", "Fichiers"],
-                ["review", "À vérifier"],
-                ["expired", "Expirées"],
-                ["playground", "Tester mon IA"],
-                ["analytics", "Analytics"],
-              ] as const
-            )
-              .slice(0, 4)
-              .map(([k, l]) => (
-                <button
-                  key={k}
-                  onClick={() => setView(k)}
-                  className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
-                >
-                  {l}
-                </button>
-              ))}
-            <select
-              aria-label="Autres vues"
-              value={
-                [
-                  "policies",
-                  "files",
-                  "review",
-                  "expired",
-                  "playground",
-                  "analytics",
-                ].includes(view)
-                  ? view
-                  : ""
-              }
-              onChange={(e) => setView(e.target.value as View)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              <option value="policies">Règles</option>
-              <option value="files">Fichiers</option>
-              <option value="review">À vérifier</option>
-              <option value="expired">Expirées</option>
-              <option value="playground">Tester mon IA</option>
-              <option value="analytics">Analytics</option>
-            </select>
-          </>
-        }
       />
       <section className="bg-white px-5 py-4">
         <div
@@ -339,6 +294,7 @@ export function KnowledgePage() {
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
       </section>
+      <KnowledgeTabs view={view} setView={setView} />
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
           {error}
@@ -353,32 +309,32 @@ export function KnowledgePage() {
       ) : (
         <main>
           <section>
-            <div className="flex flex-wrap gap-2 border-b bg-white p-4">
-              <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-                <Search size={15} />
-                <input
+            <OperationToolbar
+              search={
+                <OperationSearch
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={setQuery}
                   placeholder="Titre, contenu, tag, route, service…"
-                  className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
                 />
-              </label>
-              <select
-                className={`${input} w-52`}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "ALL"
-                      ? "Toutes les catégories"
-                      : categoryLabels[c] || c}
-                  </option>
-                ))}
-              </select>
-            </div>
+              }
+              filters={
+                <select
+                  className={`${input} w-52`}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {categories.map((c) => (
+                    <option key={c} value={c}>
+                      {c === "ALL"
+                        ? "Toutes les catégories"
+                        : categoryLabels[c] || c}
+                    </option>
+                  ))}
+                </select>
+              }
+            />
             {loading ? (
-              <p className="p-16 text-center text-[13px]">Chargement…</p>
+              <LoadingState label="Chargement des connaissances" />
             ) : (
               <KnowledgeTable items={filtered} select={choose} />
             )}
@@ -416,6 +372,54 @@ export function KnowledgePage() {
     </div>
   );
 }
+function KnowledgeTabs({
+  view,
+  setView,
+}: {
+  view: View;
+  setView: (view: View) => void;
+}) {
+  const primaryViews = [
+    ["overview", "Vue d’ensemble"],
+    ["all", "Toutes"],
+    ["faq", "FAQ clients"],
+    ["procedures", "Procédures"],
+  ] as const;
+  const secondaryViews = [
+    ["policies", "Règles"],
+    ["files", "Fichiers"],
+    ["review", "À vérifier"],
+    ["expired", "Expirées"],
+    ["playground", "Tester mon IA"],
+    ["analytics", "Analytics"],
+  ] as const;
+  return (
+    <OperationTabs>
+      {primaryViews.map(([key, label]) => (
+        <button
+          key={key}
+          onClick={() => setView(key)}
+          className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${view === key ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
+        >
+          {label}
+        </button>
+      ))}
+      <select
+        aria-label="Autres vues"
+        value={secondaryViews.some(([key]) => key === view) ? view : ""}
+        onChange={(event) => setView(event.target.value as View)}
+        className="mb-1 ml-1 h-8 rounded-md border border-[#d4d9df] bg-white px-2 text-[13px] text-[#59636e] outline-none"
+      >
+        <option value="">Plus</option>
+        {secondaryViews.map(([key, label]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </OperationTabs>
+  );
+}
 function KnowledgeTable({
   items,
   select,
@@ -424,7 +428,7 @@ function KnowledgeTable({
   select: (i: KnowledgeEntry) => void;
 }) {
   return (
-    <div className="min-h-[460px] overflow-x-auto bg-white">
+    <OperationTable className="min-h-[460px]">
       <table className="w-full min-w-[1050px] border-collapse text-left text-[13px]">
         <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
           <tr className="border-b border-[#e6e9ee]">
@@ -499,7 +503,7 @@ function KnowledgeTable({
           </div>
         </div>
       )}
-    </div>
+    </OperationTable>
   );
 }
 function Detail({

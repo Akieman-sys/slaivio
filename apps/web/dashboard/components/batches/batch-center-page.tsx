@@ -1,8 +1,16 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Download, Plus, RefreshCcw, ScanLine, Trash2, X } from "lucide-react";
+import { Download, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
 import { getReferenceCatalog, ReferenceCatalog } from "@/services/references";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationTable,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   addBatchPackages,
   Batch,
@@ -86,6 +94,7 @@ export function BatchCenterPage() {
     [q, setQ] = useState(""),
     [status, setStatus] = useState(""),
     [loading, setLoading] = useState(true),
+    [allMetrics, setAllMetrics] = useState(false),
     [error, setError] = useState("");
   const load = useCallback(async () => {
     setLoading(true);
@@ -180,8 +189,8 @@ export function BatchCenterPage() {
         }
       />
       <main>
-        <section className="bg-white px-5 py-4">
-          <div className="grid grid-cols-2 xl:grid-cols-6">
+        <OperationMetrics>
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             {[
               ["Batchs ouverts", stats.open_batches],
               ["Prêts au départ", stats.ready],
@@ -189,7 +198,9 @@ export function BatchCenterPage() {
               ["Complets", stats.full],
               ["Bloqués", stats.blocked],
               ["Colis non groupés", stats.unassigned_packages],
-            ].map(([l, v]) => (
+            ]
+              .slice(0, allMetrics ? 6 : 4)
+              .map(([l, v]) => (
               <div
                 key={String(l)}
                 className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
@@ -197,38 +208,46 @@ export function BatchCenterPage() {
                 <p className="text-[11px] text-[#707872]">{l}</p>
                 <b className="mt-2 block text-[23px]">{n(v)}</b>
               </div>
-            ))}
-          </div>
-        </section>
-        <section className="bg-white">
-          <div className="flex flex-wrap gap-2 border-b border-[#e7e9e7] p-3">
-            <input
-              className={`${input} max-w-sm`}
-              placeholder="Rechercher un batch, une route…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <select
-              className={`${input} max-w-52`}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="">Tous les statuts</option>
-              {Object.entries(labels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
               ))}
-            </select>
           </div>
+          <button
+            type="button"
+            className="mt-3 text-[12px] font-medium text-[#137a53] hover:underline xl:hidden"
+            onClick={() => setAllMetrics((value) => !value)}
+          >
+            {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+          </button>
+        </OperationMetrics>
+        <section className="bg-white">
+          <OperationToolbar
+            search={
+              <OperationSearch
+                value={q}
+                onChange={setQ}
+                placeholder="Rechercher un batch, une route…"
+              />
+            }
+            filters={
+              <select
+                className={`${input} max-w-52`}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="">Tous les statuts</option>
+                {Object.entries(labels).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            }
+          />
           {error ? (
             <p className="p-5 text-sm text-red-700">{error}</p>
           ) : loading ? (
-            <p className="p-8 text-center text-sm text-[#707872]">
-              Chargement des groupages…
-            </p>
+            <LoadingState label="Chargement des groupages…" />
           ) : (
-            <div className="overflow-x-auto">
+            <OperationTable>
               <table className="w-full min-w-[1100px] text-left text-[12px]">
                 <thead className="bg-[#f7f8f7] text-[#68716c]">
                   <tr>
@@ -306,7 +325,7 @@ export function BatchCenterPage() {
                   existants.
                 </p>
               )}
-            </div>
+            </OperationTable>
           )}
         </section>
       </main>
@@ -381,20 +400,27 @@ function CreatePanel({
     }
   }
   return (
-    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
-      <div className="flex justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Nouveau batch</h2>
-          <p className="text-xs text-[#707872]">
-            Les routes, services et entrepôts viennent des référentiels
-            existants.
-          </p>
-        </div>
-        <button onClick={close}>
-          <X />
-        </button>
-      </div>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+    <OperationDrawer
+      open
+      title="Nouveau batch"
+      description="Les routes, services et entrepôts viennent des référentiels existants."
+      close={close}
+      footer={
+        <>
+          <button className={button} onClick={close}>
+            Annuler
+          </button>
+          <button
+            className={primary}
+            disabled={busy || !p.route_id || !p.shipping_service_id}
+            onClick={submit}
+          >
+            {busy ? "Création…" : "Créer le batch"}
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Mode de groupage">
           <select
             className={input}
@@ -488,19 +514,7 @@ function CreatePanel({
         </Field>
       </div>
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
-      <div className="mt-6 flex justify-end gap-2">
-        <button className={button} onClick={close}>
-          Annuler
-        </button>
-        <button
-          className={primary}
-          disabled={busy || !p.route_id || !p.shipping_service_id}
-          onClick={submit}
-        >
-          {busy ? "Création…" : "Créer le batch"}
-        </button>
-      </div>
-    </aside>
+    </OperationDrawer>
   );
 }
 
@@ -532,19 +546,15 @@ function DetailPanel({
     }
   }
   return (
-    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-3xl overflow-y-auto bg-[#f7f8f7] shadow-2xl">
-      <header className="sticky top-0 z-10 border-b bg-white p-5">
-        <div className="flex justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">{b.batch_code}</h2>
-            <p className="text-xs text-[#707872]">
-              {b.route_name} · {b.service_name} · {labels[b.status]}
-            </p>
-          </div>
-          <button title="Fermer" onClick={close}>
-            <X />
-          </button>
-        </div>
+    <OperationDrawer
+      open
+      title={b.batch_code}
+      description={`${b.route_name} · ${b.service_name} · ${labels[b.status]}`}
+      close={close}
+      width="max-w-3xl"
+      bodyClassName="bg-[#f7f8f7]"
+    >
+      <div className="mb-4 border-b border-[#e1e5e2] bg-white pb-4">
         <div className="mt-4 flex flex-wrap gap-2">
           {b.status === "DRAFT" && (
             <button
@@ -600,8 +610,8 @@ function DetailPanel({
             {error}
           </p>
         )}
-      </header>
-      <div className="space-y-4 p-5">
+      </div>
+      <div className="space-y-4">
         <section className="grid gap-3 sm:grid-cols-4">
           {[
             ["Colis", b.package_count],
@@ -760,7 +770,7 @@ function DetailPanel({
           ))}
         </section>
       </div>
-    </aside>
+    </OperationDrawer>
   );
 }
 function Field({

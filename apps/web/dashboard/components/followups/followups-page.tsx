@@ -1,7 +1,11 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ChevronRight, Download, Plus, Search, Send } from "lucide-react";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
+import { LoadingState } from "@/components/ui/page-state";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   getReferenceCatalog,
@@ -165,32 +169,6 @@ export function FollowupsPage() {
             </button>
           </>
         }
-        tabs={
-          <div className="flex items-end gap-1">
-            {views.slice(0, 4).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setView(k)}
-                className={`h-10 whitespace-nowrap border-b-2 px-3 text-[12px] ${view === k ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
-              >
-                {l}
-              </button>
-            ))}
-            <select
-              aria-label="Autres vues"
-              value={views.slice(4).some(([k]) => k === view) ? view : ""}
-              onChange={(e) => setView(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              {views.slice(4).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
       />
       <section className="bg-white px-5 py-4">
         <div
@@ -217,6 +195,32 @@ export function FollowupsPage() {
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
       </section>
+      <OperationTabs>
+        <div className="flex items-end gap-1">
+            {views.slice(0, 4).map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => setView(k)}
+                className={`h-10 whitespace-nowrap border-b-2 px-3 text-[12px] ${view === k ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
+              >
+                {l}
+              </button>
+            ))}
+            <select
+              aria-label="Autres vues"
+              value={views.slice(4).some(([k]) => k === view) ? view : ""}
+              onChange={(e) => setView(e.target.value)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              {views.slice(4).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+        </div>
+      </OperationTabs>
       <div className="flex gap-2 border-b bg-white p-4">
         <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
           <Search size={14} />
@@ -256,7 +260,7 @@ export function FollowupsPage() {
         </p>
       )}
       {loading ? (
-        <p className="p-16 text-center text-[13px]">Chargement…</p>
+        <LoadingState label="Chargement des relances…" />
       ) : (
         <Table items={items} open={open} />
       )}{" "}

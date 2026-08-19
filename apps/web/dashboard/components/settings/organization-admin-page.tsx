@@ -38,6 +38,8 @@ import {
   type Member,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { SettingsDialog } from "@/components/ui/settings-dialog";
+import { LoadingState } from "@/components/ui/page-state";
 const input =
   "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const button =
@@ -78,7 +80,14 @@ export function OrganizationAdminPage() {
     [notice, setNotice] = useState("");
   useEffect(() => {
     const requested = params.get("section");
-    if (tabs.some(([id]) => id === requested)) setTab(requested as Section);
+    const aliases: Record<string, Section> = {
+      profile: "general",
+      preferences: "general",
+      organization: "agency",
+      spaces: "workspaces",
+    };
+    const resolved = requested ? aliases[requested] || requested : "general";
+    if (tabs.some(([id]) => id === resolved)) setTab(resolved as Section);
   }, [params]);
   const load = useCallback(async () => {
     try {
@@ -111,54 +120,19 @@ export function OrganizationAdminPage() {
     setTab(section);
     router.replace(`/app/settings?section=${section}`, { scroll: false });
   }
-  if (!data)
-    return (
-      <div className="p-6 text-[13px]">
-        {error || "Chargement de l’administration…"}
-      </div>
-    );
+  if (!data) return <SettingsDialog title="Paramètres" description="Compte, organisation et configuration Slaivio." navigation={<SettingsNavigation active={tab} select={select} />} onClose={() => router.push("/app")}><LoadingState label={error || "Chargement de l’administration…"} /></SettingsDialog>;
   return (
-    <div className="min-h-full bg-white">
-      <header className="flex h-[72px] items-center border-b border-[#e0e2e4] px-5 lg:px-7">
-        <div>
-          <p className="text-[11px] text-[#7b8289]">Administration</p>
-          <h1 className="text-[21px] font-semibold">Paramètres</h1>
-        </div>
-        <button className={`${button} ml-auto`} onClick={load}>
-          <RefreshCcw className="mr-2 inline" size={14} />
-          Actualiser
-        </button>
-      </header>
-      <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[272px_minmax(0,1fr)]">
-        <aside className="border-b border-[#e0e2e4] bg-[#fafafa] p-3 lg:border-b-0 lg:border-r">
-          <SettingsGroup label="Administration">
-            {tabs.map(([id, label, Icon]) => (
-              <SettingsItem
-                key={id}
-                active={tab === id}
-                icon={<Icon size={15} />}
-                label={label}
-                onClick={() => select(id)}
-              />
-            ))}
-          </SettingsGroup>
-          <SettingsGroup label="Plateforme">
-            <SettingsLink
-              href="/app/platform"
-              icon={<ShieldCheck size={15} />}
-              label="Console Super Admin"
-            />
-          </SettingsGroup>
-        </aside>
+    <SettingsDialog title="Paramètres" description="Compte, organisation et configuration Slaivio." navigation={<SettingsNavigation active={tab} select={select} />} onClose={() => router.push("/app")}>
         <main className="min-w-0 p-5 lg:p-7">
           <div className="mx-auto max-w-[1120px]">
-            <div className="mb-5 border-b border-[#e5e6e7] pb-4">
-              <h2 className="text-[20px] font-semibold">
+            <div className="mb-5 flex items-start gap-3 border-b border-[#e5e6e7] pb-4">
+              <div className="min-w-0 flex-1"><h2 className="text-[20px] font-semibold">
                 {sectionTitles[tab][0]}
               </h2>
               <p className="mt-1 text-[13px] text-[#69707d]">
                 {sectionTitles[tab][1]}
-              </p>
+              </p></div>
+              <button className={button} onClick={load} title="Actualiser"><RefreshCcw size={14} /></button>
             </div>
             {notice && (
               <div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
@@ -197,9 +171,19 @@ export function OrganizationAdminPage() {
             {tab === "data" && <DataSettings data={data} run={run} />}{" "}
           </div>
         </main>
-      </div>
-    </div>
+    </SettingsDialog>
   );
+}
+
+function SettingsNavigation({ active, select }: { active: Section; select: (section: Section) => void }) {
+  return <>
+    <SettingsGroup label="Compte et organisation">
+      {tabs.map(([id, label, Icon]) => <SettingsItem key={id} active={active === id} icon={<Icon size={15} />} label={label} onClick={() => select(id)} />)}
+    </SettingsGroup>
+    <SettingsGroup label="Plateforme">
+      <PermissionGuard permission="platform.admin.read"><SettingsLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" /></PermissionGuard>
+    </SettingsGroup>
+  </>;
 }
 function SettingsGroup({
   label,

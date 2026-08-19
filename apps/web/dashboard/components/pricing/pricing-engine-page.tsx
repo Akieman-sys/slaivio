@@ -7,11 +7,11 @@ import {
   Plus,
   RefreshCcw,
   Search,
-  X,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   addGridFee,
   addGridRule,
@@ -138,85 +138,13 @@ export function PricingEnginePage() {
             </PermissionGuard>
           </>
         }
-        tabs={
-          <>
-            {(
-              [
-                ["OVERVIEW", "Vue d’ensemble"],
-                ["GRIDS", "Grilles"],
-                ["ROUTES", "Par route"],
-                ["SERVICES", "Par service"],
-              ] as const
-            ).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setView(k)}
-                className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${view === k ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}
-              >
-                {l}
-              </button>
-            ))}
-            <select
-              aria-label="Autres vues Tarification"
-              value={
-                [
-                  "CATEGORIES",
-                  "TIERS",
-                  "FEES",
-                  "DISCOUNTS",
-                  "PROMOTIONS",
-                  "CLIENTS",
-                  "COSTS",
-                  "SIMULATOR",
-                  "HISTORY",
-                  "ANALYTICS",
-                  "SETTINGS",
-                ].includes(view)
-                  ? view
-                  : ""
-              }
-              onChange={(event) =>
-                event.target.value && setView(event.target.value as View)
-              }
-              className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
-                [
-                  "CATEGORIES",
-                  "TIERS",
-                  "FEES",
-                  "DISCOUNTS",
-                  "PROMOTIONS",
-                  "CLIENTS",
-                  "COSTS",
-                  "SIMULATOR",
-                  "HISTORY",
-                  "ANALYTICS",
-                  "SETTINGS",
-                ].includes(view)
-                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
-                  : "border-[#d6dadd] bg-white text-[#69717a]"
-              }`}
-            >
-              <option value="">Plus</option>
-              <option value="CATEGORIES">Catégories</option>
-              <option value="TIERS">Paliers</option>
-              <option value="FEES">Frais</option>
-              <option value="DISCOUNTS">Remises</option>
-              <option value="PROMOTIONS">Promotions</option>
-              <option value="CLIENTS">Tarifs clients</option>
-              <option value="COSTS">Coûts et marges</option>
-              <option value="SIMULATOR">Simulateur</option>
-              <option value="HISTORY">Historique</option>
-              <option value="ANALYTICS">Analytics</option>
-              <option value="SETTINGS">Paramètres</option>
-            </select>
-          </>
-        }
       />
       <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         {cards.slice(0, 4).map(([l, v]) => (
           <Metric key={String(l)} label={String(l)} value={v} />
         ))}
       </section>
+      <PricingTabs view={view} setView={setView} />
       {error && (
         <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
           {error}
@@ -246,9 +174,7 @@ export function PricingEnginePage() {
             </button>
           </div>
           {loading ? (
-            <p className="p-16 text-center text-[13px]">
-              Chargement des tarifs…
-            </p>
+            <LoadingState label="Chargement des tarifs…" />
           ) : (
             <GridTable
               grids={grids}
@@ -503,27 +429,15 @@ function GridDrawer({
 }) {
   const g = detail.grid;
   return (
-    <div className="fixed inset-0 z-50 bg-black/20" onClick={close}>
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        className="ml-auto h-full w-full max-w-[860px] overflow-y-auto bg-[#f7f7f6]"
-      >
-        <header className="border-b bg-white p-5">
-          <div className="flex justify-between">
-            <div>
-              <small>
-                {g.grid_code} · v{g.version}
-              </small>
-              <h2 className="text-xl font-semibold">{g.name}</h2>
-              <p className="text-[12px]">
-                {g.route_name} · {g.service_name}
-              </p>
-            </div>
-            <button onClick={close}>
-              <X />
-            </button>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+    <OperationDrawer
+      open
+      close={close}
+      width="max-w-[860px]"
+      title={g.name}
+      description={`${g.grid_code} · v${g.version} · ${g.route_name} · ${g.service_name}`}
+      bodyClassName="bg-[#f7f7f6] p-5"
+      footer={
+        <div className="flex flex-wrap justify-end gap-2">
             <Badge value={g.status} />
             <PermissionGuard permission="pricing.approve">
               <button
@@ -545,9 +459,10 @@ function GridDrawer({
                 Activer
               </button>
             </PermissionGuard>
-          </div>
-        </header>
-        <main className="grid gap-4 p-5 md:grid-cols-2">
+        </div>
+      }
+    >
+        <main className="grid gap-4 md:grid-cols-2">
           <Card title="Règles">
             {detail.rules.map((x, i) => (
               <Row key={i} x={x} />
@@ -572,8 +487,22 @@ function GridDrawer({
             ))}
           </Card>
         </main>
-      </aside>
-    </div>
+    </OperationDrawer>
+  );
+}
+
+function PricingTabs({ view, setView }: { view: View; setView: (next: View) => void }) {
+  const primaryViews: Array<[View, string]> = [["OVERVIEW", "Vue d’ensemble"], ["GRIDS", "Grilles"], ["ROUTES", "Par route"], ["SERVICES", "Par service"]];
+  const moreViews: Array<[View, string]> = [["CATEGORIES", "Catégories"], ["TIERS", "Paliers"], ["FEES", "Frais"], ["DISCOUNTS", "Remises"], ["PROMOTIONS", "Promotions"], ["CLIENTS", "Tarifs clients"], ["COSTS", "Coûts et marges"], ["SIMULATOR", "Simulateur"], ["HISTORY", "Historique"], ["ANALYTICS", "Analytics"], ["SETTINGS", "Paramètres"]];
+  const moreSelected = moreViews.some(([key]) => key === view);
+  return (
+    <OperationTabs>
+      {primaryViews.map(([key, label]) => <button key={key} onClick={() => setView(key)} className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${view === key ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}>{label}</button>)}
+      <select aria-label="Autres vues Tarification" value={moreSelected ? view : ""} onChange={(event) => event.target.value && setView(event.target.value as View)} className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${moreSelected ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]" : "border-[#d6dadd] bg-white text-[#69717a]"}`}>
+        <option value="">Plus</option>
+        {moreViews.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </select>
+    </OperationTabs>
   );
 }
 function AddRule({

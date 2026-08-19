@@ -1,10 +1,12 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, Search, X } from "lucide-react";
+import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, RefreshCcw } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
+import { OperationContent, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import {
   addTicketMessage,
   createTicket,
@@ -19,9 +21,9 @@ import {
   type TicketDetail,
 } from "@/services/support";
 
-const button = "inline-flex h-8 items-center gap-1.5 rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f5f3]";
-const primary = "inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-[#1a73e8] px-3 text-[13px] font-medium text-white hover:bg-[#1768d1]";
-const input = "h-8 w-full rounded-[4px] border border-[#d3d3d0] bg-white px-3 text-[13px] outline-none focus:border-[#1a73e8]";
+const button = "inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f6f6]";
+const primary = "inline-flex h-9 items-center gap-1.5 rounded-[5px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
+const input = "h-9 w-full rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] outline-none focus:border-[#167d57] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function SupportCenterPage() {
   const [tab, setTab] = useState<"help" | "tickets">("help");
@@ -64,48 +66,48 @@ export function SupportCenterPage() {
   }
 
   return (
-    <div className="min-h-full bg-[#f8f8f7]">
-      <header className="border-b border-[#d9d9d6] bg-white">
-        <div className="flex min-h-[58px] items-center gap-4 px-6">
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[#202124]">Support et Centre d’aide</h1>
-          <div className="ml-auto flex items-center gap-2">
-            <button className={button} onClick={load}>Actualiser</button>
+    <div className="min-h-full bg-[#f7f8f8]">
+      <OperationPageHeader
+        title="Support et Centre d’aide"
+        description="Consultez les ressources utiles et suivez les demandes adressées à l’équipe Slaivio."
+        actions={
+          <>
+            <button className={button} onClick={load}><RefreshCcw size={15} />Actualiser</button>
             <PermissionGuard permission="support.create">
               <button className={primary} onClick={() => setCreating(true)}>
                 <Plus size={15} />
                 Nouveau ticket
               </button>
             </PermissionGuard>
-          </div>
-        </div>
-        <div className="flex h-[48px] items-end gap-4 border-t border-[#eeeeeb] px-6">
-          <Tab active={tab === "help"} onClick={() => setTab("help")} icon={<BookOpen size={16} />} label="Centre d’aide" />
-          <Tab active={tab === "tickets"} onClick={() => setTab("tickets")} icon={<LifeBuoy size={16} />} label={`Tickets (${tickets.length})`} />
-          <label className="ml-auto mb-2 flex h-8 w-[360px] max-w-[45vw] items-center gap-2 rounded-[4px] border border-[#d3d3d0] bg-white px-2 focus-within:border-[#1a73e8]">
-            <Search size={15} className="text-[#6b7075]" />
-            <input value={q} onChange={(event) => setQ(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" placeholder="Rechercher un article ou un ticket" />
-          </label>
-          {tab === "tickets" && (
-            <select className={`${input} mb-2 max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
+          </>
+        }
+      />
+      <OperationTabs>
+        <Tab active={tab === "help"} onClick={() => setTab("help")} icon={<BookOpen size={16} />} label="Centre d’aide" />
+        <Tab active={tab === "tickets"} onClick={() => setTab("tickets")} icon={<LifeBuoy size={16} />} label={`Tickets (${tickets.length})`} />
+      </OperationTabs>
+      <OperationToolbar
+        search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher un article ou un ticket" />}
+        filters={
+          tab === "tickets" ? (
+            <select className={`${input} max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Tous les statuts</option>
               {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item}>{item}</option>)}
             </select>
-          )}
-        </div>
-      </header>
+          ) : undefined
+        }
+      />
 
-      <main className="px-6 py-5">
+      <OperationContent>
         {error && <p className="mb-3 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>}
         {tab === "help" ? <ArticleGrid articles={articles} open={setArticle} /> : <TicketTable tickets={tickets} open={open} />}
-      </main>
+      </OperationContent>
 
       {creating && <Create close={() => setCreating(false)} done={async (id) => { setCreating(false); setTab("tickets"); await load(); await open(id); }} />}
       {selected && <Detail detail={selected} close={() => setSelected(null)} reload={() => open(selected.ticket.id)} />}
       {article && (
-        <Panel close={() => setArticle(null)}>
-          <small className="font-semibold text-[#1a73e8]">{article.category}</small>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.02em]">{article.title}</h2>
-          <p className="mt-6 whitespace-pre-wrap text-[14px] leading-7 text-[#2f3437]">{article.content}</p>
+        <Panel close={() => setArticle(null)} title={article.title} description={article.category}>
+          <p className="whitespace-pre-wrap text-[13px] leading-6 text-[#2f3437]">{article.content}</p>
         </Panel>
       )}
     </div>
@@ -114,7 +116,7 @@ export function SupportCenterPage() {
 
 function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={`flex h-[48px] items-center gap-2 border-b-2 px-1 text-[14px] ${active ? "border-[#1a73e8] font-medium text-[#202124]" : "border-transparent text-[#5f6368] hover:text-[#202124]"}`}>
+    <button onClick={onClick} className={`flex h-[42px] items-center gap-2 border-b-2 px-2 text-[13px] ${active ? "border-[#167d57] font-medium text-[#126543]" : "border-transparent text-[#69717a] hover:text-[#25292e]"}`}>
       {icon}
       {label}
     </button>
@@ -126,13 +128,13 @@ function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: 
     return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun article d’aide dans cette vue.</div>;
   }
   return (
-    <div className="overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
+    <OperationTable className="overflow-hidden rounded-[6px] border border-[#d3d8dd]">
       <div className="grid grid-cols-[220px_1fr_80px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
         <span>Catégorie</span><span>Article</span><span />
       </div>
       {articles.map((article) => (
-        <button key={article.id} onClick={() => open(article)} className="grid w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-3 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
-          <span className="font-medium text-[#1a73e8]">{article.category}</span>
+        <button key={article.id} onClick={() => open(article)} className="grid min-h-11 w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-2 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
+          <span className="font-medium text-[#167d57]">{article.category}</span>
           <span>
             <span className="block font-medium text-[#202124]">{article.title}</span>
             <span className="mt-1 line-clamp-1 text-[#6b7075]">{article.summary}</span>
@@ -140,7 +142,7 @@ function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: 
           <ChevronRight size={16} className="justify-self-end text-[#6b7075]" />
         </button>
       ))}
-    </div>
+    </OperationTable>
   );
 }
 
@@ -149,26 +151,26 @@ function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) 
     return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun ticket dans cette vue.</div>;
   }
   return (
-    <div className="overflow-auto rounded-[6px] border border-[#d3d3d0] bg-white shadow-sm">
+    <OperationTable className="rounded-[6px] border border-[#d3d8dd]">
       <table className="w-full whitespace-nowrap text-left text-[12px]">
         <thead className="border-b border-[#d9d9d6] bg-[#f7f7f5] text-[#5f6368]">
           <tr>{["Référence", "Sujet", "Priorité", "Statut", "SLA", "Messages", "Mise à jour"].map((item) => <th className="px-4 py-2 font-medium" key={item}>{item}</th>)}</tr>
         </thead>
         <tbody>
           {tickets.map((ticket) => (
-            <tr key={ticket.id} className="cursor-pointer border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]" onClick={() => open(ticket.id)}>
-              <td className="px-4 py-3 font-semibold">{ticket.ticket_reference}</td>
-              <td className="px-4 py-3">{ticket.subject}</td>
-              <td className="px-4 py-3">{ticket.priority}</td>
-              <td className="px-4 py-3">{ticket.status}</td>
-              <td className={`px-4 py-3 ${ticket.first_response_overdue || ticket.resolution_overdue ? "text-red-700" : "text-emerald-700"}`}>{ticket.first_response_overdue || ticket.resolution_overdue ? "Dépassé" : "Dans le délai"}</td>
-              <td className="px-4 py-3">{ticket.message_count}</td>
-              <td className="px-4 py-3">{new Date(ticket.updated_at).toLocaleDateString("fr-FR")}</td>
+            <tr key={ticket.id} className="h-11 cursor-pointer border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]" onClick={() => open(ticket.id)}>
+              <td className="px-4 py-2 font-semibold">{ticket.ticket_reference}</td>
+              <td className="px-4 py-2">{ticket.subject}</td>
+              <td className="px-4 py-2">{ticket.priority}</td>
+              <td className="px-4 py-2">{ticket.status}</td>
+              <td className={`px-4 py-2 ${ticket.first_response_overdue || ticket.resolution_overdue ? "text-red-700" : "text-emerald-700"}`}>{ticket.first_response_overdue || ticket.resolution_overdue ? "Dépassé" : "Dans le délai"}</td>
+              <td className="px-4 py-2">{ticket.message_count}</td>
+              <td className="px-4 py-2">{new Date(ticket.updated_at).toLocaleDateString("fr-FR")}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+    </OperationTable>
   );
 }
 
@@ -190,7 +192,7 @@ function Create({ close, done }: { close: () => void; done: (id: string) => void
     }
   }
   return (
-    <Dialog title="New ticket" close={close}>
+    <OperationDrawer open title="Nouveau ticket" description="Décrivez la demande afin de la transmettre au support Slaivio." close={close} width="max-w-[620px]">
       <form onSubmit={submit} className="grid gap-3">
         <input required minLength={5} name="subject" className={input} placeholder="Objet de la demande" />
         <div className="grid grid-cols-2 gap-2">
@@ -199,9 +201,9 @@ function Create({ close, done }: { close: () => void; done: (id: string) => void
         </div>
         <textarea required minLength={10} name="description" rows={7} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Décrivez le problème." />
         {error && <p className="text-[13px] text-red-700">{error}</p>}
-        <button className={primary}>Create ticket</button>
+        <button className={`${primary} justify-center`}>Créer le ticket</button>
       </form>
-    </Dialog>
+    </OperationDrawer>
   );
 }
 
@@ -232,9 +234,7 @@ function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => 
     }
   }
   return (
-    <Panel close={close}>
-      <small className="text-[#6b7075]">{ticket.ticket_reference} · {ticket.status}</small>
-      <h2 className="mt-1 text-[22px] font-semibold">{ticket.subject}</h2>
+    <Panel close={close} title={ticket.subject} description={`${ticket.ticket_reference} · ${ticket.status}`}>
       <p className="mt-1 text-[12px] text-[#6b7075]">{ticket.priority} · réponse avant {ticket.first_response_due_at ? new Date(ticket.first_response_due_at).toLocaleString("fr-FR") : "—"}</p>
       {error && <p className="mt-3 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
       <div className="mt-5 overflow-hidden rounded-[6px] border border-[#d3d3d0] bg-white">
@@ -268,24 +268,10 @@ function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => 
   );
 }
 
-function Panel({ close, children }: { close: () => void; children: React.ReactNode }) {
+function Panel({ close, children, title = "Support Slaivio", description = "Article, ticket et historique de la demande." }: { close: () => void; children: React.ReactNode; title?: string; description?: string }) {
   return (
-    <OperationDrawer open close={close} title="Support Slaivio" description="Article, ticket et historique de la demande." width="max-w-2xl">
+    <OperationDrawer open close={close} title={title} description={description} width="max-w-2xl">
       {children}
     </OperationDrawer>
-  );
-}
-
-function Dialog({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
-      <section className="w-full max-w-xl rounded-[6px] border border-[#d3d3d0] bg-white p-5 shadow-2xl">
-        <div className="mb-4 flex justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={close} className="rounded-[4px] p-1 hover:bg-[#f0f0ef]"><X size={18} /></button>
-        </div>
-        {children}
-      </section>
-    </div>
   );
 }

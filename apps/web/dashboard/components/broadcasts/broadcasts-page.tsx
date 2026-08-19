@@ -1,7 +1,11 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ChevronRight, Download, Plus, Search } from "lucide-react";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
+import { OperationTable } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { listClients } from "@/services/clients";
 import {
@@ -132,32 +136,6 @@ export function BroadcastsPage() {
             </button>
           </>
         }
-        tabs={
-          <div className="flex items-end gap-1">
-            {tabs.slice(0, 4).map(([v, l]) => (
-              <button
-                key={v}
-                onClick={() => setStatus(v)}
-                className={`h-10 border-b-2 px-3 text-[12px] ${status === v ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
-              >
-                {l}
-              </button>
-            ))}
-            <select
-              aria-label="Autres vues"
-              value={tabs.slice(4).some(([v]) => v === status) ? status : ""}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              {tabs.slice(4).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
       />
       <section className="bg-white px-5 py-4">
         <div
@@ -184,6 +162,32 @@ export function BroadcastsPage() {
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
       </section>
+      <OperationTabs>
+        <div className="flex items-end gap-1">
+            {tabs.slice(0, 4).map(([v, l]) => (
+              <button
+                key={v}
+                onClick={() => setStatus(v)}
+                className={`h-10 border-b-2 px-3 text-[12px] ${status === v ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
+              >
+                {l}
+              </button>
+            ))}
+            <select
+              aria-label="Autres vues"
+              value={tabs.slice(4).some(([v]) => v === status) ? status : ""}
+              onChange={(e) => setStatus(e.target.value)}
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+            >
+              <option value="">Plus</option>
+              {tabs.slice(4).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+        </div>
+      </OperationTabs>
       <div className="flex gap-2 border-b bg-white p-4">
         <label className="flex h-9 flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
           <Search size={14} />
@@ -210,7 +214,7 @@ export function BroadcastsPage() {
         </select>
       </div>
       {error && <p className="m-4 bg-red-50 p-3 text-red-700">{error}</p>}
-      <div className="min-h-[460px] overflow-x-auto bg-white">
+      <OperationTable className="min-h-[460px]">
         <table className="w-full min-w-[980px] border-collapse bg-white text-left text-[13px]">
           <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
             <tr className="border-b border-[#e6e9ee]">
@@ -271,7 +275,7 @@ export function BroadcastsPage() {
             Aucune campagne dans cette vue.
           </div>
         )}
-      </div>
+      </OperationTable>
       {selected && (
         <OperationDrawer
           open

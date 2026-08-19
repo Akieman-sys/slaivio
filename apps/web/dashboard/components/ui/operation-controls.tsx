@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Ellipsis } from "lucide-react";
+import { Check, Ellipsis, SlidersHorizontal, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -142,6 +143,103 @@ export function OperationTabMenu<T extends string>({
               </button>
             );
           })}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+export function OperationFilterPopover({
+  open: controlledOpen,
+  onOpenChange,
+  activeCount = 0,
+  onReset,
+  children,
+  title = "Filtrer les résultats",
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  activeCount?: number;
+  onReset: () => void;
+  children: ReactNode;
+  title?: string;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = useCallback((next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  }, [controlledOpen, onOpenChange]);
+  const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const anchor = root.current?.getBoundingClientRect();
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!root.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const closeOnResize = () => setOpen(false);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("resize", closeOnResize);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", closeOnResize);
+    };
+  }, [open, setOpen]);
+
+  const panelWidth = Math.min(380, typeof window === "undefined" ? 380 : window.innerWidth - 16);
+  const left = anchor
+    ? Math.max(8, Math.min(anchor.right - panelWidth, window.innerWidth - panelWidth - 8))
+    : 8;
+
+  return (
+    <div ref={root} className="relative">
+      <OperationButton
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className={open ? "border-[#9ed8bc] bg-[#edf8f2] text-[#087a46]" : ""}
+      >
+        <SlidersHorizontal size={15} />
+        Filtres
+        {activeCount > 0 && (
+          <span className="rounded-full bg-[#d9f3e5] px-1.5 py-0.5 text-[10px] font-bold text-[#087a46]">
+            {activeCount}
+          </span>
+        )}
+      </OperationButton>
+      {open && anchor && createPortal(
+        <div
+          ref={panel}
+          role="dialog"
+          aria-label={title}
+          className="fixed z-[90] overflow-hidden rounded-[10px] border border-[#d9dde1] bg-white shadow-[0_18px_48px_rgba(15,23,42,.18)]"
+          style={{ top: anchor.bottom + 7, left, width: panelWidth }}
+        >
+          <header className="flex min-h-12 items-center justify-between border-b border-[#e6e9ec] px-4">
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#293139]">{title}</h3>
+              {activeCount > 0 && <p className="text-[11px] text-[#73808a]">{activeCount} critère{activeCount > 1 ? "s" : ""} actif{activeCount > 1 ? "s" : ""}</p>}
+            </div>
+            <button type="button" onClick={() => setOpen(false)} className="grid h-8 w-8 place-items-center rounded-[6px] text-[#65707a] hover:bg-[#f1f3f4]" aria-label="Fermer les filtres">
+              <X size={16} />
+            </button>
+          </header>
+          <div className="grid max-h-[min(62vh,520px)] gap-4 overflow-y-auto p-4">
+            {children}
+          </div>
+          <footer className="flex items-center justify-between border-t border-[#e6e9ec] bg-[#fafbfb] px-4 py-3">
+            <button type="button" onClick={onReset} className="text-[12px] font-semibold text-[#606b75] hover:text-[#252b31]">
+              Réinitialiser
+            </button>
+            <OperationButton type="button" variant="primary" onClick={() => setOpen(false)}>
+              Afficher les résultats
+            </OperationButton>
+          </footer>
         </div>,
         document.body,
       )}

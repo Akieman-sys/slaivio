@@ -21,8 +21,6 @@ import {
   PackageCheck,
   PackageSearch,
   Ruler,
-  Search,
-  SlidersHorizontal,
   Truck,
   Upload,
   Warehouse,
@@ -34,6 +32,8 @@ import { API_BASE_URL } from "@/services/api";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
+  OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
@@ -309,6 +309,7 @@ export function PackagesPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [fragileOnly, setFragileOnly] = useState(false);
+  const [filterWarehouses, setFilterWarehouses] = useState<ReferenceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -356,7 +357,31 @@ export function PackagesPage() {
 
   useEffect(() => {
     loadStats();
+    getReferenceCatalog()
+      .then((catalog) => setFilterWarehouses(catalog.warehouses))
+      .catch(() => setFilterWarehouses([]));
   }, []);
+
+  const activeFilterCount = [status, warehouseFilter, payment, priorityFilter]
+    .filter(Boolean).length + (fragileOnly ? 1 : 0) + (sort !== "updated_desc" ? 1 : 0);
+
+  function resetFilters() {
+    setStatus("");
+    setCondition("");
+    setInventory("");
+    setPayment("");
+    setValidation("");
+    setPackageType("");
+    setSource("");
+    setSort("updated_desc");
+    setWarehouseFilter("");
+    setZoneFilter("");
+    setCountryFilter("");
+    setCityFilter("");
+    setCategoryFilter("");
+    setPriorityFilter("");
+    setFragileOnly(false);
+  }
 
   useEffect(() => {
     if (!selected || activeTab !== "history") return;
@@ -747,174 +772,60 @@ export function PackagesPage() {
         <section className={selected ? "xl:pr-[380px]" : ""}>
           <OperationToolbar
             search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un colis…" />}
-            filters={<OperationButton onClick={() => setFiltersOpen((value) => !value)} aria-expanded={filtersOpen}><SlidersHorizontal size={15} />Filtres</OperationButton>}
+            filters={
+              <OperationFilterPopover
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                activeCount={activeFilterCount}
+                onReset={resetFilters}
+                title="Filtrer les colis"
+              >
+                <OperationField label="Étape du colis">
+                  <select value={status} onChange={(event) => setStatus(event.target.value as PackageStatus | "")} className={inputClass}>
+                    <option value="">Toutes les étapes</option>
+                    {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <OperationField label="Entrepôt">
+                  <select value={warehouseFilter} onChange={(event) => setWarehouseFilter(event.target.value)} className={inputClass}>
+                    <option value="">Tous les entrepôts</option>
+                    {filterWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.label}>{warehouse.label}</option>)}
+                  </select>
+                </OperationField>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <OperationField label="Paiement">
+                    <select value={payment} onChange={(event) => setPayment(event.target.value as PaymentClearanceStatus | "")} className={inputClass}>
+                      <option value="">Toutes les situations</option>
+                      {Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </OperationField>
+                  <OperationField label="Priorité">
+                    <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className={inputClass}>
+                      <option value="">Toutes</option>
+                      <option value="LOW">Basse</option>
+                      <option value="NORMAL">Normale</option>
+                      <option value="HIGH">Haute</option>
+                      <option value="URGENT">Urgente</option>
+                    </select>
+                  </OperationField>
+                </div>
+                <OperationField label="Ordre d’affichage">
+                  <select value={sort} onChange={(event) => setSort(event.target.value)} className={inputClass}>
+                    <option value="updated_desc">Activité récente</option>
+                    <option value="created_desc">Créés récemment</option>
+                    <option value="created_asc">Créés anciennement</option>
+                    <option value="reference_asc">Référence A-Z</option>
+                    <option value="client_asc">Client A-Z</option>
+                    <option value="weight_desc">Poids le plus élevé</option>
+                  </select>
+                </OperationField>
+                <label className="flex min-h-10 items-center gap-3 rounded-[7px] bg-[#f6f8f7] px-3 text-[13px] font-medium text-[#3d474f]">
+                  <input type="checkbox" checked={fragileOnly} onChange={(event) => setFragileOnly(event.target.checked)} className="h-4 w-4 rounded border-[#c9d0d8]" />
+                  Afficher uniquement les colis fragiles
+                </label>
+              </OperationFilterPopover>
+            }
           />
-          {filtersOpen && (
-            <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
-              <SelectFilter
-                value={status}
-                onChange={(value) => setStatus(value as PackageStatus | "")}
-                label="Statut"
-              >
-                <option value="">Statut</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={condition}
-                onChange={(value) =>
-                  setCondition(value as PackageCondition | "")
-                }
-                label="État"
-              >
-                <option value="">État colis</option>
-                {Object.entries(conditionLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={inventory}
-                onChange={(value) =>
-                  setInventory(value as InventoryStatus | "")
-                }
-                label="Stock"
-              >
-                <option value="">Stock</option>
-                {Object.entries(inventoryLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={payment}
-                onChange={(value) =>
-                  setPayment(value as PaymentClearanceStatus | "")
-                }
-                label="Paiement"
-              >
-                <option value="">Paiement</option>
-                {Object.entries(paymentLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={validation}
-                onChange={(value) =>
-                  setValidation(value as PackageValidationStatus | "")
-                }
-                label="Validation"
-              >
-                <option value="">Validation</option>
-                {Object.entries(validationLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={packageType}
-                onChange={(value) => setPackageType(value as PackageType | "")}
-                label="Type"
-              >
-                <option value="">Type</option>
-                {Object.entries(packageTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={source}
-                onChange={(value) => setSource(value as PackageSource | "")}
-                label="Source"
-              >
-                <option value="">Source</option>
-                {Object.entries(sourceLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter value={sort} onChange={setSort} label="Tri">
-                <option value="updated_desc">Activité récente</option>
-                <option value="created_desc">Créés récemment</option>
-                <option value="created_asc">Créés anciennement</option>
-                <option value="reference_asc">Référence A-Z</option>
-                <option value="client_asc">Client A-Z</option>
-                <option value="weight_desc">Poids élevé</option>
-              </SelectFilter>
-              <label className="hidden">
-                <Search size={16} className="text-[#6b7280]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher..."
-                  className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-                />
-              </label>
-            </div>
-          )}
-          {filtersOpen && (
-            <div className="grid gap-2 border-b border-[#d8dce2] bg-[#fafafa] px-5 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-              <input
-                value={warehouseFilter}
-                onChange={(e) => setWarehouseFilter(e.target.value)}
-                className={inputClass}
-                placeholder="Entrepôt"
-              />
-              <input
-                value={zoneFilter}
-                onChange={(e) => setZoneFilter(e.target.value)}
-                className={inputClass}
-                placeholder="Zone"
-              />
-              <input
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-                className={inputClass}
-                placeholder="Pays"
-              />
-              <input
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
-                className={inputClass}
-                placeholder="Ville"
-              />
-              <input
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className={inputClass}
-                placeholder="Catégorie"
-              />
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Priorité</option>
-                <option value="LOW">Basse</option>
-                <option value="NORMAL">Normale</option>
-                <option value="HIGH">Haute</option>
-                <option value="URGENT">Urgente</option>
-              </select>
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={fragileOnly}
-                  onChange={(e) => setFragileOnly(e.target.checked)}
-                />
-                Fragiles uniquement
-              </label>
-            </div>
-          )}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -3961,35 +3872,6 @@ function SelectInput({
           </option>
         ))}
       </select>
-    </label>
-  );
-}
-
-function SelectFilter({
-  value,
-  onChange,
-  label,
-  children,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="relative inline-flex h-8 min-w-[118px] items-center">
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-full appearance-none rounded-md border border-[#cfd5dd] bg-white px-3 pr-8 text-[13px] font-medium text-[#1f2328] shadow-sm outline-none transition hover:bg-[#f7f8fa] focus:border-[#2f7df6]"
-      >
-        {children}
-      </select>
-      <ChevronRight
-        size={14}
-        className="pointer-events-none absolute right-2 rotate-90 text-[#687584]"
-      />
     </label>
   );
 }

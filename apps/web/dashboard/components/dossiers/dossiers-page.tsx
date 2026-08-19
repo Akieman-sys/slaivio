@@ -14,8 +14,6 @@ import {
   Bell,
   Package,
   RotateCcw,
-  Search,
-  SlidersHorizontal,
   Upload,
   Trash2,
   Truck,
@@ -30,6 +28,8 @@ import {
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
+  OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
@@ -187,6 +187,8 @@ const buttonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
 const pagerButtonClass =
   "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
+const inputClass =
+  "h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]";
 
 type Pagination = {
   page: number;
@@ -598,81 +600,53 @@ export function DossiersPage() {
         <section>
           <OperationToolbar
             search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un dossier…" />}
-            filters={<OperationButton onClick={() => setFiltersOpen((value) => !value)} aria-expanded={filtersOpen}><SlidersHorizontal size={15} />Filtres</OperationButton>}
+            filters={
+              <OperationFilterPopover
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                activeCount={[caseType, status, validation, payment].filter(Boolean).length + (sort !== "updated_desc" ? 1 : 0)}
+                onReset={() => { setCaseType(""); setStatus(""); setValidation(""); setPayment(""); setSort("updated_desc"); }}
+                title="Filtrer les dossiers"
+              >
+                <OperationField label="Nature du dossier">
+                  <select value={caseType} onChange={(event) => setCaseType(event.target.value as DossierCaseType | "")} className={inputClass}>
+                    <option value="">Toutes les natures</option>
+                    {Object.entries(caseTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <OperationField label="Étape du dossier">
+                  <select value={status} onChange={(event) => setStatus(event.target.value as DossierStatus | "")} className={inputClass}>
+                    <option value="">Toutes les étapes</option>
+                    {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <OperationField label="Validation">
+                    <select value={validation} onChange={(event) => setValidation(event.target.value as DossierValidationStatus | "")} className={inputClass}>
+                      <option value="">Toutes</option>
+                      {Object.entries(validationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </OperationField>
+                  <OperationField label="Paiement">
+                    <select value={payment} onChange={(event) => setPayment(event.target.value as DossierPaymentStatus | "")} className={inputClass}>
+                      <option value="">Toutes</option>
+                      {Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </OperationField>
+                </div>
+                <OperationField label="Ordre d’affichage">
+                  <select value={sort} onChange={(event) => setSort(event.target.value)} className={inputClass}>
+                    <option value="updated_desc">Activité récente</option>
+                    <option value="created_desc">Créés récemment</option>
+                    <option value="created_asc">Créés anciennement</option>
+                    <option value="reference_asc">Référence A-Z</option>
+                    <option value="client_asc">Client A-Z</option>
+                    <option value="amount_desc">Montant le plus élevé</option>
+                  </select>
+                </OperationField>
+              </OperationFilterPopover>
+            }
           />
-          {filtersOpen && (
-            <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
-              <SelectFilter
-                value={caseType}
-                onChange={(value) => setCaseType(value as DossierCaseType | "")}
-                label="Type"
-              >
-                <option value="">Type</option>
-                {Object.entries(caseTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={status}
-                onChange={(value) => setStatus(value as DossierStatus | "")}
-                label="Statut"
-              >
-                <option value="">Statut</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={validation}
-                onChange={(value) =>
-                  setValidation(value as DossierValidationStatus | "")
-                }
-                label="Validation"
-              >
-                <option value="">Validation</option>
-                {Object.entries(validationLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={payment}
-                onChange={(value) =>
-                  setPayment(value as DossierPaymentStatus | "")
-                }
-                label="Paiement"
-              >
-                <option value="">Paiement</option>
-                {Object.entries(paymentLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter value={sort} onChange={setSort} label="Tri">
-                <option value="updated_desc">Activité récente</option>
-                <option value="created_desc">Créés récemment</option>
-                <option value="created_asc">Créés anciennement</option>
-                <option value="reference_asc">Référence A-Z</option>
-                <option value="client_asc">Client A-Z</option>
-                <option value="amount_desc">Montant élevé</option>
-              </SelectFilter>
-              <label className="hidden">
-                <Search size={16} className="text-[#6b7280]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher..."
-                  className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-                />
-              </label>
-            </div>
-          )}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -2106,31 +2080,6 @@ function PaymentBadge({ status }: { status: DossierPaymentStatus }) {
     >
       {paymentLabels[status] || status}
     </span>
-  );
-}
-
-function SelectFilter({
-  value,
-  onChange,
-  label,
-  children,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="relative">
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 rounded-md border border-[#cfd5dd] bg-white px-3 pr-8 text-[13px] text-[#1f2328] shadow-sm outline-none focus:border-[#2f7df6]"
-      >
-        {children}
-      </select>
-    </label>
   );
 }
 

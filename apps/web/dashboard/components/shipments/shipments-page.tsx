@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Filter,
   Loader2,
   MoreHorizontal,
   Plane,
@@ -24,7 +23,7 @@ import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -387,61 +386,68 @@ export function ShipmentsPage() {
               </div>
             </OperationTabs>
 
-            <OperationToolbar search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher une expédition…" />}>
-                <button
-                  className={buttonClass}
-                  onClick={() => setFiltersOpen((value) => !value)}
+            <OperationToolbar
+              search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher une expédition…" />}
+              filters={
+                <OperationFilterPopover
+                  open={filtersOpen}
+                  onOpenChange={setFiltersOpen}
+                  activeCount={[status, mode, risk].filter(Boolean).length + (sort !== "updated_desc" ? 1 : 0)}
+                  onReset={() => { setStatus(""); setMode(""); setRisk(""); setSort("updated_desc"); }}
+                  title="Filtrer les expéditions"
                 >
-                  <Filter size={15} />
-                  Filtres
-                </button>
-              {filtersOpen && (
-                <div className="basis-full flex flex-wrap items-center gap-2 rounded-md bg-[#f6f7f8] p-3">
+                  <OperationField label="Étape de l’expédition">
                   <select
-                    className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"
+                    className="h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]"
                     value={status}
                     onChange={(event) =>
                       setStatus(event.target.value as ExpeditionStatus | "")
                     }
                     disabled={Boolean(currentView.status)}
                   >
-                    <option value="">Statut</option>
+                    <option value="">Toutes les étapes</option>
                     {Object.entries(statusLabels).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}
                       </option>
                     ))}
                   </select>
+                  </OperationField>
+                  <OperationField label="Mode de transport">
                   <select
-                    className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"
+                    className="h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]"
                     value={mode}
                     onChange={(event) =>
                       setMode(event.target.value as ExpeditionMode | "")
                     }
                   >
-                    <option value="">Mode</option>
+                    <option value="">Tous les modes</option>
                     {Object.entries(modeLabels).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}
                       </option>
                     ))}
                   </select>
+                  </OperationField>
+                  <OperationField label="Niveau de risque">
                   <select
-                    className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"
+                    className="h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]"
                     value={risk}
                     onChange={(event) =>
                       setRisk(event.target.value as RiskLevel | "")
                     }
                   >
-                    <option value="">Risque</option>
+                    <option value="">Tous les niveaux</option>
                     {Object.entries(riskLabels).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}
                       </option>
                     ))}
                   </select>
+                  </OperationField>
+                  <OperationField label="Ordre d’affichage">
                   <select
-                    className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"
+                    className="h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]"
                     value={sort}
                     onChange={(event) => setSort(event.target.value)}
                   >
@@ -450,9 +456,10 @@ export function ShipmentsPage() {
                     <option value="created_desc">Création récente</option>
                     <option value="reference_asc">Référence A-Z</option>
                   </select>
-                </div>
-              )}
-            </OperationToolbar>
+                  </OperationField>
+                </OperationFilterPopover>
+              }
+            />
 
             {error ? <ErrorState title="Expéditions indisponibles" description={error} /> : null}
 

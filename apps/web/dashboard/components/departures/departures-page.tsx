@@ -20,6 +20,8 @@ import {
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
+  OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
@@ -220,35 +222,7 @@ export function DeparturesPage() {
               placeholder="Rechercher un départ, une route..."
             />
           }
-          filters={
-            <select
-              className={`${input} w-52`}
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-            >
-              <option value="">Tous les services de l’agence</option>
-              {Array.from(
-                new Set(
-                  services
-                    .map((service) => service.shipping_mode)
-                    .filter(Boolean),
-                ),
-              ).map((serviceMode) => (
-                <option key={serviceMode} value={serviceMode}>
-                  {(
-                    {
-                      AIR: "Avion",
-                      SEA: "Bateau",
-                      EXPRESS: "Express",
-                      ROAD: "Route",
-                      RAIL: "Rail",
-                      MULTIMODAL: "Plusieurs modes",
-                    } as Record<string, string>
-                  )[serviceMode] || serviceMode}
-                </option>
-              ))}
-            </select>
-          }
+          filters={<OperationFilterPopover activeCount={mode ? 1 : 0} onReset={() => setMode("")} title="Filtrer les départs"><OperationField label="Mode proposé par l’agence"><select className={`${input} w-full`} value={mode} onChange={(e) => setMode(e.target.value)}><option value="">Tous les modes</option>{Array.from(new Set(services.map((service) => service.shipping_mode).filter(Boolean))).map((serviceMode) => <option key={serviceMode} value={serviceMode}>{({AIR:"Avion",SEA:"Bateau",EXPRESS:"Express",ROAD:"Route",RAIL:"Rail",MULTIMODAL:"Plusieurs modes"} as Record<string,string>)[serviceMode] || serviceMode}</option>)}</select></OperationField></OperationFilterPopover>}
         />
         {error && <ErrorState title="Calendrier indisponible" description={error} retry={load} />}
         {loading ? (

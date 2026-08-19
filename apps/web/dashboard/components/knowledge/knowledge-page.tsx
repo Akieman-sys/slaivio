@@ -29,7 +29,7 @@ import {
   OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -313,21 +313,7 @@ export function KnowledgePage() {
                   placeholder="Titre, contenu, tag, route, service…"
                 />
               }
-              filters={
-                <select
-                  className={`${input} w-52`}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c === "ALL"
-                        ? "Toutes les catégories"
-                        : categoryLabels[c] || c}
-                    </option>
-                  ))}
-                </select>
-              }
+              filters={<OperationFilterPopover activeCount={category !== "ALL" ? 1 : 0} onReset={() => setCategory("ALL")} title="Filtrer les connaissances"><OperationField label="Catégorie"><select className={`${input} w-full`} value={category} onChange={(e) => setCategory(e.target.value)}>{categories.map((c) => <option key={c} value={c}>{c === "ALL" ? "Toutes les catégories" : categoryLabels[c] || c}</option>)}</select></OperationField></OperationFilterPopover>}
             />
             {loading ? (
               <TableSkeleton rows={7} columns={9} label="Chargement des connaissances…" />

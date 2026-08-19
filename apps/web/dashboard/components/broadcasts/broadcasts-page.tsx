@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients } from "@/services/clients";
 import {
@@ -174,20 +174,7 @@ export function BroadcastsPage() {
               onChange={setStatus}
             />
       </OperationTabs>
-      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<select
-          className={`${field} w-44`}
-          value={channel}
-          onChange={(event) => setChannel(event.target.value)}
-        >
-          <option value="">Tous les canaux</option>
-          {Array.from(
-            new Set(items.flatMap((item) => item.channels || [])),
-          ).map((value) => (
-            <option key={value} value={value}>
-              {channelLabels[value] || value}
-            </option>
-          ))}
-        </select>} />
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<OperationFilterPopover activeCount={channel ? 1 : 0} onReset={() => setChannel("")} title="Filtrer les campagnes"><OperationField label="Canal d’envoi"><select className={`${field} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option>{Array.from(new Set(items.flatMap((item) => item.channels || []))).map((value) => <option key={value} value={value}>{channelLabels[value] || value}</option>)}</select></OperationField></OperationFilterPopover>} />
       {error && <ErrorState title="Campagnes indisponibles" description={error} retry={load} />}
       {loading ? <TableSkeleton rows={7} columns={7} label="Chargement des campagnes…" /> : items.length ? <OperationTable className="min-h-[460px]">
         <table className="w-full min-w-[980px] border-collapse bg-white text-left text-[13px]">

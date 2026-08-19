@@ -4,7 +4,6 @@ import axios from "axios";
 import {
   AlertCircle,
   Archive,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -18,7 +17,6 @@ import {
   Package,
   Phone,
   Search,
-  SlidersHorizontal,
   RotateCcw,
   ShieldAlert,
   Truck,
@@ -37,6 +35,8 @@ import {
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
+  OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
@@ -142,6 +142,8 @@ const iconButtonClass =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[#4f5b67] transition hover:border-[#d8dce2] hover:bg-[#f4f6f8]";
 const pagerButtonClass =
   "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
+const inputClass =
+  "h-10 w-full rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] outline-none focus:border-[#12a865]";
 
 type Pagination = {
   page: number;
@@ -588,68 +590,44 @@ export function ClientsPage() {
         <section>
           <OperationToolbar
             search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un client…" />}
-            filters={<OperationButton onClick={() => setFiltersOpen((value) => !value)} aria-expanded={filtersOpen}><SlidersHorizontal size={15} />Filtres</OperationButton>}
+            filters={
+              <OperationFilterPopover
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                activeCount={[customerType, status, source].filter(Boolean).length + (sort !== "created_desc" ? 1 : 0)}
+                onReset={() => { setCustomerType(""); setStatus(""); setSource(""); setSort("created_desc"); }}
+                title="Filtrer les clients"
+              >
+                <OperationField label="Type de client">
+                  <select value={customerType} onChange={(event) => setCustomerType(event.target.value as ClientCustomerType | "")} className={inputClass}>
+                    <option value="">Tous les types</option>
+                    {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <OperationField label="Relation avec l’agence">
+                  <select value={status} onChange={(event) => setStatus(event.target.value as ClientLifecycleStatus | "")} className={inputClass}>
+                    <option value="">Toutes les situations</option>
+                    {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <OperationField label="Origine du contact">
+                  <select value={source} onChange={(event) => setSource(event.target.value as ClientSource | "")} className={inputClass}>
+                    <option value="">Toutes les sources</option>
+                    {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </OperationField>
+                <OperationField label="Ordre d’affichage">
+                  <select value={sort} onChange={(event) => setSort(event.target.value)} className={inputClass}>
+                    <option value="created_desc">Créés récemment</option>
+                    <option value="created_asc">Créés anciennement</option>
+                    <option value="name_asc">Nom A-Z</option>
+                    <option value="name_desc">Nom Z-A</option>
+                    <option value="activity_desc">Activité récente</option>
+                  </select>
+                </OperationField>
+              </OperationFilterPopover>
+            }
           />
-          {filtersOpen && (
-            <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
-              <SelectFilter
-                value={customerType}
-                onChange={(value) =>
-                  setCustomerType(value as ClientCustomerType | "")
-                }
-                label="Type"
-              >
-                <option value="">Type</option>
-                {Object.entries(typeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={status}
-                onChange={(value) =>
-                  setStatus(value as ClientLifecycleStatus | "")
-                }
-                label="Statut"
-              >
-                <option value="">Statut</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter
-                value={source}
-                onChange={(value) => setSource(value as ClientSource | "")}
-                label="Source"
-              >
-                <option value="">Source</option>
-                {Object.entries(sourceLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFilter>
-              <SelectFilter value={sort} onChange={setSort} label="Tri">
-                <option value="created_desc">Créés récemment</option>
-                <option value="created_asc">Créés anciennement</option>
-                <option value="name_asc">Nom A-Z</option>
-                <option value="name_desc">Nom Z-A</option>
-                <option value="activity_desc">Activité récente</option>
-              </SelectFilter>
-              <label className="hidden">
-                <Search size={16} className="text-[#6b7280]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher..."
-                  className="ml-2 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-                />
-              </label>
-            </div>
-          )}
 
           {error && (
             <div className="m-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -1586,33 +1564,6 @@ function ImportClientsModal({
           </div>
         </form>
     </OperationDrawer>
-  );
-}
-
-function SelectFilter({
-  value,
-  onChange,
-  children,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="relative inline-flex h-8 min-w-[120px] items-center">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-full appearance-none rounded-md border border-[#cfd5dd] bg-white pl-3 pr-8 text-[13px] font-medium outline-none shadow-sm hover:bg-[#f8fafc] focus:border-[#2f7df6]"
-      >
-        {children}
-      </select>
-      <ChevronDown
-        size={14}
-        className="pointer-events-none absolute right-2 text-[#667085]"
-      />
-    </label>
   );
 }
 

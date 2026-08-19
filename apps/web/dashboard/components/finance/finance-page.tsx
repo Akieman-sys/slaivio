@@ -5,7 +5,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
@@ -159,25 +159,7 @@ export function FinancePage() {
             </OperationTab>
           ))}
         </OperationTabs>
-        <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Numéro, client, téléphone…" />} filters={<><select
-              className={input}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="">Tous les statuts</option>
-              {[
-                "DRAFT",
-                "ISSUED",
-                "PARTIALLY_PAID",
-                "PAID",
-                "OVERDUE",
-                "VOID",
-              ].map((x) => (
-                <option key={x} value={x}>
-                  {labels[x]}
-                </option>
-              ))}
-            </select><OperationButton onClick={load}>
+        <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Numéro, client, téléphone…" />} filters={<><OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer la facturation"><OperationField label="État du document"><select className={`${input} w-full`} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Tous les états</option>{["DRAFT","ISSUED","PARTIALLY_PAID","PAID","OVERDUE","VOID"].map((x) => <option key={x} value={x}>{labels[x]}</option>)}</select></OperationField></OperationFilterPopover><OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
             </OperationButton></>} />

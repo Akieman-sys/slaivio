@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, RefreshCcw } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { FormSection, OperationButton, OperationField, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
+import { FormSection, OperationButton, OperationField, OperationFilterPopover, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationContent, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
@@ -89,12 +89,7 @@ export function SupportCenterPage() {
       <OperationToolbar
         search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher un article ou un ticket" />}
         filters={
-          tab === "tickets" ? (
-            <select className={`${input} max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="">Tous les statuts</option>
-              {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item} value={item}>{ticketStatusLabel(item)}</option>)}
-            </select>
-          ) : undefined
+          tab === "tickets" ? <OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer les tickets"><OperationField label="État du ticket"><select className={input} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tous les états</option>{["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item} value={item}>{ticketStatusLabel(item)}</option>)}</select></OperationField></OperationFilterPopover> : undefined
         }
       />
 

@@ -14,6 +14,7 @@ import {
   FormSection,
   OperationButton,
   OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
 } from "@/components/ui/operation-controls";
@@ -229,20 +230,7 @@ export function BatchCenterPage() {
                 placeholder="Rechercher un batch, une route…"
               />
             }
-            filters={
-              <select
-                className={`${input} max-w-52`}
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="">Tous les statuts</option>
-                {Object.entries(labels).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            }
+            filters={<OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer les groupages"><OperationField label="Étape du groupage"><select className={`${input} w-full`} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Toutes les étapes</option>{Object.entries(labels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></OperationField></OperationFilterPopover>}
           />
           {error ? (
             <ErrorState title="Groupages indisponibles" description={error} retry={load} />

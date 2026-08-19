@@ -14,7 +14,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
+import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState, TableSkeleton } from "@/components/ui/page-state";
 import {
   checkInPickup,
@@ -201,18 +201,7 @@ export function PickupsPage() {
           </button>
         </OperationMetrics>
         <section className="overflow-hidden bg-white">
-          <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Téléphone, nom, colis ou tracking…" />} filters={<><select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className={input}
-            >
-              <option value="">Tous les statuts</option>
-              {Object.entries(labels).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select><OperationButton onClick={load}>
+          <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Téléphone, nom, colis ou tracking…" />} filters={<><OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer les retraits"><OperationField label="Étape du retrait"><select value={status} onChange={(e) => setStatus(e.target.value)} className={`${input} w-full`}><option value="">Toutes les étapes</option>{Object.entries(labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></OperationField></OperationFilterPopover><OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
             </OperationButton></>} />

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OperationButton,
   OperationField,
+  OperationFilterPopover,
   OperationMetric,
   OperationMetricGrid,
   OperationStatus,
@@ -52,5 +53,24 @@ describe("operational design primitives", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Analytics" }));
     expect(change).toHaveBeenCalledWith("analytics");
+  });
+
+  it("opens the shared filter panel and exposes reset and apply actions", () => {
+    const reset = vi.fn();
+    render(
+      <OperationFilterPopover activeCount={2} onReset={reset} title="Filtrer les colis">
+        <OperationField label="Entrepôt">
+          <select><option>Guangzhou</option></select>
+        </OperationField>
+      </OperationFilterPopover>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Filtres 2/i }));
+    expect(screen.getByRole("dialog", { name: "Filtrer les colis" })).toBeInTheDocument();
+    expect(screen.getByText("2 critères actifs")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+    expect(reset).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Afficher les résultats" }));
+    expect(screen.queryByRole("dialog", { name: "Filtrer les colis" })).not.toBeInTheDocument();
   });
 });

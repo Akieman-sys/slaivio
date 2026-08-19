@@ -6,7 +6,7 @@ import {
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
@@ -202,27 +202,7 @@ export function FollowupsPage() {
               onChange={setView}
             />
       </OperationTabs>
-      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<><select
-          className={`${input} w-44`}
-          value={channel}
-          onChange={(event) => setChannel(event.target.value)}
-        >
-          <option value="">Tous les canaux</option>
-          <option value="WHATSAPP">WhatsApp</option>
-          <option value="IN_APP">Tâches internes</option>
-          <option value="PHONE">Appels manuels</option>
-        </select><select
-          className={`${input} w-40`}
-          value={priority}
-          onChange={(event) => setPriority(event.target.value)}
-        >
-          <option value="">Toutes priorités</option>
-          {Object.entries(priorityLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select></>} />
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<OperationFilterPopover activeCount={[channel, priority].filter(Boolean).length} onReset={() => { setChannel(""); setPriority(""); }} title="Filtrer les relances"><OperationField label="Canal de contact"><select className={`${input} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option><option value="WHATSAPP">WhatsApp</option><option value="IN_APP">Tâches internes</option><option value="PHONE">Appels manuels</option></select></OperationField><OperationField label="Priorité"><select className={`${input} w-full`} value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Toutes les priorités</option>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></OperationField></OperationFilterPopover>} />
       {error && <ErrorState title="Relances indisponibles" description={error} retry={load} />}
       {loading ? (
         <TableSkeleton rows={7} columns={10} label="Chargement des relances…" />

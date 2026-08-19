@@ -32,6 +32,18 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "@/services/api";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
+  OperationButton,
+  OperationMetric,
+  OperationMetricGrid,
+  OperationTab,
+} from "@/components/ui/operation-controls";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { EmptyState as SharedEmptyState, TableSkeleton } from "@/components/ui/page-state";
+import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
@@ -685,54 +697,44 @@ export function PackagesPage() {
                   </button>
                 </div>
               </details>
-              <button
-                onClick={() => setImportOpen(true)}
-                className={buttonClass}
-              >
+              <OperationButton onClick={() => setImportOpen(true)}>
                 <Upload size={14} />
                 Importer
-              </button>
-              <button onClick={handleExport} className={buttonClass}>
+              </OperationButton>
+              <OperationButton onClick={handleExport}>
                 <Download size={14} />
                 Exporter
-              </button>
-              <button onClick={openCreate} className={primaryButtonClass}>
+              </OperationButton>
+              <OperationButton variant="primary" onClick={openCreate}>
                 <span className="text-lg leading-none">+</span>
                 Nouveau colis
-              </button>
+              </OperationButton>
             </>
           }
         />
 
-        <section className="bg-white px-5 py-4">
-          <div className="grid grid-cols-2 lg:grid-cols-6">
+        <OperationMetrics>
+          <OperationMetricGrid className="lg:grid-cols-6">
             {statCards.map((card) => (
-              <div
+              <OperationMetric
                 key={card.label}
-                className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
-              >
-                <p className="text-[12px] text-[#6b7580]">{card.label}</p>
-                <p className="mt-1 text-[24px] font-medium tracking-[-.035em]">
-                  {card.value.toLocaleString("fr-FR")}
-                </p>
-              </div>
+                label={card.label}
+                value={typeof card.value === "number" ? card.value.toLocaleString("fr-FR") : card.value}
+                tone={card.tone === "amber" ? "warning" : "default"}
+              />
             ))}
-          </div>
-        </section>
+          </OperationMetricGrid>
+        </OperationMetrics>
 
         <OperationTabs>
           {views.slice(0, 5).map((view) => (
-            <button
+            <OperationTab
               key={view.key}
               onClick={() => setActiveView(view.key)}
-              className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
-                activeView === view.key
-                  ? "border-[#12c76f] text-[#067a45]"
-                  : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
-              }`}
+              active={activeView === view.key}
             >
               {view.label}
-            </button>
+            </OperationTab>
           ))}
           <select
             aria-label="Autres vues colis"
@@ -754,27 +756,10 @@ export function PackagesPage() {
         </OperationTabs>
 
         <section className={selected ? "xl:pr-[380px]" : ""}>
-          <div className="border-y border-[#eceef1] px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-                <Search size={16} className="text-[#6b7280]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher un colis..."
-                  className="ml-3 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-                />
-              </label>
-              <button
-                onClick={() => setFiltersOpen((value) => !value)}
-                className={buttonClass}
-                aria-expanded={filtersOpen}
-              >
-                <SlidersHorizontal size={16} />
-                Filtres
-              </button>
-            </div>
-          </div>
+          <OperationToolbar
+            search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un colis…" />}
+            filters={<OperationButton onClick={() => setFiltersOpen((value) => !value)} aria-expanded={filtersOpen}><SlidersHorizontal size={15} />Filtres</OperationButton>}
+          />
           {filtersOpen && (
             <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
               <SelectFilter
@@ -1363,27 +1348,10 @@ function PackagesTable({
   onSelect: (item: PackageRecord) => void;
 }) {
   if (loading) {
-    return (
-      <div className="space-y-1 p-4">
-        {[0, 1, 2, 3, 4, 5].map((item) => (
-          <div
-            key={item}
-            className="h-11 animate-pulse rounded-md bg-[#eef1f5]"
-          />
-        ))}
-      </div>
-    );
+    return <TableSkeleton />;
   }
   if (packages.length === 0) {
-    return (
-      <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-        <h2 className="text-[18px] font-semibold">Aucun colis trouvé</h2>
-        <p className="mt-2 max-w-md text-[13px] leading-6 text-[#617083]">
-          Créez un colis depuis un dossier réel. Les réceptions, scans, photos
-          et événements apparaîtront ici dès qu’ils seront enregistrés.
-        </p>
-      </div>
-    );
+    return <SharedEmptyState title="Aucun colis trouvé" description="Créez un colis depuis un dossier réel ou ajustez les filtres de cette vue." />;
   }
 
   return (
@@ -3337,20 +3305,20 @@ function PackageFormModal({
           )}
 
           <div className="flex items-center justify-end gap-2 border-t border-[#d8dce2] px-5 py-4">
-            <button type="button" onClick={onClose} className={buttonClass}>
+            <OperationButton type="button" onClick={onClose}>
               Annuler
-            </button>
-            <button
+            </OperationButton>
+            <OperationButton
               type="submit"
+              variant="primary"
               disabled={saving}
-              className={primaryButtonClass}
             >
               {saving
                 ? "Enregistrement..."
                 : mode === "edit"
                   ? "Enregistrer"
                   : "Créer le colis"}
-            </button>
+            </OperationButton>
           </div>
         </form>
     </OperationDrawer>

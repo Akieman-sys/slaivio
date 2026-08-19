@@ -54,6 +54,7 @@ export function OrganizationSwitcher({ collapsed = false }: { collapsed?: boolea
     setError("");
     try {
       await switchTenant(tenant.org_id);
+      window.sessionStorage.removeItem("slaivio:dashboard-home");
       window.location.reload();
     } catch {
       setError("Changement impossible");

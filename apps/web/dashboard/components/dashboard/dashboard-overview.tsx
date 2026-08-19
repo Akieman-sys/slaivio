@@ -1,173 +1,112 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock3, MapPin, MessageCircleMore, RefreshCcw } from "lucide-react";
+import { ArrowRight, Bell, Building2, CheckCircle2, Clock3, MapPin, MessageCircleMore, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { getDashboardHome, type DashboardHome, type HomeAttentionItem, type HomeResource } from "@/services/dashboard";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationStatus } from "@/components/ui/operation-controls";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { ErrorState } from "@/components/ui/page-state";
+import { getDashboardHome, type DashboardHome, type HomeAttentionItem } from "@/services/dashboard";
+
+const dashboardCacheKey = "slaivio:dashboard-home";
 
 export function DashboardOverviewPage() {
-  const [data, setData] = useState<DashboardHome | null>(() => {
-    if (typeof window === "undefined") return null;
-    try { return JSON.parse(sessionStorage.getItem("slaivio:dashboard-home") || "null") as DashboardHome | null; } catch { return null; }
-  });
-  const [loading, setLoading] = useState(!data);
+  const [data, setData] = useState<DashboardHome | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepCurrent = true) => {
+    if (!keepCurrent) setData(null);
     setLoading(true);
     setError("");
     try {
       const next = await getDashboardHome();
       setData(next);
-      sessionStorage.setItem("slaivio:dashboard-home", JSON.stringify(next));
+      window.sessionStorage.setItem(dashboardCacheKey, JSON.stringify(next));
     } catch {
-      setError("Le tableau de bord n’a pas pu être chargé.");
+      setError("Le tableau de bord n’a pas pu être actualisé.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    try {
+      const cached = window.sessionStorage.getItem(dashboardCacheKey);
+      if (cached) setData(JSON.parse(cached) as DashboardHome);
+    } catch {
+      window.sessionStorage.removeItem(dashboardCacheKey);
+    }
+    void load(true);
+  }, [load]);
 
-  return (
-    <div className="min-h-full bg-[#f7f7f6]">
-      <header className="border-b border-[#dfe1e3] bg-white px-5 py-3.5 sm:px-6">
-        <div className="flex min-h-[44px] items-center justify-between gap-4">
-          <div>
-            <h1 className="text-[21px] font-semibold text-[#24282d]">
-              {data?.workspace.name ? `Vue d’ensemble · ${data.workspace.name}` : "Vue d’ensemble de l’agence"}
-            </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#69717a]">
-              <span>Les priorités opérationnelles de votre agence, au même endroit.</span>
-              {(data?.workspace.city || data?.workspace.country) && <span className="inline-flex items-center gap-1"><MapPin size={12} />{[data.workspace.city, data.workspace.country].filter(Boolean).join(", ")}</span>}
-            </div>
-          </div>
-          <button type="button" onClick={load} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d2d5d8] bg-white px-3 text-[13px] hover:bg-[#f2f3f3] disabled:opacity-60">
-            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} /> Actualiser
-          </button>
-        </div>
-      </header>
+  if (!data && loading) return <DashboardSkeleton />;
+  if (!data && error) return <ErrorState title="Accueil indisponible" description={error} retry={() => load(false)} />;
+  if (data?.status === "no_workspace") return <NoWorkspace />;
 
-      <main className="space-y-4 p-4 sm:p-5">
-        {error && (
-          <div className="flex items-center gap-3 rounded-[6px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
-            <AlertTriangle size={17} />{error}<button onClick={load} className="ml-auto font-medium underline">Réessayer</button>
-          </div>
-        )}
+  return <div className="min-h-full bg-[#f5f6f6]">
+    <OperationPageHeader
+      title={data?.workspace.name ? `Vue d’ensemble · ${data.workspace.name}` : "Vue d’ensemble de l’agence"}
+      description="Les priorités opérationnelles et les données réelles de votre agence, au même endroit."
+      actions={<OperationButton onClick={() => load(true)} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : ""} />Actualiser</OperationButton>}
+    />
 
-        {loading && !data ? <DashboardSkeleton /> : data?.status === "no_workspace" ? <NoWorkspace /> : (
-          <>
-            <section className="overflow-hidden border-y border-[#dfe1e3] bg-white" aria-labelledby="indicators-title">
-              <div className="flex min-h-10 items-center justify-between border-b border-[#eceeef] px-4">
-                <h2 id="indicators-title" className="text-[13px] font-semibold">Activité de l’agence</h2>
-                <span className="text-[11px] text-[#858b92]">Données en temps réel</span>
-              </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {(data?.resources || []).slice(0, 6).map((resource) => <ResourceMetric key={resource.key} resource={resource} />)}
-                {!data?.resources.length && <div className="col-span-full px-5 py-10 text-center text-[12px] text-[#858b92]">Aucun indicateur disponible.</div>}
-              </div>
-            </section>
+    <main className="grid gap-5 p-5 sm:p-6">
+      {(data?.workspace.city || data?.workspace.country) && <div className="flex items-center gap-1.5 text-[11px] text-[#727b84]"><MapPin size={13} />{[data.workspace.city, data.workspace.country].filter(Boolean).join(", ")}</div>}
 
-            <section className="grid border-y border-[#dfe1e3] bg-white sm:grid-cols-3" aria-label="État opérationnel">
-              <OperationalStatus label="Points à traiter" value={data?.attention_items.length || 0} detail="Retards, suivis et paiements" tone={(data?.attention_items.length || 0) > 0 ? "warning" : "success"} />
-              <OperationalStatus label="Notifications non lues" value={data?.unread_count || 0} detail="Mises à jour de l’agence" tone={(data?.unread_count || 0) > 0 ? "info" : "success"} />
-              <OperationalStatus label="Canal WhatsApp" value={data?.whatsapp.configured ? "Connecté" : "À configurer"} detail={data?.whatsapp.phone || "Communication client"} tone={data?.whatsapp.configured ? "success" : "neutral"} icon={<MessageCircleMore size={16} />} />
-            </section>
+      {error && <div className="flex items-center gap-3 rounded-[7px] border border-[#f1c7c3] bg-[#fff5f4] px-4 py-3 text-[12px] text-[#a52a22]"><span>{error} Les dernières données connues restent affichées.</span><button type="button" onClick={() => load(true)} className="ml-auto font-semibold">Réessayer</button></div>}
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
-              <section className="overflow-hidden border-y border-[#d9dcdf] bg-white" aria-labelledby="attention-title">
-                <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
-                  <Clock3 size={16} className="mr-2 text-[#646b73]" />
-                  <h2 id="attention-title" className="text-[13px] font-semibold">À traiter maintenant</h2>
-                  <span className="ml-2 rounded-full bg-[#f0f1f1] px-2 py-0.5 text-[10px] text-[#687079]">{data?.attention_items.length || 0}</span>
-                </div>
-                <div>
-                  {data?.attention_items.length ? data.attention_items.map((item) => <AttentionRow key={`${item.kind}-${item.id}`} item={item} />) : (
-                    <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
-                      <CheckCircle2 size={24} className="text-emerald-600" />
-                      <p className="mt-3 text-[13px] font-medium">Aucune urgence opérationnelle</p>
-                      <p className="mt-1 text-[11px] text-[#858b92]">Les retards, suivis et paiements à traiter apparaîtront ici.</p>
-                    </div>
-                  )}
-                </div>
-              </section>
+      <section aria-labelledby="dashboard-kpis">
+        <div className="mb-2 flex items-center justify-between"><h2 id="dashboard-kpis" className="text-[13px] font-semibold text-[#30363d]">Activité de l’agence</h2><span className="text-[11px] text-[#7a838d]">Données opérationnelles</span></div>
+        <OperationMetricGrid className="lg:grid-cols-6">
+          {(data?.resources || []).slice(0, 6).map((resource) => <Link key={resource.key} href={resource.href} className="group min-w-0"><OperationMetric label={resource.label || resource.name} value={resource.count ?? "—"} detail={resource.description} /></Link>)}
+        </OperationMetricGrid>
+      </section>
 
-              <section className="overflow-hidden border-y border-[#d9dcdf] bg-white" aria-labelledby="notifications-title">
-                <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
-                  <Bell size={16} className="mr-2 text-[#646b73]" />
-                  <h2 id="notifications-title" className="text-[13px] font-semibold">Notifications récentes</h2>
-                  {data?.unread_count ? <span className="ml-2 rounded-full bg-[#16855f] px-2 py-0.5 text-[10px] text-white">{data.unread_count}</span> : null}
-                  <Link href="/app/notifications" className="ml-auto text-[11px] font-medium text-[#145f49] hover:underline">Tout voir</Link>
-                </div>
-                <div>
-                  {data?.notifications.length ? data.notifications.slice(0, 6).map((item) => (
-                    <Link href="/app/notifications" key={item.id} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#16855f]"}`} />
-                      <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-[#727981]">{item.message}</span></span>
-                    </Link>
-                  )) : <p className="px-5 py-12 text-center text-[12px] text-[#858b92]">Aucune notification récente.</p>}
-                </div>
-              </section>
-            </div>
+      <section className="grid overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white sm:grid-cols-3" aria-label="État opérationnel">
+        <OperationalSummary label="Points à traiter" value={data?.attention_items.length || 0} detail="Retards, suivis et paiements" tone={(data?.attention_items.length || 0) > 0 ? "warning" : "success"} />
+        <OperationalSummary label="Notifications non lues" value={data?.unread_count || 0} detail="Mises à jour de l’agence" tone={(data?.unread_count || 0) > 0 ? "info" : "success"} />
+        <OperationalSummary label="Canal WhatsApp" value={data?.whatsapp.configured ? "Connecté" : "À configurer"} detail={data?.whatsapp.phone || "Communication client"} tone={data?.whatsapp.configured ? "success" : "neutral"} icon={<MessageCircleMore size={16} />} />
+      </section>
 
-            <section aria-labelledby="modules-title">
-              <h2 id="modules-title" className="mb-2.5 text-[13px] font-semibold">Accès rapide</h2>
-              <div className="grid overflow-hidden border-y border-[#d9dcdf] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {(data?.resources || []).map((resource) => (
-                  <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[#eaf7f1] text-[12px] font-semibold text-[#145f49]">{resource.name.slice(0, 2).toUpperCase()}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium">{resource.name}</span><span className="block truncate text-[10px] text-[#858b92]">{resource.description}</span></span>
-                    <ArrowRight size={14} className="text-[#a1a6ac] opacity-0 transition group-hover:opacity-100" />
-                  </Link>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-      </main>
-    </div>
-  );
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
+        <DashboardSection title="À traiter maintenant" icon={<Clock3 size={16} />} count={data?.attention_items.length || 0}>
+          {data?.attention_items.length ? data.attention_items.map((item) => <AttentionRow key={`${item.kind}-${item.id}`} item={item} />) : <DashboardEmpty icon={<CheckCircle2 size={23} />} title="Aucune urgence opérationnelle" description="Les retards, suivis et paiements à traiter apparaîtront ici." />}
+        </DashboardSection>
+        <DashboardSection title="Notifications récentes" icon={<Bell size={16} />} count={data?.unread_count || 0} action={<Link href="/app/notifications" className="text-[11px] font-medium text-[#087a46]">Tout voir</Link>}>
+          {data?.notifications.length ? data.notifications.slice(0, 6).map((item) => <Link href="/app/notifications" key={item.id} className="flex gap-3 border-b border-[#eceff2] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#12c76f]"}`} /><span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-[#727981]">{item.message}</span></span></Link>) : <DashboardEmpty title="Aucune notification récente" description="Les nouvelles activités de l’agence apparaîtront ici." />}
+        </DashboardSection>
+      </div>
+
+      <section aria-labelledby="quick-access"><h2 id="quick-access" className="mb-2 text-[13px] font-semibold text-[#30363d]">Accès rapide</h2><div className="grid overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{(data?.resources || []).map((resource) => <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceff2] px-4 py-3 hover:bg-[#f7f8f8]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#e8f8ef] text-[11px] font-semibold text-[#087a46]">{resource.name.slice(0, 2).toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium">{resource.name}</span><span className="block truncate text-[10px] text-[#7a838d]">{resource.description}</span></span><ArrowRight size={14} className="text-[#a1a6ac] transition-transform group-hover:translate-x-0.5" /></Link>)}</div></section>
+    </main>
+  </div>;
 }
 
-function ResourceMetric({ resource }: { resource: HomeResource }) {
-  return (
-    <Link href={resource.href} className="group border-b border-r border-[#e5e7e8] px-5 py-4 hover:bg-[#fafafa]">
-      <div className="flex items-center justify-between"><span className="text-[11px] font-medium text-[#6d747c]">{resource.label || resource.name}</span><ArrowRight size={14} className="text-[#a0a5aa] opacity-0 transition group-hover:opacity-100" /></div>
-      <div className="mt-2 text-[25px] font-semibold text-[#25292e]">{resource.count ?? "—"}</div>
-      <div className="mt-1 truncate text-[10px] text-[#8a9097]">{resource.description}</div>
-    </Link>
-  );
+function OperationalSummary({ label, value, detail, tone, icon }: { label: string; value: number | string; detail: string; tone: "success" | "warning" | "info" | "neutral"; icon?: ReactNode }) {
+  const statusLabel = tone === "success" ? "À jour" : tone === "warning" ? "À traiter" : tone === "info" ? "Nouveau" : "Configuration requise";
+  return <div className="flex min-h-[78px] items-center gap-3 border-b border-r border-[#eceff2] px-4 py-3 sm:border-b-0"><div className="min-w-0 flex-1"><p className="text-[11px] text-[#69727c]">{label}</p><p className="mt-0.5 truncate text-[17px] font-semibold">{value}</p><p className="truncate text-[10px] text-[#7f8790]">{detail}</p></div><div className="flex flex-col items-end gap-1.5">{icon && <span className="text-[#69727c]">{icon}</span>}<OperationStatus label={statusLabel} tone={tone} /></div></div>;
 }
 
-function OperationalStatus({ label, value, detail, tone, icon }: { label: string; value: number | string; detail: string; tone: "success" | "warning" | "info" | "neutral"; icon?: ReactNode }) {
-  const colors = { success: "bg-emerald-500", warning: "bg-amber-500", info: "bg-sky-500", neutral: "bg-[#a4a9ae]" };
-  return (
-    <div className="flex min-h-[74px] items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 sm:border-b-0">
-      <span className={`h-8 w-1 shrink-0 rounded-full ${colors[tone]}`} />
-      <div className="min-w-0 flex-1"><p className="text-[11px] text-[#6d747c]">{label}</p><p className="mt-0.5 truncate text-[17px] font-semibold">{value}</p><p className="truncate text-[10px] text-[#8a9097]">{detail}</p></div>
-      {icon && <span className="text-[#767d84]">{icon}</span>}
-    </div>
-  );
+function DashboardSection({ title, icon, count, action, children }: { title: string; icon: ReactNode; count: number; action?: ReactNode; children: ReactNode }) {
+  return <section className="overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white"><header className="flex h-12 items-center border-b border-[#e5e8eb] px-4"><span className="mr-2 text-[#65707b]">{icon}</span><h2 className="text-[13px] font-semibold">{title}</h2><span className="ml-2 rounded-full bg-[#f0f2f3] px-2 py-0.5 text-[10px] text-[#687079]">{count}</span><span className="ml-auto">{action}</span></header>{children}</section>;
 }
 
 function AttentionRow({ item }: { item: HomeAttentionItem }) {
-  return (
-    <Link href={item.href} className="grid min-h-16 grid-cols-[minmax(0,1fr)_100px_20px] items-center gap-3 border-b border-[#eceeef] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]">
-      <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-1 block text-[11px] text-[#737a82]">{item.message}</span></span>
-      <span className={`justify-self-start rounded-full px-2 py-1 text-[10px] font-medium ${item.priority === "HIGH" ? "bg-amber-50 text-amber-800" : "bg-[#f0f1f1] text-[#646b73]"}`}>{item.status}</span>
-      <ChevronMarker />
-    </Link>
-  );
+  return <Link href={item.href} className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto_20px] items-center gap-3 border-b border-[#eceff2] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]"><span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-1 block text-[11px] text-[#737a82]">{item.message}</span></span><OperationStatus label={item.status} tone={item.priority === "HIGH" ? "warning" : "neutral"} /><ArrowRight size={14} className="text-[#a1a6ac]" /></Link>;
 }
 
-function ChevronMarker() { return <ArrowRight size={14} className="text-[#a1a6ac]" />; }
+function DashboardEmpty({ icon, title, description }: { icon?: ReactNode; title: string; description: string }) {
+  return <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">{icon && <span className="text-[#12a865]">{icon}</span>}<p className="mt-3 text-[13px] font-medium">{title}</p><p className="mt-1 text-[11px] text-[#7a838d]">{description}</p></div>;
+}
 
 function NoWorkspace() {
-  return <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[7px] border border-[#d9dcdf] bg-white px-6 text-center"><Building2 size={28} className="text-[#8a9097]" /><h2 className="mt-4 text-[16px] font-semibold">Aucune agence active</h2><p className="mt-1 max-w-md text-[12px] leading-5 text-[#737a82]">Sélectionnez ou configurez une agence pour accéder aux opérations.</p><Link href="/app/settings" className="mt-5 inline-flex h-9 items-center rounded-[5px] bg-[#16855f] px-3 text-[13px] font-medium text-white hover:bg-[#126f50]">Configurer l’agence</Link></div>;
+  return <div className="grid min-h-full place-items-center bg-[#f5f6f6] p-6"><div className="max-w-md text-center"><Building2 size={28} className="mx-auto text-[#8a9097]" /><h2 className="mt-4 text-[16px] font-semibold">Aucun espace agence actif</h2><p className="mt-1 text-[12px] leading-5 text-[#737a82]">Sélectionnez ou configurez un espace pour accéder à ses opérations.</p><Link href="/app/settings" className="mt-5 inline-flex h-9 items-center rounded-[6px] bg-[#12c76f] px-3 text-[13px] font-medium text-white">Configurer l’agence</Link></div></div>;
 }
 
 function DashboardSkeleton() {
-  return <div className="space-y-4" aria-label="Chargement du tableau de bord"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Array.from({length:6}).map((_,i)=><div key={i} className="h-[92px] rounded-[7px] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.06)]"><span className="block h-2.5 w-20 animate-pulse rounded bg-[#e6e9e7]"/><span className="mt-4 block h-6 w-12 animate-pulse rounded bg-[#dfe4e1]"/></div>)}</div><div className="grid gap-4 xl:grid-cols-[1.6fr_.8fr]"><div className="h-72 rounded-[7px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.06)]"><LoadingDots/></div><div className="h-72 rounded-[7px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.06)]"/></div></div>;
+  return <div className="min-h-full bg-[#f5f6f6]" role="status" aria-label="Chargement de l’accueil"><div className="border-b border-[#dfe3e7] bg-white px-6 py-4"><Skeleton className="h-5 w-64" /><Skeleton className="mt-2 h-3 w-[420px] max-w-full" /></div><main className="grid gap-5 p-5 sm:p-6"><div><Skeleton className="mb-2 h-3 w-36" /><div className="grid grid-cols-2 overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white lg:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="border-r border-[#eceff2] p-4"><Skeleton className="h-2.5 w-20" /><Skeleton className="mt-3 h-6 w-14" /></div>)}</div></div><div className="grid gap-5 xl:grid-cols-[1.6fr_.8fr]"><Skeleton className="h-72 bg-white" /><Skeleton className="h-72 bg-white" /></div></main></div>;
 }
-function LoadingDots(){return <span className="flex items-center gap-1" aria-hidden>{[0,1,2].map(i=><span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#16855f]" style={{animationDelay:`${i*120}ms`}}/>)}</span>}
+
+function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse rounded-[6px] bg-[#e9ecee] ${className}`} />; }

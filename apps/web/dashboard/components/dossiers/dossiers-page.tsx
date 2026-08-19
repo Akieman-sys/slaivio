@@ -27,6 +27,18 @@ import {
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import {
+  OperationButton,
+  OperationMetric,
+  OperationMetricGrid,
+  OperationTab,
+} from "@/components/ui/operation-controls";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { EmptyState as SharedEmptyState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
@@ -172,8 +184,6 @@ const views: Array<{
 
 const buttonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
-const primaryButtonClass =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#0fb966]";
 const pagerButtonClass =
   "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
 
@@ -543,75 +553,51 @@ export function DossiersPage() {
                 </div>
               </details>
               <PermissionGuard permission="dossiers.export">
-                <button onClick={handleExport} className={buttonClass}>
+                <OperationButton onClick={handleExport}>
                   <Download size={14} />
                   Exporter
-                </button>
+                </OperationButton>
               </PermissionGuard>
               <PermissionGuard permission="dossiers.create">
-                <button onClick={openCreate} className={primaryButtonClass}>
+                <OperationButton variant="primary" onClick={openCreate}>
                   <span className="text-lg leading-none">+</span>
                   Nouveau dossier
-                </button>
+                </OperationButton>
               </PermissionGuard>
             </>
           }
         />
 
-        <section className="bg-white px-5 py-4">
-          <div className="grid grid-cols-2 lg:grid-cols-5">
+        <OperationMetrics>
+          <OperationMetricGrid className="lg:grid-cols-5">
             {statCards.map((card) => (
-              <div
+              <OperationMetric
                 key={card.label}
-                className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
-              >
-                <p className="text-[12px] text-[#6b7580]">{card.label}</p>
-                <p className="mt-1 text-[24px] font-medium tracking-[-.035em]">
-                  {card.value.toLocaleString("fr-FR")}
-                </p>
-              </div>
+                label={card.label}
+                value={card.value.toLocaleString("fr-FR")}
+                tone={card.tone === "amber" ? "warning" : "default"}
+              />
             ))}
-          </div>
-        </section>
+          </OperationMetricGrid>
+        </OperationMetrics>
 
         <OperationTabs>
           {views.map((view) => (
-            <button
+            <OperationTab
               key={view.key}
               onClick={() => setActiveView(view.key)}
-              className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
-                activeView === view.key
-                  ? "border-[#12c76f] text-[#067a45]"
-                  : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
-              }`}
+              active={activeView === view.key}
             >
               {view.label}
-            </button>
+            </OperationTab>
           ))}
         </OperationTabs>
 
         <section>
-          <div className="border-y border-[#eceef1] px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-                <Search size={18} className="text-[#6b7280]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Rechercher un dossier..."
-                  className="ml-3 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
-                />
-              </label>
-              <button
-                onClick={() => setFiltersOpen((value) => !value)}
-                className={buttonClass}
-                aria-expanded={filtersOpen}
-              >
-                <SlidersHorizontal size={16} />
-                Filtres
-              </button>
-            </div>
-          </div>
+          <OperationToolbar
+            search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un dossier…" />}
+            filters={<OperationButton onClick={() => setFiltersOpen((value) => !value)} aria-expanded={filtersOpen}><SlidersHorizontal size={15} />Filtres</OperationButton>}
+          />
           {filtersOpen && (
             <div className="flex flex-col gap-2 border-y border-[#d8dce2] bg-[#fafbfc] px-5 py-3 xl:flex-row xl:items-center">
               <SelectFilter
@@ -842,27 +828,10 @@ function DossiersTable({
   onSelect: (dossier: DossierRecord) => void;
 }) {
   if (loading) {
-    return (
-      <div className="space-y-1 p-4">
-        {[0, 1, 2, 3, 4, 5].map((item) => (
-          <div
-            key={item}
-            className="h-11 animate-pulse rounded-md bg-[#eef1f5]"
-          />
-        ))}
-      </div>
-    );
+    return <TableSkeleton />;
   }
   if (dossiers.length === 0) {
-    return (
-      <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-        <h2 className="text-[18px] font-semibold">Aucun dossier trouvé</h2>
-        <p className="mt-2 max-w-md text-[13px] leading-6 text-[#617083]">
-          Créez un dossier à partir d’un client réel. La liste affichera
-          uniquement les dossiers de l’organisation active.
-        </p>
-      </div>
-    );
+    return <SharedEmptyState title="Aucun dossier trouvé" description="Créez un dossier à partir d’un client réel ou ajustez les filtres de cette vue." />;
   }
   return (
     <div className="overflow-x-auto">
@@ -2031,16 +2000,16 @@ function DossierFormModal({
             />
           </div>
           <div className="mt-6 flex justify-end gap-2 border-t border-[#edf0f2] pt-4">
-            <button type="button" onClick={onClose} className={buttonClass}>
+            <OperationButton type="button" onClick={onClose}>
               Annuler
-            </button>
-            <button disabled={saving} className={primaryButtonClass}>
+            </OperationButton>
+            <OperationButton type="submit" variant="primary" disabled={saving}>
               {saving
                 ? "Enregistrement..."
                 : mode === "edit"
                   ? "Enregistrer"
                   : "Créer le dossier"}
-            </button>
+            </OperationButton>
           </div>
         </form>
     </OperationDrawer>

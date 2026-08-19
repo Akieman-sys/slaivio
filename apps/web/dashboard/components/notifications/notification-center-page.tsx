@@ -4,10 +4,11 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Archive, CheckCheck, Clock3, RotateCcw, Settings2 } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationButton, OperationTab } from "@/components/ui/operation-controls";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationContent, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import {
   getNotificationPreferences,
   listNotifications,
@@ -20,8 +21,6 @@ import {
   type NotificationPreference,
 } from "@/services/notification-center";
 
-const button = "inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f6f6]";
-const primary = "inline-flex h-9 items-center gap-1.5 rounded-[5px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
 const input = "h-9 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] outline-none focus:border-[#167d57] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function NotificationCenterPage() {
@@ -68,15 +67,15 @@ export function NotificationCenterPage() {
         description="Suivez les événements opérationnels et gérez les alertes qui demandent votre attention."
         actions={
           <>
-            <button className={button} onClick={() => setSettings(true)}>
+            <OperationButton onClick={() => setSettings(true)}>
               <Settings2 size={15} />
               Préférences
-            </button>
+            </OperationButton>
             <PermissionGuard permission="notifications.manage">
-              <button className={primary} onClick={async () => { await markAllRead(); await load(); }}>
+              <OperationButton variant="primary" onClick={async () => { await markAllRead(); await load(); }}>
                 <CheckCheck size={15} />
                 Tout marquer comme lu
-              </button>
+              </OperationButton>
             </PermissionGuard>
           </>
         }
@@ -106,19 +105,19 @@ export function NotificationCenterPage() {
       />
 
       <OperationContent>
-        {error && <p className="mb-3 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>}
-        <OperationTable className="overflow-hidden rounded-[6px] border border-[#d3d8dd]">
-          <div className="grid grid-cols-[1fr_120px_120px_150px_168px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
+        {error && !result ? <ErrorState title="Notifications indisponibles" description={error} retry={load} /> : null}
+        <OperationTable>
+          <div className="grid min-w-[820px] grid-cols-[1fr_120px_120px_150px_168px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
             <span>Notification</span>
             <span>Source</span>
-            <span>Priority</span>
-            <span>Created</span>
+            <span>Priorité</span>
+            <span>Créée le</span>
             <span className="text-right">Actions</span>
           </div>
           {loading ? (
-            <LoadingState label="Chargement des notifications…" />
+            <TableSkeleton columns={5} label="Chargement des notifications" />
           ) : !result?.items.length ? (
-            <p className="p-16 text-center text-[13px] text-[#9aa0a6]">Aucune notification dans cette vue.</p>
+            <EmptyState title="Aucune notification" description="Les événements correspondant à cette vue apparaîtront ici." />
           ) : (
             result.items.map((item) => <NotificationRow key={`${item.source}-${item.id}`} item={item} action={action} reload={load} />)
           )}
@@ -130,7 +129,7 @@ export function NotificationCenterPage() {
 }
 
 function NotificationTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} className={`h-[42px] border-b-2 px-3 text-[13px] ${active ? "border-[#167d57] font-medium text-[#126543]" : "border-transparent text-[#69717a] hover:text-[#25292e]"}`}>{children}</button>;
+  return <OperationTab active={active} onClick={onClick} className="h-[42px]">{children}</OperationTab>;
 }
 
 function NotificationRow({
@@ -144,7 +143,7 @@ function NotificationRow({
 }) {
   const unread = !item.read_at;
   return (
-    <article className={`grid min-h-11 grid-cols-[1fr_120px_120px_150px_168px] items-center border-b border-[#eeeeeb] px-4 py-2 text-[13px] last:border-0 ${unread ? "bg-[#f3fbf7]" : "bg-white"}`}>
+    <article className={`grid min-h-11 min-w-[820px] grid-cols-[1fr_120px_120px_150px_168px] items-center border-b border-[#eeeeeb] px-4 py-2 text-[13px] last:border-0 ${unread ? "bg-[#f3fbf7]" : "bg-white"}`}>
       <div className="flex min-w-0 gap-3">
         <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${item.priority === "CRITICAL" ? "bg-red-500" : item.priority === "HIGH" ? "bg-amber-500" : unread ? "bg-[#167d57]" : "bg-[#c7c7c3]"}`} />
         <div className="min-w-0">
@@ -158,18 +157,18 @@ function NotificationRow({
       <span className="text-[#6b7075]">{new Date(item.created_at).toLocaleString("fr-FR")}</span>
       <PermissionGuard permission="notifications.manage">
         <div className="flex justify-end gap-1">
-          <button title={unread ? "Marquer comme lu" : "Marquer non lu"} className={button} onClick={() => action(item, unread ? "read" : "unread")}>
+          <OperationButton title={unread ? "Marquer comme lu" : "Marquer non lu"} onClick={() => action(item, unread ? "read" : "unread")}>
             {unread ? <CheckCheck size={14} /> : <RotateCcw size={14} />}
-          </button>
-          <button title="Reporter" className={button} onClick={() => action(item, "snooze", 60)}>
+          </OperationButton>
+          <OperationButton title="Reporter" onClick={() => action(item, "snooze", 60)}>
             <Clock3 size={14} />
-          </button>
-          <button title={item.archived_at ? "Restaurer" : "Archiver"} className={button} onClick={() => action(item, item.archived_at ? "restore" : "archive")}>
+          </OperationButton>
+          <OperationButton title={item.archived_at ? "Restaurer" : "Archiver"} onClick={() => action(item, item.archived_at ? "restore" : "archive")}>
             <Archive size={14} />
-          </button>
+          </OperationButton>
           {item.source === "DELIVERY" && item.delivery_status === "FAILED" && (
             <PermissionGuard permission="notifications.delivery.manage">
-              <button className={button} onClick={async () => { await retryDelivery(item.id); await reload(); }}>Retry</button>
+              <OperationButton onClick={async () => { await retryDelivery(item.id); await reload(); }}>Réessayer</OperationButton>
             </PermissionGuard>
           )}
         </div>
@@ -179,6 +178,14 @@ function NotificationRow({
 }
 
 const categories = ["OPERATIONS", "SHIPMENT", "PACKAGE", "PAYMENT", "COMPLIANCE", "SYSTEM"];
+const categoryLabels: Record<string, string> = {
+  OPERATIONS: "Activité de l’agence",
+  SHIPMENT: "Expéditions",
+  PACKAGE: "Colis",
+  PAYMENT: "Paiements",
+  COMPLIANCE: "Documents et contrôles",
+  SYSTEM: "Compte et sécurité",
+};
 
 function Preferences({ close }: { close: () => void }) {
   const [items, setItems] = useState<NotificationPreference[]>([]);
@@ -221,25 +228,25 @@ function Preferences({ close }: { close: () => void }) {
         {error && <p className="mb-4 rounded-[5px] bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
         <form onSubmit={submit}>
           <div className="overflow-x-auto rounded-[6px] border border-[#d3d8dd] bg-white">
-            <div className="grid grid-cols-[1fr_repeat(3,78px)_128px] border-b bg-[#f7f7f5] px-3 py-2 text-[12px] font-medium text-[#5f6368]">
+            <div className="grid min-w-[640px] grid-cols-[1fr_repeat(3,78px)_148px] border-b bg-[#f7f7f5] px-3 py-2 text-[12px] font-medium text-[#5f6368]">
               <span>Catégorie</span><span>App</span><span>Email</span><span>WhatsApp</span><span>Fréquence</span>
             </div>
             {categories.map((category) => {
               const pref = current(category);
               return (
-                <div key={category} className="grid grid-cols-[1fr_repeat(3,78px)_128px] items-center border-b px-3 py-3 text-[13px] last:border-0">
-                  <b>{category}</b>
+                <div key={category} className="grid min-w-[640px] grid-cols-[1fr_repeat(3,78px)_148px] items-center border-b px-3 py-3 text-[13px] last:border-0">
+                  <b>{categoryLabels[category]}</b>
                   <input name={`${category}.in_app`} type="checkbox" defaultChecked={pref.in_app} className="h-4 w-4 accent-[#167d57]" />
                   <input name={`${category}.email`} type="checkbox" defaultChecked={pref.email} className="h-4 w-4 accent-[#167d57]" />
                   <input name={`${category}.whatsapp`} type="checkbox" defaultChecked={pref.whatsapp} className="h-4 w-4 accent-[#167d57]" />
                   <select name={`${category}.digest`} defaultValue={pref.digest_frequency} className={input}>
-                    <option>IMMEDIATE</option><option>DAILY</option><option>WEEKLY</option><option>OFF</option>
+                    <option value="IMMEDIATE">Immédiatement</option><option value="DAILY">Résumé quotidien</option><option value="WEEKLY">Résumé hebdomadaire</option><option value="OFF">Désactivé</option>
                   </select>
                 </div>
               );
             })}
           </div>
-          <div className="mt-4 flex justify-end"><button className={primary}>Enregistrer les préférences</button></div>
+          <div className="mt-4 flex justify-end"><OperationButton type="submit" variant="primary">Enregistrer les préférences</OperationButton></div>
         </form>
     </OperationDrawer>
   );

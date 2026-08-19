@@ -4,9 +4,11 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { BookOpen, ChevronRight, Download, LifeBuoy, MessageSquare, Paperclip, Plus, RefreshCcw } from "lucide-react";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { FormSection, OperationButton, OperationField, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationContent, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
+import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import {
   addTicketMessage,
   createTicket,
@@ -21,8 +23,6 @@ import {
   type TicketDetail,
 } from "@/services/support";
 
-const button = "inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] text-[#2f3437] hover:bg-[#f5f6f6]";
-const primary = "inline-flex h-9 items-center gap-1.5 rounded-[5px] bg-[#167d57] px-3 text-[13px] font-medium text-white hover:bg-[#116b49]";
 const input = "h-9 w-full rounded-[5px] border border-[#d3d8dd] bg-white px-3 text-[13px] outline-none focus:border-[#167d57] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function SupportCenterPage() {
@@ -72,12 +72,12 @@ export function SupportCenterPage() {
         description="Consultez les ressources utiles et suivez les demandes adressées à l’équipe Slaivio."
         actions={
           <>
-            <button className={button} onClick={load}><RefreshCcw size={15} />Actualiser</button>
+            <OperationButton onClick={load}><RefreshCcw size={15} />Actualiser</OperationButton>
             <PermissionGuard permission="support.create">
-              <button className={primary} onClick={() => setCreating(true)}>
+              <OperationButton variant="primary" onClick={() => setCreating(true)}>
                 <Plus size={15} />
                 Nouveau ticket
-              </button>
+              </OperationButton>
             </PermissionGuard>
           </>
         }
@@ -92,14 +92,14 @@ export function SupportCenterPage() {
           tab === "tickets" ? (
             <select className={`${input} max-w-[210px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Tous les statuts</option>
-              {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item}>{item}</option>)}
+              {["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item} value={item}>{ticketStatusLabel(item)}</option>)}
             </select>
           ) : undefined
         }
       />
 
       <OperationContent>
-        {error && <p className="mb-3 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{error}</p>}
+        {error && <ErrorState title="Support indisponible" description={error} retry={load} />}
         {tab === "help" ? <ArticleGrid articles={articles} open={setArticle} /> : <TicketTable tickets={tickets} open={open} />}
       </OperationContent>
 
@@ -116,24 +116,24 @@ export function SupportCenterPage() {
 
 function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={`flex h-[42px] items-center gap-2 border-b-2 px-2 text-[13px] ${active ? "border-[#167d57] font-medium text-[#126543]" : "border-transparent text-[#69717a] hover:text-[#25292e]"}`}>
+    <OperationTab active={active} onClick={onClick} className="flex h-[42px] items-center gap-2">
       {icon}
       {label}
-    </button>
+    </OperationTab>
   );
 }
 
 function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: Article) => void }) {
   if (!articles.length) {
-    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun article d’aide dans cette vue.</div>;
+    return <EmptyState title="Aucun article d’aide" description="Les ressources disponibles pour votre recherche apparaîtront ici." />;
   }
   return (
     <OperationTable className="overflow-hidden rounded-[6px] border border-[#d3d8dd]">
-      <div className="grid grid-cols-[220px_1fr_80px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
+      <div className="grid min-w-[640px] grid-cols-[220px_1fr_80px] border-b border-[#d9d9d6] bg-[#f7f7f5] px-4 py-2 text-[12px] font-medium text-[#5f6368]">
         <span>Catégorie</span><span>Article</span><span />
       </div>
       {articles.map((article) => (
-        <button key={article.id} onClick={() => open(article)} className="grid min-h-11 w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-2 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
+        <button key={article.id} onClick={() => open(article)} className="grid min-h-11 min-w-[640px] w-full grid-cols-[220px_1fr_80px] items-center border-b border-[#eeeeeb] px-4 py-2 text-left text-[13px] last:border-0 hover:bg-[#f8f8f7]">
           <span className="font-medium text-[#167d57]">{article.category}</span>
           <span>
             <span className="block font-medium text-[#202124]">{article.title}</span>
@@ -148,11 +148,11 @@ function ArticleGrid({ articles, open }: { articles: Article[]; open: (article: 
 
 function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) => void }) {
   if (!tickets.length) {
-    return <div className="rounded-[6px] border border-[#d3d3d0] bg-white p-16 text-center text-[13px] text-[#9aa0a6]">Aucun ticket dans cette vue.</div>;
+    return <EmptyState title="Aucun ticket" description="Les demandes adressées au support apparaîtront ici." />;
   }
   return (
     <OperationTable className="rounded-[6px] border border-[#d3d8dd]">
-      <table className="w-full whitespace-nowrap text-left text-[12px]">
+      <table className="w-full min-w-[860px] whitespace-nowrap text-left text-[13px]">
         <thead className="border-b border-[#d9d9d6] bg-[#f7f7f5] text-[#5f6368]">
           <tr>{["Référence", "Sujet", "Priorité", "Statut", "SLA", "Messages", "Mise à jour"].map((item) => <th className="px-4 py-2 font-medium" key={item}>{item}</th>)}</tr>
         </thead>
@@ -161,8 +161,8 @@ function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) 
             <tr key={ticket.id} className="h-11 cursor-pointer border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]" onClick={() => open(ticket.id)}>
               <td className="px-4 py-2 font-semibold">{ticket.ticket_reference}</td>
               <td className="px-4 py-2">{ticket.subject}</td>
-              <td className="px-4 py-2">{ticket.priority}</td>
-              <td className="px-4 py-2">{ticket.status}</td>
+              <td className="px-4 py-2">{priorityLabel(ticket.priority)}</td>
+              <td className="px-4 py-2"><OperationStatus label={ticketStatusLabel(ticket.status)} tone={ticketStatusTone(ticket.status)} /></td>
               <td className={`px-4 py-2 ${ticket.first_response_overdue || ticket.resolution_overdue ? "text-red-700" : "text-emerald-700"}`}>{ticket.first_response_overdue || ticket.resolution_overdue ? "Dépassé" : "Dans le délai"}</td>
               <td className="px-4 py-2">{ticket.message_count}</td>
               <td className="px-4 py-2">{new Date(ticket.updated_at).toLocaleDateString("fr-FR")}</td>
@@ -193,15 +193,17 @@ function Create({ close, done }: { close: () => void; done: (id: string) => void
   }
   return (
     <OperationDrawer open title="Nouveau ticket" description="Décrivez la demande afin de la transmettre au support Slaivio." close={close} width="max-w-[620px]">
-      <form onSubmit={submit} className="grid gap-3">
-        <input required minLength={5} name="subject" className={input} placeholder="Objet de la demande" />
-        <div className="grid grid-cols-2 gap-2">
-          <select name="category" className={input}>{["TECHNIQUE", "FACTURATION", "COMPTE", "DONNÉES", "FONCTIONNALITÉ", "AUTRE"].map((item) => <option key={item}>{item}</option>)}</select>
-          <select name="priority" className={input}><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select>
-        </div>
-        <textarea required minLength={10} name="description" rows={7} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Décrivez le problème." />
+      <form onSubmit={submit} className="grid gap-5">
+        <FormSection title="Votre demande" description="Décrivez le résultat attendu et son impact sur le travail de l’agence.">
+          <OperationField label="Objet" required><input required minLength={5} name="subject" className={input} placeholder="Ex. Impossible de valider une expédition" /></OperationField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <OperationField label="Sujet" required><select name="category" className={input}><option value="TECHNIQUE">Problème technique</option><option value="FACTURATION">Abonnement ou facturation</option><option value="COMPTE">Compte et accès</option><option value="DONNÉES">Données</option><option value="FONCTIONNALITÉ">Utilisation d’une fonctionnalité</option><option value="AUTRE">Autre demande</option></select></OperationField>
+            <OperationField label="Impact" hint="Urgent uniquement si les opérations sont bloquées." required><select name="priority" className={input}><option value="LOW">Faible</option><option value="NORMAL">Normal</option><option value="HIGH">Important</option><option value="URGENT">Opérations bloquées</option></select></OperationField>
+          </div>
+          <OperationField label="Description détaillée" required><textarea required minLength={10} name="description" rows={7} className="rounded-[6px] border border-[#d3d3d0] p-3 text-[13px] outline-none focus:border-[#12c76f]" placeholder="Expliquez ce que vous faisiez, ce qui s’est passé et le résultat attendu." /></OperationField>
+        </FormSection>
         {error && <p className="text-[13px] text-red-700">{error}</p>}
-        <button className={`${primary} justify-center`}>Créer le ticket</button>
+        <div className="flex justify-end gap-2"><OperationButton onClick={close}>Annuler</OperationButton><OperationButton type="submit" variant="primary">Créer le ticket</OperationButton></div>
       </form>
     </OperationDrawer>
   );
@@ -255,14 +257,14 @@ function Detail({ detail, close, reload }: { detail: TicketDetail; close: () => 
           <form onSubmit={send} className="mt-4 grid gap-2 rounded-[6px] border border-[#d3d3d0] bg-white p-4">
             <textarea required name="message" rows={4} className="rounded-[4px] border border-[#d3d3d0] p-3 text-[13px]" placeholder="Ajouter une réponse..." />
             <div className="flex justify-between">
-              <label className={button}><Paperclip size={14} />Joindre<input hidden type="file" onChange={upload} /></label>
-              <button className={primary}><MessageSquare size={14} />Envoyer</button>
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium hover:bg-[#f6f7f7]"><Paperclip size={14} />Joindre<input hidden type="file" onChange={upload} /></label>
+              <OperationButton type="submit" variant="primary"><MessageSquare size={14} />Envoyer</OperationButton>
             </div>
           </form>
         </PermissionGuard>
       )}
       <PermissionGuard permission="support.close">
-        <button className={`${button} mt-4`} onClick={async () => { await transitionTicket(ticket.id, ticket.status === "CLOSED" ? "reopen" : "close", ticket.row_version); reload(); }}>{ticket.status === "CLOSED" ? "Rouvrir" : "Fermer le ticket"}</button>
+        <OperationButton className="mt-4" onClick={async () => { await transitionTicket(ticket.id, ticket.status === "CLOSED" ? "reopen" : "close", ticket.row_version); reload(); }}>{ticket.status === "CLOSED" ? "Rouvrir" : "Fermer le ticket"}</OperationButton>
       </PermissionGuard>
     </Panel>
   );
@@ -274,4 +276,19 @@ function Panel({ close, children, title = "Support Slaivio", description = "Arti
       {children}
     </OperationDrawer>
   );
+}
+
+function priorityLabel(value: string) {
+  return ({ LOW: "Faible", NORMAL: "Normale", HIGH: "Haute", URGENT: "Urgente" } as Record<string, string>)[value] || value;
+}
+
+function ticketStatusLabel(value: string) {
+  return ({ OPEN: "Ouvert", IN_PROGRESS: "En cours", WAITING_CUSTOMER: "Votre réponse est attendue", RESOLVED: "Résolu", CLOSED: "Fermé", REOPENED: "Rouvert" } as Record<string, string>)[value] || value;
+}
+
+function ticketStatusTone(value: string): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (["RESOLVED", "CLOSED"].includes(value)) return "success";
+  if (value === "WAITING_CUSTOMER") return "warning";
+  if (["OPEN", "REOPENED"].includes(value)) return "info";
+  return "neutral";
 }

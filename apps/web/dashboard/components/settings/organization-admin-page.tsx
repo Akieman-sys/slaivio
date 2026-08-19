@@ -19,12 +19,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   archiveWorkspace,
-  createApiKey,
   getAdmin,
   inviteMember,
   listAgencyWhatsappNumbers,
   requestDataOperation,
-  revokeApiKey,
   revokeInvitation,
   saveIntegration,
   saveLocation,
@@ -39,6 +37,8 @@ import {
   type AgencyWhatsappNumber,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { FormSection, OperationButton, OperationField } from "@/components/ui/operation-controls";
+import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
   getNotificationPreferences,
   saveNotificationPreference,
@@ -47,9 +47,9 @@ import {
 const input =
   "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const button =
-  "h-9 rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] font-medium";
+  "h-9 rounded-[6px] border border-[#d8d9dc] bg-white px-3 text-[13px] font-medium hover:bg-[#f6f7f7]";
 const primary =
-  "h-9 rounded-[5px] bg-[#16855f] px-4 text-[13px] font-semibold text-white hover:bg-[#126f50]";
+  "h-9 rounded-[6px] bg-[#12c76f] px-4 text-[13px] font-semibold text-white hover:bg-[#0fb766]";
 const tabs = [
   ["general", "Général", Languages],
   ["agency", "Agence", Building2],
@@ -65,12 +65,20 @@ const tabs = [
   ["data", "Données & confidentialité", Database],
 ] as const;
 type Section = (typeof tabs)[number][0];
-const sectionTitles = Object.fromEntries(
-  tabs.map(([id, label]) => [
-    id,
-    [label, `${label} de l’agence et du workspace actif.`],
-  ]),
-) as Record<Section, [string, string]>;
+const sectionTitles: Record<Section, [string, string]> = {
+  general: ["Général", "Préférences régionales et unités du workspace actif."],
+  agency: ["Agence", "Identité légale, coordonnées et image de marque de l’agence."],
+  workspaces: ["Workspaces", "Espaces opérationnels, responsables et périmètres de travail."],
+  locations: ["Bureaux & établissements", "Sites physiques utilisés par vos équipes et vos clients."],
+  team: ["Utilisateurs & équipe", "Invitations, affectations et accès des collaborateurs."],
+  roles: ["Rôles & permissions", "Responsabilités et droits accordés à chaque rôle."],
+  notifications: ["Notifications", "Événements importants et canaux utilisés pour prévenir l’équipe."],
+  integrations: ["Canaux & intégrations", "Comptes externes connectés aux opérations de l’agence."],
+  documents: ["Documents & numérotation", "Formats de références utilisés sur les documents métier."],
+  billing: ["Abonnement Slaivio", "Plan, usage et facturation de votre abonnement à la plateforme."],
+  security: ["Sécurité", "Protection des comptes, sessions et règles d’authentification."],
+  data: ["Données & confidentialité", "Export, conservation et demandes sensibles sur les données."],
+};
 function val(f: FormData, k: string) {
   return String(f.get(k) || "").trim() || null;
 }
@@ -123,12 +131,9 @@ export function OrganizationAdminPage() {
     setTab(section);
     router.replace(`/app/settings?section=${section}`, { scroll: false });
   }
-  if (!data)
-    return (
-      <div className="p-6 text-[13px]">
-        {error || "Chargement de l’administration…"}
-      </div>
-    );
+  if (!data) return error
+    ? <ErrorState title="Paramètres indisponibles" description={error} retry={load} />
+    : <LoadingState label="Chargement des paramètres…" />;
   return (
     <div className="min-h-full bg-white">
       <header className="flex h-[72px] items-center border-b border-[#e0e2e4] px-5 lg:px-7">
@@ -136,13 +141,13 @@ export function OrganizationAdminPage() {
           <p className="text-[11px] text-[#7b8289]">Administration</p>
           <h1 className="text-[21px] font-semibold">Paramètres</h1>
         </div>
-        <button className={`${button} ml-auto`} onClick={load}>
+        <OperationButton className="ml-auto" onClick={load}>
           <RefreshCcw className="mr-2 inline" size={14} />
           Actualiser
-        </button>
+        </OperationButton>
       </header>
       <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[272px_minmax(0,1fr)]">
-        <aside className="border-b border-[#e0e2e4] bg-[#fafafa] p-3 lg:border-b-0 lg:border-r">
+        <aside className="hidden border-r border-[#e0e2e4] bg-[#fafafa] p-3 lg:block">
           <SettingsGroup label="Administration">
             {tabs.map(([id, label, Icon]) => (
               <SettingsItem
@@ -154,16 +159,20 @@ export function OrganizationAdminPage() {
               />
             ))}
           </SettingsGroup>
-          <SettingsGroup label="Plateforme">
-            <SettingsLink
-              href="/app/platform"
-              icon={<ShieldCheck size={15} />}
-              label="Console Super Admin"
-            />
-          </SettingsGroup>
+          <PermissionGuard permission="platform.admin.read">
+            <SettingsGroup label="Plateforme">
+              <SettingsLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" />
+            </SettingsGroup>
+          </PermissionGuard>
         </aside>
         <main className="min-w-0 p-5 lg:p-7">
           <div className="mx-auto max-w-[1120px]">
+            <label className="mb-5 grid gap-1.5 text-[12px] font-medium text-[#59636e] lg:hidden">
+              Section des paramètres
+              <select className={input} value={tab} onChange={(event) => select(event.target.value as Section)}>
+                {tabs.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
             <div className="mb-5 flex items-start gap-3 border-b border-[#e5e6e7] pb-4">
               <div className="min-w-0 flex-1"><h2 className="text-[20px] font-semibold">
                 {sectionTitles[tab][0]}
@@ -171,7 +180,7 @@ export function OrganizationAdminPage() {
               <p className="mt-1 text-[13px] text-[#69707d]">
                 {sectionTitles[tab][1]}
               </p></div>
-              <button className={button} onClick={load} title="Actualiser"><RefreshCcw size={14} /></button>
+              <OperationButton onClick={load} title="Actualiser" aria-label="Actualiser la section"><RefreshCcw size={14} /></OperationButton>
             </div>
             {notice && (
               <div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
@@ -204,16 +213,6 @@ export function OrganizationAdminPage() {
   );
 }
 
-function SettingsNavigation({ active, select }: { active: Section; select: (section: Section) => void }) {
-  return <>
-    <SettingsGroup label="Compte et organisation">
-      {tabs.map(([id, label, Icon]) => <SettingsItem key={id} active={active === id} icon={<Icon size={15} />} label={label} onClick={() => select(id)} />)}
-    </SettingsGroup>
-    <SettingsGroup label="Plateforme">
-      <PermissionGuard permission="platform.admin.read"><SettingsLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" /></PermissionGuard>
-    </SettingsGroup>
-  </>;
-}
 function SettingsGroup({
   label,
   children,
@@ -223,7 +222,7 @@ function SettingsGroup({
 }) {
   return (
     <section className="mb-5">
-      <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase text-[#8a9097]">
+      <div className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8a9097]">
         {label}
       </div>
       <div className="space-y-0.5">{children}</div>
@@ -283,7 +282,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-[#e8eaed]">
+    <section className="overflow-hidden rounded-[8px] border border-[#e3e7ea] bg-white">
       <div className="border-b border-[#edf0f3] px-5 py-4">
         <h2 className="text-[15px] font-semibold text-[#293034]">{title}</h2>
         <p className="text-[12px] text-[#697178]">{description}</p>
@@ -705,21 +704,13 @@ function Roles({
         description="Accordez uniquement les capacités nécessaires."
       >
         <PermissionGuard permission="roles.manage" fallback={<ReadOnly />}>
-          <form onSubmit={submit} className="grid gap-3">
-            <div className="grid gap-2">
-              <label>Nom du rôle
-              <input
-                required
-                name="name"
-                className={`${input} mt-1`}
-                placeholder="Ex. Responsable entrepôt Chine"
-              />
-              </label>
-            </div>
-            <label>À quoi sert ce rôle ?
-              <input name="description" className={`${input} mt-1`} placeholder="Décrivez simplement les responsabilités de cette équipe" />
-            </label>
-            <div className="max-h-[400px] overflow-y-auto rounded-[5px] border p-3">
+          <form onSubmit={submit} className="grid gap-5">
+            <FormSection title="Responsabilité" description="Utilisez un nom compris par les responsables et les employés.">
+              <OperationField label="Nom du rôle" required><input required name="name" className={input} placeholder="Ex. Responsable entrepôt Chine" /></OperationField>
+              <OperationField label="À quoi sert ce rôle ?"><input name="description" className={input} placeholder="Décrivez simplement les responsabilités de cette équipe" /></OperationField>
+            </FormSection>
+            <FormSection title="Actions autorisées" description="Cochez uniquement les actions nécessaires au travail de ce rôle.">
+            <div className="max-h-[400px] overflow-y-auto rounded-[6px] border border-[#e3e7ea] p-3">
               {Object.entries(groups).map(([group, permissions]) => (
                 <div key={group} className="mb-4">
                   <b className="text-[12px] font-semibold text-[#334155]">
@@ -743,7 +734,8 @@ function Roles({
                 </div>
               ))}
             </div>
-            <button className={primary}>Créer le rôle</button>
+            </FormSection>
+            <div className="flex justify-end"><OperationButton type="submit" variant="primary">Créer le rôle</OperationButton></div>
           </form>
         </PermissionGuard>
       </Card>
@@ -860,46 +852,6 @@ function Security({
           <button className={primary}>Enregistrer la politique</button>
         </form>
       </PermissionGuard>
-    </Card>
-  );
-}
-export function Audit({ data }: { data: AdminData }) {
-  return (
-    <Card
-      title="Journal d’audit"
-      description="Dernières mutations administratives de l’organisation."
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-[12px]">
-          <thead>
-            <tr className="border-b text-[#69707d]">
-              <th className="py-2">Date</th>
-              <th>Action</th>
-              <th>Objet</th>
-              <th>Acteur</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.audit.map((x) => (
-              <tr className="border-b" key={String(x.id)}>
-                <td className="py-3">
-                  {new Date(String(x.created_at)).toLocaleString("fr-FR")}
-                </td>
-                <td>{String(x.action)}</td>
-                <td>
-                  {String(x.entity_type)} · {String(x.entity_id)}
-                </td>
-                <td>{String(x.actor_name || x.actor_id || "Système")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!data.audit.length && (
-          <p className="py-8 text-center text-[#69707d]">
-            Aucune mutation administrative enregistrée.
-          </p>
-        )}
-      </div>
     </Card>
   );
 }
@@ -1162,7 +1114,7 @@ function DocumentsSettings({
         {data.numbering.map((x) => (
           <form
             key={String(x.id)}
-            className="rounded-md bg-[#f8faf9] p-4 ring-1 ring-[#e6eae8]"
+            className="rounded-[7px] border border-[#e3e7ea] bg-[#fafbfb] p-4"
             onSubmit={(e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
@@ -1181,7 +1133,7 @@ function DocumentsSettings({
             <label>Format du numéro
               <input name="format" className={`${input} mt-1 font-mono`} defaultValue={String(x.prefix_format)} />
             </label>
-            <button className={`${button} mt-3`}>Enregistrer ce format</button>
+            <OperationButton type="submit" className="mt-3">Enregistrer ce format</OperationButton>
           </form>
         ))}
       </div>
@@ -1327,84 +1279,6 @@ function DataSettings({
         </button>
       </section>
     </div>
-  );
-}
-export function DeveloperSettings({
-  data,
-  run,
-}: {
-  data: AdminData;
-  run: (a: () => Promise<unknown>, m: string) => void;
-}) {
-  const [secret, setSecret] = useState("");
-  async function create() {
-    const name = prompt("Nom de la clé API");
-    if (!name) return;
-    try {
-      const result = await createApiKey({ name, scopes: ["api.read"] });
-      setSecret(String(result.api_key.secret));
-      await run(
-        async () => undefined,
-        "Clé créée. Copiez-la maintenant : elle ne sera plus affichée.",
-      );
-    } catch {
-      setSecret("Erreur de création.");
-    }
-  }
-  return (
-    <Card
-      title="Clés API"
-      description="Secrets hachés en base, scopes minimaux et révocation immédiate."
-    >
-      <button className={primary} onClick={create}>
-        Créer une clé
-      </button>
-      {secret && (
-        <code className="my-3 block break-all bg-[#f2f3f3] p-3 text-[12px]">
-          {secret}
-        </code>
-      )}
-      <div className="divide-y">
-        {data.api_keys.map((x) => (
-          <div
-            key={String(x.id)}
-            className="flex items-center justify-between py-3 text-[12px]"
-          >
-            <span>
-              <b>{String(x.name)}</b> · {String(x.key_prefix)}… ·{" "}
-              {String(x.status)}
-            </span>
-            {x.status === "ACTIVE" && (
-              <button
-                className={button}
-                onClick={() =>
-                  run(() => revokeApiKey(String(x.id)), "Clé révoquée.")
-                }
-              >
-                Révoquer
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-function SettingsLinkCard({
-  href,
-  title,
-  text,
-}: {
-  href: string;
-  title: string;
-  text: string;
-}) {
-  return (
-    <Card title={title} description={text}>
-      <Link className={primary} href={href}>
-        Ouvrir le module
-      </Link>
-    </Card>
   );
 }
 function ReadOnly() {

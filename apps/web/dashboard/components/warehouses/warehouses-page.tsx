@@ -16,6 +16,7 @@ import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
+import { getAdmin } from "@/services/organization-admin";
 import {
   createWarehouse,
   exportWarehouseInventory,
@@ -139,6 +140,16 @@ export function WarehousesPage() {
 function CreateWarehouseDrawer({ open, close, done }: { open: boolean; close: () => void; done: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [locations, setLocations] = useState<Array<Record<string, unknown>>>([]);
+  const [locationId, setLocationId] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    getAdmin().then((admin) => {
+      setLocations(admin.locations);
+      if (admin.locations.length === 1) setLocationId(String(admin.locations[0].id));
+    }).catch(() => setLocations([]));
+  }, [open]);
+  const selectedLocation = locations.find((location) => String(location.id) === locationId);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,10 +161,10 @@ function CreateWarehouseDrawer({ open, close, done }: { open: boolean; close: ()
         warehouse_code: form.get("code"),
         warehouse_name: form.get("name"),
         warehouse_type: form.get("type"),
-        country_code: form.get("country"),
-        city: form.get("city"),
-        address: form.get("address"),
-        timezone: form.get("timezone"),
+        country_code: selectedLocation?.country || null,
+        city: selectedLocation?.city || null,
+        address: selectedLocation?.address || null,
+        timezone: selectedLocation?.timezone || "UTC",
         capacity_packages: Number(form.get("capacity")) || null,
       });
       done();
@@ -175,15 +186,22 @@ function CreateWarehouseDrawer({ open, close, done }: { open: boolean; close: ()
         </div>
       </FormSection>
       <FormSection title="Localisation" description="Adresse communiquée aux fournisseurs et utilisée pour orienter les colis.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <OperationField label="Pays" hint="Code pays, par exemple CN"><input name="country" className={input} placeholder="CN" /></OperationField>
-          <OperationField label="Ville"><input name="city" className={input} placeholder="Guangzhou" /></OperationField>
-          <OperationField label="Adresse complète"><input name="address" className={input} placeholder="Rue, bâtiment et instructions d’accès" /></OperationField>
-          <OperationField label="Fuseau horaire"><input name="timezone" defaultValue="UTC" className={input} /></OperationField>
-        </div>
+        {locations.length ? <div className="grid gap-4">
+          <OperationField label="Établissement configuré" hint="La ville, le pays, l’adresse et le fuseau seront repris automatiquement." required>
+            <select required value={locationId} onChange={(event) => setLocationId(event.target.value)} className={input}>
+              <option value="">Choisir un établissement</option>
+              {locations.map((location) => <option key={String(location.id)} value={String(location.id)}>{String(location.name)} · {String(location.city || "Ville non renseignée")}</option>)}
+            </select>
+          </OperationField>
+          {selectedLocation && <div className="grid gap-3 rounded-[7px] bg-[#f6f8f8] p-4 text-[13px] sm:grid-cols-2">
+            <p><span className="block text-[11px] text-[#737d87]">Pays et ville</span>{String(selectedLocation.country || "—")}, {String(selectedLocation.city || "—")}</p>
+            <p><span className="block text-[11px] text-[#737d87]">Fuseau horaire</span>{String(selectedLocation.timezone || "UTC")}</p>
+            <p className="sm:col-span-2"><span className="block text-[11px] text-[#737d87]">Adresse</span>{String(selectedLocation.address || "Adresse non renseignée")}</p>
+          </div>}
+        </div> : <div className="rounded-[7px] bg-amber-50 p-4 text-[13px] text-amber-900">Configurez d’abord un bureau ou établissement avec son pays, sa ville et son adresse. <Link className="font-semibold underline" href="/app/settings?section=locations">Configurer les établissements</Link></div>}
       </FormSection>
       {error && <p className="text-[12px] text-[#b42318]">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-[#e8ebee] pt-4"><OperationButton type="button" onClick={close}>Annuler</OperationButton><OperationButton type="submit" variant="primary" disabled={busy}>{busy ? "Création…" : "Créer l’entrepôt"}</OperationButton></div>
+      <div className="flex justify-end gap-2 border-t border-[#e8ebee] pt-4"><OperationButton type="button" onClick={close}>Annuler</OperationButton><OperationButton type="submit" variant="primary" disabled={busy || !selectedLocation}>{busy ? "Création…" : "Créer l’entrepôt"}</OperationButton></div>
     </form>
   </OperationDrawer>;
 }

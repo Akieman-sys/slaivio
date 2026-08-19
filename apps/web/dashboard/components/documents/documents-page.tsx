@@ -2,17 +2,13 @@
 
 import {
   ChevronRight,
-  FileCheck2,
   FilePlus2,
-  FolderOpen,
-  ShieldCheck,
 } from "lucide-react";
 import {
   type FormEvent,
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
 
 import {
@@ -25,17 +21,20 @@ import {
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
+  FormSection,
+  OperationButton,
+  OperationField,
+  OperationMetric,
+  OperationMetricGrid,
+  OperationStatus,
+} from "@/components/ui/operation-controls";
+import {
   OperationMetrics,
   OperationSearch,
   OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
-
-const button =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f6]";
-const primary =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] bg-[#12a861] px-3 text-[12px] font-semibold text-white hover:bg-[#0d9455]";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 const input =
   "h-9 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[13px] outline-none focus:border-[#12a861]";
 
@@ -96,36 +95,20 @@ export function DocumentsPage() {
         title="Documents et conformité"
         description="Centralisez les pièces cargo, contrôlez leur validité et suivez les échéances."
         actions={
-          <button className={primary} onClick={() => setOpen(true)}>
+          <OperationButton variant="primary" onClick={() => setOpen(true)}>
             <FilePlus2 size={15} />
             Ajouter un document
-          </button>
+          </OperationButton>
         }
       />
       <main>
         <OperationMetrics>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4">
-            <Metric
-              label="Documents"
-              value={items.length}
-              icon={<FolderOpen size={16} />}
-            />
-            <Metric
-              label="À contrôler"
-              value={pending}
-              icon={<FileCheck2 size={16} />}
-            />
-            <Metric
-              label="Conformes"
-              value={valid}
-              icon={<ShieldCheck size={16} />}
-            />
-            <Metric
-              label="À renouveler bientôt"
-              value={expiring}
-              icon={<FileCheck2 size={16} />}
-            />
-          </div>
+          <OperationMetricGrid>
+            <OperationMetric label="Documents" value={items.length} />
+            <OperationMetric label="À contrôler" value={pending} tone={pending ? "warning" : "default"} />
+            <OperationMetric label="Conformes" value={valid} tone="success" />
+            <OperationMetric label="À renouveler bientôt" value={expiring} tone={expiring ? "warning" : "default"} />
+          </OperationMetricGrid>
         </OperationMetrics>
         <OperationToolbar
           search={
@@ -137,13 +120,10 @@ export function DocumentsPage() {
           }
         />
         <section className="border-b border-[#dfe1e3] bg-white">
-          {error && (
-            <p className="m-4 bg-red-50 p-3 text-[13px] text-red-700">
-              {error}
-            </p>
-          )}
-          {loading ? (
-            <LoadingState label="Chargement des documents…" />
+          {error && !items.length ? (
+            <ErrorState title="Documents indisponibles" description={error} retry={load} />
+          ) : loading ? (
+            <TableSkeleton columns={7} label="Chargement des documents" />
           ) : filtered.length ? (
             <OperationTable>
             <table className="w-full min-w-[850px] border-collapse text-left text-[13px]">
@@ -181,7 +161,7 @@ export function DocumentsPage() {
                     </td>
                     <td>{entityLabel(item.entity_type)}</td>
                     <td>
-                      <Status value={item.status} />
+                      <DocumentStatus value={item.status} />
                     </td>
                     <td>{item.expires_at || "—"}</td>
                     <td className="space-x-3">
@@ -226,17 +206,7 @@ export function DocumentsPage() {
             </table>
             </OperationTable>
           ) : (
-            <div className="grid min-h-64 place-items-center text-center">
-              <div>
-                <FolderOpen className="mx-auto text-[#9299a0]" />
-                <p className="mt-3 text-[13px] font-medium">
-                  Aucun document dans cette vue
-                </p>
-                <p className="mt-1 text-[11px] text-[#7a8188]">
-                  Les pièces liées aux opérations apparaîtront ici.
-                </p>
-              </div>
-            </div>
+            <EmptyState title="Aucun document dans cette vue" description="Les pièces liées aux opérations apparaîtront ici." />
           )}
         </section>
       </main>
@@ -247,81 +217,29 @@ export function DocumentsPage() {
           description="Ajoutez une pièce à une opération existante de l’agence."
           close={() => setOpen(false)}
         >
-          <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-            <FieldLabel label="Code du document">
-              <input
-                required
-                name="document_code"
-                className={input}
-                placeholder="Ex. DOC-2026-001"
-              />
-            </FieldLabel>
-            <FieldLabel label="Type de document">
-              <input
-                required
-                name="document_type"
-                className={input}
-                placeholder="Ex. Facture fournisseur"
-              />
-            </FieldLabel>
-            <FieldLabel label="Titre">
-              <input
-                required
-                name="title"
-                className={input}
-                placeholder="Nom compréhensible par l’équipe"
-              />
-            </FieldLabel>
-            <FieldLabel label="Concerne">
-              <select name="entity_type" className={input}>
-                <option value="SHIPMENT">Une expédition</option>
-                <option value="DOSSIER">Un dossier</option>
-                <option value="PACKAGE">Un colis</option>
-                <option value="CLIENT">Un client</option>
-                <option value="DEPARTURE">Un départ</option>
-                <option value="ORGANIZATION">L’agence</option>
-              </select>
-            </FieldLabel>
-            <FieldLabel label="Référence de l’élément">
-              <input
-                required
-                name="entity_id"
-                className={input}
-                placeholder="Rechercher ou saisir la référence"
-              />
-            </FieldLabel>
-            <FieldLabel label="Date d’émission">
-              <input name="issued_at" type="date" className={input} />
-            </FieldLabel>
-            <FieldLabel label="Date d’expiration">
-              <input name="expires_at" type="date" className={input} />
-            </FieldLabel>
-            <FieldLabel label="Émis par">
-              <input
-                name="issuer"
-                className={input}
-                placeholder="Fournisseur, douane ou agence"
-              />
-            </FieldLabel>
-            <label className="grid gap-1 text-[12px] font-medium sm:col-span-2">
-              Fichier
-              <input
-                required
-                name="file"
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                className="rounded-md border border-dashed border-[#cfd5dd] p-4 text-[12px]"
-              />
-            </label>
-            <div className="flex justify-end gap-2 border-t border-[#eceef1] pt-4 sm:col-span-2">
-              <button
-                type="button"
-                className={button}
-                onClick={() => setOpen(false)}
-              >
-                Annuler
-              </button>
-              <button className={primary}>Enregistrer</button>
+          <form onSubmit={submit} className="grid gap-5">
+            <FormSection title="Identification" description="Nommez clairement la pièce pour que l’équipe puisse la retrouver.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <OperationField label="Code du document" required><input required name="document_code" className={input} placeholder="Ex. DOC-2026-001" /></OperationField>
+                <OperationField label="Type de document" required><input required name="document_type" className={input} placeholder="Ex. Facture fournisseur" /></OperationField>
+                <OperationField label="Titre" required><input required name="title" className={input} placeholder="Nom compréhensible par l’équipe" /></OperationField>
+                <OperationField label="Émis par"><input name="issuer" className={input} placeholder="Fournisseur, douane ou agence" /></OperationField>
+              </div>
+            </FormSection>
+            <FormSection title="Élément concerné" description="Reliez la pièce à l’opération réelle pour éviter les documents isolés.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <OperationField label="Ce document concerne" required><select name="entity_type" className={input}><option value="SHIPMENT">Une expédition</option><option value="DOSSIER">Un dossier</option><option value="PACKAGE">Un colis</option><option value="CLIENT">Un client</option><option value="DEPARTURE">Un départ</option><option value="ORGANIZATION">L’agence</option></select></OperationField>
+                <OperationField label="Référence visible" hint="Exemple : COL-2026-008452" required><input required name="entity_id" className={input} placeholder="Référence du dossier, colis ou expédition" /></OperationField>
+                <OperationField label="Date d’émission"><input name="issued_at" type="date" className={input} /></OperationField>
+                <OperationField label="Date d’expiration"><input name="expires_at" type="date" className={input} /></OperationField>
+              </div>
+            </FormSection>
+            <FormSection title="Fichier" description="PDF ou image lisible. Le document restera lié à l’agence active.">
+              <OperationField label="Choisir le fichier" required><input required name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="rounded-[6px] border border-dashed border-[#cfd5dd] p-4 text-[13px]" /></OperationField>
+            </FormSection>
+            <div className="flex justify-end gap-2 border-t border-[#eceef1] pt-4">
+              <OperationButton type="button" onClick={() => setOpen(false)}>Annuler</OperationButton>
+              <OperationButton type="submit" variant="primary">Enregistrer</OperationButton>
             </div>
           </form>
         </OperationDrawer>
@@ -330,51 +248,15 @@ export function DocumentsPage() {
   );
 }
 
-function Metric({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: number;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-[76px] items-center gap-3 border-l border-[#eceeef] px-4 py-1 first:border-l-0">
-      <span className="text-[#087a46]">{icon}</span>
-      <div>
-        <p className="text-[11px] text-[#6d747c]">{label}</p>
-        <p className="mt-1 text-[24px] font-medium">{value}</p>
-      </div>
-    </div>
-  );
-}
-function Status({ value }: { value: string }) {
-  const style =
-    value === "VALID"
-      ? "bg-emerald-50 text-emerald-700"
-      : value === "REJECTED"
-        ? "bg-red-50 text-red-700"
-        : "bg-amber-50 text-amber-700";
-  return (
-    <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${style}`}>
-      {value}
-    </span>
-  );
-}
-function FieldLabel({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="grid gap-1 text-[12px] font-medium text-[#414950]">
-      {label}
-      {children}
-    </label>
-  );
+function DocumentStatus({ value }: { value: string }) {
+  const states: Record<string, { label: string; tone: "success" | "danger" | "warning" | "neutral" }> = {
+    VALID: { label: "Conforme", tone: "success" },
+    REJECTED: { label: "Rejeté", tone: "danger" },
+    PENDING_REVIEW: { label: "À contrôler", tone: "warning" },
+    EXPIRED: { label: "Expiré", tone: "danger" },
+  };
+  const state = states[value] || { label: value, tone: "neutral" as const };
+  return <OperationStatus label={state.label} tone={state.tone} />;
 }
 function entityLabel(value: string) {
   return (

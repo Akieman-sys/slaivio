@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Calculator, CircleDollarSign, MapPinned, Plus, RefreshCcw, Route as RouteIcon, Truck } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { LoadingState } from "@/components/ui/page-state";
 import { addPrice, catalog, createRoute, createService, simulate, type Route, type Service } from "@/services/route-catalog";
@@ -25,9 +25,10 @@ export function RouteCatalogPage() {
   const configured = services.filter((item) => item.pricing_count > 0).length;
 
   return <div className="min-h-full bg-[#f7f7f6]">
-    <OperationPageHeader title="Routes et services" description="Configurez les corridors, délais, niveaux de service et règles tarifaires utilisés par toutes les opérations." actions={<><button className={button} onClick={() => setAction("simulate")}><Calculator size={14} />Simuler un tarif</button><PermissionGuard permission="routes.manage"><button className={primary} onClick={() => setAction("route")}><Plus size={14} />Nouvelle route</button></PermissionGuard></>} tabs={<><Tab active={view === "routes"} onClick={() => setView("routes")}>Routes</Tab><Tab active={view === "services"} onClick={() => setView("services")}>Services</Tab></>} />
+    <OperationPageHeader title="Routes et services" description="Configurez les corridors, délais, niveaux de service et règles tarifaires utilisés par toutes les opérations." actions={<><button className={button} onClick={() => setAction("simulate")}><Calculator size={14} />Simuler un tarif</button><PermissionGuard permission="routes.manage"><button className={primary} onClick={() => setAction("route")}><Plus size={14} />Nouvelle route</button></PermissionGuard></>} />
     <main className="py-4">
       <section className="grid border-y border-[#dfe1e3] bg-white sm:grid-cols-3"><Metric label="Routes actives" value={routes.filter((item) => item.active).length} icon={<MapPinned size={16} />} /><Metric label="Services disponibles" value={services.length} icon={<Truck size={16} />} /><Metric label="Services tarifés" value={`${configured}/${services.length}`} icon={<CircleDollarSign size={16} />} /></section>
+      <OperationTabs><Tab active={view === "routes"} onClick={() => setView("routes")}>Routes</Tab><Tab active={view === "services"} onClick={() => setView("services")}>Services</Tab></OperationTabs>
       <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3"><PermissionGuard permission="pricing.manage"><button className={button} onClick={() => setAction("price")}><Plus size={14} />Nouveau tarif</button></PermissionGuard><PermissionGuard permission="services.manage"><button className={button} onClick={() => setAction("service")}><Plus size={14} />Nouveau service</button></PermissionGuard><button className={button} onClick={load}><RefreshCcw size={14} />Actualiser</button></div>
       {error && <p className="mx-4 mb-3 bg-red-50 p-3 text-[13px] text-red-700">{error}</p>}
       {loading ? <LoadingState label="Chargement du réseau cargo…" /> : view === "routes" ? <RoutesTable items={routes} /> : <ServicesTable items={services} />}

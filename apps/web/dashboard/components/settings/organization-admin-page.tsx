@@ -39,11 +39,6 @@ import {
   type AgencyWhatsappNumber,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import {
-  getNotificationPreferences,
-  saveNotificationPreference,
-  type NotificationPreference,
-} from "@/services/notification-center";
 const input =
   "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const button =
@@ -83,7 +78,14 @@ export function OrganizationAdminPage() {
     [notice, setNotice] = useState("");
   useEffect(() => {
     const requested = params.get("section");
-    if (tabs.some(([id]) => id === requested)) setTab(requested as Section);
+    const aliases: Record<string, Section> = {
+      profile: "general",
+      preferences: "general",
+      organization: "agency",
+      spaces: "workspaces",
+    };
+    const resolved = requested ? aliases[requested] || requested : "general";
+    if (tabs.some(([id]) => id === resolved)) setTab(resolved as Section);
   }, [params]);
   const load = useCallback(async () => {
     try {
@@ -147,16 +149,24 @@ export function OrganizationAdminPage() {
               />
             ))}
           </SettingsGroup>
+          <SettingsGroup label="Plateforme">
+            <SettingsLink
+              href="/app/platform"
+              icon={<ShieldCheck size={15} />}
+              label="Console Super Admin"
+            />
+          </SettingsGroup>
         </aside>
         <main className="min-w-0 p-5 lg:p-7">
           <div className="mx-auto max-w-[1120px]">
-            <div className="mb-5 border-b border-[#e5e6e7] pb-4">
-              <h2 className="text-[20px] font-semibold">
+            <div className="mb-5 flex items-start gap-3 border-b border-[#e5e6e7] pb-4">
+              <div className="min-w-0 flex-1"><h2 className="text-[20px] font-semibold">
                 {sectionTitles[tab][0]}
               </h2>
               <p className="mt-1 text-[13px] text-[#69707d]">
                 {sectionTitles[tab][1]}
-              </p>
+              </p></div>
+              <button className={button} onClick={load} title="Actualiser"><RefreshCcw size={14} /></button>
             </div>
             {notice && (
               <div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
@@ -184,9 +194,19 @@ export function OrganizationAdminPage() {
             {tab === "data" && <DataSettings data={data} run={run} />}{" "}
           </div>
         </main>
-      </div>
-    </div>
+    </SettingsDialog>
   );
+}
+
+function SettingsNavigation({ active, select }: { active: Section; select: (section: Section) => void }) {
+  return <>
+    <SettingsGroup label="Compte et organisation">
+      {tabs.map(([id, label, Icon]) => <SettingsItem key={id} active={active === id} icon={<Icon size={15} />} label={label} onClick={() => select(id)} />)}
+    </SettingsGroup>
+    <SettingsGroup label="Plateforme">
+      <PermissionGuard permission="platform.admin.read"><SettingsLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" /></PermissionGuard>
+    </SettingsGroup>
+  </>;
 }
 function SettingsGroup({
   label,

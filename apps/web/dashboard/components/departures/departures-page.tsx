@@ -6,11 +6,19 @@ import {
   Download,
   Plus,
   RefreshCcw,
-  Search,
   Ship,
 } from "lucide-react";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { LoadingState } from "@/components/ui/page-state";
 import { getReferenceCatalog, type ReferenceItem } from "@/services/references";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { catalog, type Service } from "@/services/route-catalog";
@@ -69,6 +77,7 @@ export function DeparturesPage() {
     [mode, setMode] = useState(""),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
+    [allMetrics, setAllMetrics] = useState(false),
     [cursor, setCursor] = useState(new Date());
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,94 +170,87 @@ export function DeparturesPage() {
             </PermissionGuard>
           </>
         }
-        tabs={
-          <>
-            {(
-              [
-                ["calendar", "Calendrier"],
-                ["list", "Liste"],
-                ["routes", "Routes"],
-                ["capacity", "Capacité"],
-                ["delays", "Retards"],
-                ["history", "Historique"],
-              ] as const
-            )
-              .slice(0, 4)
-              .map(([k, l]) => (
-                <button
-                  key={k}
-                  onClick={() => setView(k)}
-                  className={`h-10 border-b-2 px-3 text-[12px] ${view === k ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
-                >
-                  {l}
-                </button>
-              ))}
-            <select
-              aria-label="Autres vues"
-              value={["delays", "history"].includes(view) ? view : ""}
-              onChange={(e) => setView(e.target.value as typeof view)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              <option value="delays">Retards</option>
-              <option value="history">Historique</option>
-            </select>
-          </>
-        }
       />
       <main>
-        <section className="bg-white px-5 py-4">
+        <OperationMetrics>
           <div className="grid grid-cols-2 lg:grid-cols-4">
-            {cards.slice(0, 4).map(([l, v]) => (
+            {cards.slice(0, allMetrics ? cards.length : 4).map(([l, v]) => (
               <Metric key={l} label={String(l)} value={v} />
             ))}
           </div>
-        </section>
-        <div className="flex flex-wrap gap-2 border-b bg-white p-4">
-          <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-            <Search size={15} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un départ, une route..."
-              className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
-            />
-          </label>
-          <select
-            className={`${input} w-40`}
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
+          <button
+            type="button"
+            onClick={() => setAllMetrics((current) => !current)}
+            className="mt-3 text-[12px] font-medium text-[#08764b] hover:underline"
           >
-            <option value="">Tous les services de l’agence</option>
-            {Array.from(
-              new Set(
-                services
-                  .map((service) => service.shipping_mode)
-                  .filter(Boolean),
-              ),
-            ).map((serviceMode) => (
-              <option key={serviceMode} value={serviceMode}>
-                {(
-                  {
-                    AIR: "Avion",
-                    SEA: "Bateau",
-                    EXPRESS: "Express",
-                    ROAD: "Route",
-                    RAIL: "Rail",
-                    MULTIMODAL: "Plusieurs modes",
-                  } as Record<string, string>
-                )[serviceMode] || serviceMode}
-              </option>
-            ))}
-          </select>
-        </div>
+            {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+          </button>
+        </OperationMetrics>
+        <OperationTabs>
+          {(
+            [
+              ["calendar", "Calendrier"],
+              ["list", "Liste"],
+              ["routes", "Routes"],
+              ["capacity", "Capacité"],
+              ["delays", "Retards"],
+              ["history", "Historique"],
+            ] as const
+          ).map(([k, l]) => (
+            <button
+              key={k}
+              onClick={() => setView(k)}
+              className={view === k ? "is-active" : ""}
+            >
+              {l}
+            </button>
+          ))}
+        </OperationTabs>
+        <OperationToolbar
+          search={
+            <OperationSearch
+              value={query}
+              onChange={setQuery}
+              placeholder="Rechercher un départ, une route..."
+            />
+          }
+          filters={
+            <select
+              className={`${input} w-52`}
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+            >
+              <option value="">Tous les services de l’agence</option>
+              {Array.from(
+                new Set(
+                  services
+                    .map((service) => service.shipping_mode)
+                    .filter(Boolean),
+                ),
+              ).map((serviceMode) => (
+                <option key={serviceMode} value={serviceMode}>
+                  {(
+                    {
+                      AIR: "Avion",
+                      SEA: "Bateau",
+                      EXPRESS: "Express",
+                      ROAD: "Route",
+                      RAIL: "Rail",
+                      MULTIMODAL: "Plusieurs modes",
+                    } as Record<string, string>
+                  )[serviceMode] || serviceMode}
+                </option>
+              ))}
+            </select>
+          }
+        />
         {error && (
           <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
             {error}
           </p>
         )}
         {loading ? (
-          <p className="p-16 text-center text-[13px]">Chargement…</p>
+          <LoadingState label="Préparation du calendrier des départs…" />
         ) : view === "calendar" ? (
           <Calendar
             items={filtered}

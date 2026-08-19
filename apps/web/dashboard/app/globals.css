@@ -623,6 +623,31 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   box-shadow: none;
 }
 
+.operation-form-surface form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),
+.operation-form-surface form select {
+  padding-inline: 0.75rem;
+}
+
+.operation-form-surface form textarea {
+  min-height: 96px;
+  padding: 0.625rem 0.75rem;
+  resize: vertical;
+}
+
+.operation-form-surface form input[type="checkbox"],
+.operation-form-surface form input[type="radio"] {
+  accent-color: #16855f;
+}
+
+.operation-form-surface form > :is(.border-t, footer) {
+  border-color: #e5e8eb !important;
+}
+
 .slaivio-operations form input:focus,
 .slaivio-operations form select:focus,
 .slaivio-operations form textarea:focus,

@@ -5,7 +5,6 @@ import {
   FileCheck2,
   FilePlus2,
   FolderOpen,
-  Search,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -25,6 +24,13 @@ import {
 } from "@/services/documents";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationTable,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { LoadingState } from "@/components/ui/page-state";
 
 const button =
   "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f6]";
@@ -97,50 +103,49 @@ export function DocumentsPage() {
         }
       />
       <main>
-        <section className="grid border-b border-[#dfe1e3] bg-white sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            label="Documents"
-            value={items.length}
-            icon={<FolderOpen size={16} />}
-          />
-          <Metric
-            label="À contrôler"
-            value={pending}
-            icon={<FileCheck2 size={16} />}
-          />
-          <Metric
-            label="Conformes"
-            value={valid}
-            icon={<ShieldCheck size={16} />}
-          />
-          <Metric
-            label="À renouveler bientôt"
-            value={expiring}
-            icon={<FileCheck2 size={16} />}
-          />
-        </section>
-        <section className="overflow-x-auto border-b border-[#dfe1e3] bg-white">
-          <div className="flex items-center border-b border-[#e5e7e8] p-3">
-            <label className="flex h-9 min-w-[260px] max-w-xl flex-1 items-center rounded-[5px] bg-[#f3f4f4] px-3">
-              <Search size={15} className="text-[#757c84]" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="ml-2 w-full bg-transparent text-[13px] outline-none"
-                placeholder="Rechercher un document..."
-              />
-            </label>
+        <OperationMetrics>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+            <Metric
+              label="Documents"
+              value={items.length}
+              icon={<FolderOpen size={16} />}
+            />
+            <Metric
+              label="À contrôler"
+              value={pending}
+              icon={<FileCheck2 size={16} />}
+            />
+            <Metric
+              label="Conformes"
+              value={valid}
+              icon={<ShieldCheck size={16} />}
+            />
+            <Metric
+              label="À renouveler bientôt"
+              value={expiring}
+              icon={<FileCheck2 size={16} />}
+            />
           </div>
+        </OperationMetrics>
+        <OperationToolbar
+          search={
+            <OperationSearch
+              value={query}
+              onChange={setQuery}
+              placeholder="Rechercher un document..."
+            />
+          }
+        />
+        <section className="border-b border-[#dfe1e3] bg-white">
           {error && (
             <p className="m-4 bg-red-50 p-3 text-[13px] text-red-700">
               {error}
             </p>
           )}
           {loading ? (
-            <p className="p-12 text-center text-[13px] text-[#68717d]">
-              Chargement...
-            </p>
+            <LoadingState label="Chargement des documents…" />
           ) : filtered.length ? (
+            <OperationTable>
             <table className="w-full min-w-[850px] border-collapse text-left text-[13px]">
               <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
                 <tr className="border-b border-[#e6e9ee]">
@@ -162,7 +167,7 @@ export function DocumentsPage() {
               <tbody>
                 {filtered.map((item) => (
                   <tr
-                    className="border-b border-[#edf0f3] hover:bg-[#f7faf9]"
+                    className="h-11 border-b border-[#edf0f3] hover:bg-[#f7faf9]"
                     key={item.id}
                   >
                     <td className="px-4 py-3 font-semibold">
@@ -219,6 +224,7 @@ export function DocumentsPage() {
                 ))}
               </tbody>
             </table>
+            </OperationTable>
           ) : (
             <div className="grid min-h-64 place-items-center text-center">
               <div>
@@ -334,11 +340,11 @@ function Metric({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex min-h-[76px] items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 sm:border-b-0">
+    <div className="flex min-h-[76px] items-center gap-3 border-l border-[#eceeef] px-4 py-1 first:border-l-0">
       <span className="text-[#087a46]">{icon}</span>
       <div>
         <p className="text-[11px] text-[#6d747c]">{label}</p>
-        <p className="text-[20px] font-semibold">{value}</p>
+        <p className="mt-1 text-[24px] font-medium">{value}</p>
       </div>
     </div>
   );

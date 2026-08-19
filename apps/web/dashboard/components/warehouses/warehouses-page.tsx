@@ -5,12 +5,18 @@ import {
   Download,
   ChevronRight,
   Plus,
-  Search,
   Warehouse as WarehouseIcon,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import {
+  OperationMetrics,
+  OperationSearch,
+  OperationTable,
+  OperationToolbar,
+} from "@/components/ui/operation-primitives";
+import { LoadingState } from "@/components/ui/page-state";
 import {
   createWarehouse,
   exportWarehouseInventory,
@@ -96,7 +102,7 @@ export function WarehousesPage() {
         }
       />
       <main>
-        <section className="bg-white px-5 py-4">
+        <OperationMetrics>
           <div
             className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}
           >
@@ -125,37 +131,37 @@ export function WarehousesPage() {
           </div>
           <button
             onClick={() => setAllMetrics((current) => !current)}
-            className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+            className="mt-3 text-[11px] font-medium text-[#087a46]"
           >
             {allMetrics
               ? "Réduire les indicateurs"
               : "Voir tous les indicateurs"}
           </button>
-        </section>
-        <section className="overflow-hidden bg-white">
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e7e8] p-3">
-            <label className="flex h-9 min-w-[260px] flex-1 items-center rounded-[5px] bg-[#f4f5f5] px-3">
-              <Search size={15} className="text-[#7a838e]" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="ml-2 w-full bg-transparent text-[13px] outline-none"
-                placeholder="Rechercher un entrepôt, une ville…"
-              />
-            </label>
+        </OperationMetrics>
+        <OperationToolbar
+          search={
+            <OperationSearch
+              value={q}
+              onChange={setQ}
+              placeholder="Rechercher un entrepôt, une ville…"
+            />
+          }
+          filters={
             <button className={button} onClick={load}>
               Actualiser
             </button>
-          </div>
+          }
+        />
+        <section className="overflow-hidden bg-white">
           {error && (
             <p className="m-4 rounded bg-red-50 p-3 text-[13px] text-red-700">
               {error}
             </p>
           )}
           {loading ? (
-            <Skeleton />
+            <LoadingState label="Chargement des entrepôts…" />
           ) : items.length ? (
-            <div className="overflow-x-auto">
+            <OperationTable>
               <table className="w-full min-w-[980px] border-collapse text-left text-[13px]">
                 <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
                   <tr className="border-b border-[#e6e9ee]">
@@ -179,7 +185,7 @@ export function WarehousesPage() {
                   {items.map((w) => (
                     <tr
                       key={w.id}
-                      className="border-b border-[#edf0f3] hover:bg-[#f7faf9]"
+                      className="h-11 border-b border-[#edf0f3] hover:bg-[#f7faf9]"
                     >
                       <td className="px-4 py-3">
                         <Link
@@ -226,7 +232,7 @@ export function WarehousesPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </OperationTable>
           ) : (
             <div className="grid min-h-64 place-items-center p-8 text-center">
               <div>
@@ -345,15 +351,6 @@ function Capacity({ w }: { w: Warehouse }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
-  );
-}
-function Skeleton() {
-  return (
-    <div className="space-y-2 p-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-12 animate-pulse rounded bg-[#f0f1f2]" />
-      ))}
     </div>
   );
 }

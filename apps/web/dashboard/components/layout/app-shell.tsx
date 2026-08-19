@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   CheckCheck,
+  ChevronDown,
   ChevronRight,
   CircleHelp,
   Code2,
@@ -18,6 +19,8 @@ import {
   Megaphone,
   MessageSquareText,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
   Search,
   Settings,
@@ -60,6 +63,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [floatingPanel, setFloatingPanel] = useState<FloatingPanel>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const groupedRoutes = useMemo(
     () => appNavigation.map((group) => ({
@@ -79,6 +84,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       [route.label, ...route.keywords].some((term) => term.toLocaleLowerCase("fr").includes(normalized)),
     );
   }, [query, permissions, permissionsAvailable]);
+
+  useEffect(() => {
+    const savedCollapsed = window.localStorage.getItem("slaivio.sidebar.collapsed");
+    const savedGroups = window.localStorage.getItem("slaivio.sidebar.groups");
+    setSidebarCollapsed(savedCollapsed === "1");
+    if (savedGroups) {
+      try { setOpenGroups(JSON.parse(savedGroups) as Record<string, boolean>); } catch { /* Ignore stale preferences. */ }
+    }
+  }, []);
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {
@@ -113,6 +127,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     setFloatingPanel((current) => current === panel ? null : panel);
   }
 
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("slaivio.sidebar.collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  function toggleGroup(label: string) {
+    setOpenGroups((current) => {
+      const next = { ...current, [label]: current[label] === false };
+      window.localStorage.setItem("slaivio.sidebar.groups", JSON.stringify(next));
+      return next;
+    });
+  }
+
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e]">
       <button
@@ -121,24 +151,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={`fixed inset-0 z-40 bg-black/25 lg:hidden ${mobileOpen ? "block" : "hidden"}`}
       />
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-transform lg:relative lg:z-auto lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] px-4">
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
           <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
-            <SlaivioBrand compact />
+            <SlaivioBrand compact iconOnly={sidebarCollapsed} />
           </Link>
           <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
           </button>
+          <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:absolute lg:left-[52px] lg:z-10 lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </div>
 
-        <OrganizationSwitcher />
-
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-3" aria-label="Navigation Slaivio">
-          <SidebarLink href="/app" icon={<Home size={17} />} active={pathname === "/app"} label="Accueil" />
+        <nav className={`min-h-0 flex-1 overflow-y-auto py-3 ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
+          <SidebarLink href="/app" icon={<Home size={17} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
           {groupedRoutes.map((group) => (
-            <section key={group.label} className="mt-5">
-              <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase text-[#8a9097]">{group.label}</div>
-              <div className="space-y-0.5">
+            <section key={group.label} className={sidebarCollapsed ? "mt-2" : "mt-4"}>
+              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} className={`flex w-full items-center text-[#747c85] hover:text-[#33383e] ${sidebarCollapsed ? "h-9 justify-center rounded-[5px] hover:bg-[#f0f1f1]" : "h-7 gap-2 px-2"}`}>
+                <group.icon size={15} className="shrink-0" />
+                {!sidebarCollapsed && <><span className="truncate text-[10px] font-semibold uppercase">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+              </button>
+              <div className={`space-y-0.5 ${openGroups[group.label] === false && !sidebarCollapsed ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
                   <SidebarLink
                     key={route.href}
@@ -146,6 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     icon={<route.icon size={16} />}
                     active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
                     label={route.label}
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </div>
@@ -153,13 +188,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-[#e3e4e5] p-3">
+        <div className={`shrink-0 border-t border-[#e3e4e5] ${sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
           {!permissionsLoading && !permissionsAvailable && (
             <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
               Les droits n’ont pas pu être chargés. Les API continuent de protéger les actions.
             </div>
           )}
-          <SidebarLink href="/app/settings" icon={<Settings size={16} />} active={pathname.startsWith("/app/settings")} label="Paramètres" />
+          <OrganizationSwitcher collapsed={sidebarCollapsed} />
         </div>
       </aside>
 
@@ -231,11 +266,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarLink({ href, icon, active, label }: { href: string; icon: ReactNode; active: boolean; label: string }) {
+function SidebarLink({ href, icon, active, label, collapsed = false }: { href: string; icon: ReactNode; active: boolean; label: string; collapsed?: boolean }) {
   return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center gap-2.5 rounded-[5px] px-2.5 text-[13px] ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
+    <Link href={href} title={collapsed ? label : undefined} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center rounded-[5px] text-[13px] ${collapsed ? "justify-center px-1" : "gap-2.5 px-2.5"} ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
       <span className={active ? "text-[#16855f]" : "text-[#656c74]"}>{icon}</span>
-      <span className="truncate">{label}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </Link>
   );
 }
@@ -293,6 +328,8 @@ function FallbackAccountMenu({ close }: { close: () => void }) {
 }
 
 function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: () => void; name: string; email: string; imageUrl?: string | null; logout: () => void | Promise<unknown> }) {
+  const { permissions, available } = usePermissions();
+  const canOpenPlatform = !available || permissions.some((permission) => permission.startsWith("platform."));
   return (
     <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
       <div className="flex items-center gap-3 px-4 py-4">
@@ -300,15 +337,19 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
         <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
       </div>
       <MenuDivider />
-      <MenuLink href="/app/settings?section=profile" icon={<UserRound size={15} />} label="Compte et profil" close={close} />
+      <MenuLink href="/app/settings?section=general" icon={<UserRound size={15} />} label="Compte et profil" close={close} />
+      <MenuLink href="/app/settings?section=agency" icon={<Settings size={15} />} label="Organisation" close={close} />
+      <MenuLink href="/app/settings?section=workspaces" icon={<Home size={15} />} label="Espaces et agences" close={close} />
       <MenuLink href="/app/settings?section=team" icon={<Users size={15} />} label="Équipe et accès" close={close} />
+      <MenuLink href="/app/settings?section=roles" icon={<ShieldCheck size={15} />} label="Rôles et permissions" close={close} />
       <MenuLink href="/app/notifications?preferences=1" icon={<SlidersHorizontal size={15} />} label="Préférences de notifications" close={close} />
-      <MenuLink href="/app/settings?section=preferences" icon={<Languages size={15} />} label="Langue et formats" close={close} />
+      <MenuLink href="/app/settings?section=general" icon={<Languages size={15} />} label="Langue et formats" close={close} />
       <MenuDisabled icon={<Palette size={15} />} label="Apparence" status="Bientôt" />
       <MenuDivider />
-      <MenuDisabled icon={<Plug size={15} />} label="Intégrations" status="Indisponible" />
-      <MenuDisabled icon={<CreditCard size={15} />} label="Abonnement et facturation" status="Indisponible" />
-      <MenuLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" close={close} />
+      <MenuLink href="/app/settings?section=integrations" icon={<Plug size={15} />} label="Intégrations" close={close} />
+      <MenuLink href="/app/settings?section=billing" icon={<CreditCard size={15} />} label="Abonnement et facturation" close={close} />
+      <MenuLink href="/app/settings?section=security" icon={<ShieldCheck size={15} />} label="Sécurité" close={close} />
+      {canOpenPlatform && <MenuLink href="/app/platform" icon={<ShieldCheck size={15} />} label="Console Super Admin" close={close} />}
       <MenuDivider />
       <MenuDisabled icon={<Trash2 size={15} />} label="Corbeille" status="Bientôt" />
       <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
@@ -382,7 +423,13 @@ function NotificationsMenu({ close }: { close: () => void }) {
         </label>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {loading ? <p className="p-10 text-center text-[12px] text-[#858b92]">Chargement...</p> : error ? <p className="p-6 text-center text-[12px] text-red-600">{error}</p> : !filtered.length ? (
+        {loading ? (
+          <div className="flex h-full min-h-36 items-center justify-center" aria-label="Chargement des notifications">
+            <span className="flex items-center gap-1.5">
+              {[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#169c68]" style={{ animationDelay: `${dot * 140}ms` }} />)}
+            </span>
+          </div>
+        ) : error ? <p className="p-6 text-center text-[12px] text-red-600">{error}</p> : !filtered.length ? (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center"><CheckCheck size={24} className="text-[#a1a7ad]" /><p className="mt-3 text-[13px] font-medium">Aucune notification {tab === "unread" ? "non lue" : "lue"}</p><p className="mt-1 text-[11px] leading-5 text-[#858b92]">Les mises à jour opérationnelles apparaîtront ici.</p></div>
         ) : filtered.map((item) => (
           <Link key={`${item.source}-${item.id}`} href={notificationTarget(item)} onClick={() => markRead(item)} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">

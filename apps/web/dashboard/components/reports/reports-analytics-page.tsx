@@ -9,7 +9,11 @@ import {
   type Analytics,
 } from "@/services/reports";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
+import { OperationMetrics } from "@/components/ui/operation-primitives";
 import { LoadingState } from "@/components/ui/page-state";
 const button =
     "inline-flex h-9 items-center gap-2 rounded-[5px] border border-[#d8dddf] bg-white px-3 text-[13px] font-medium text-[#30363a] hover:bg-[#f5f7f6]",
@@ -33,6 +37,7 @@ export function ReportsAnalyticsPage() {
     [tab, setTab] = useState("overview"),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
+    [allMetrics, setAllMetrics] = useState(false),
     [report, setReport] = useState("packages"),
     [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const load = useCallback(async () => {
@@ -81,6 +86,19 @@ export function ReportsAnalyticsPage() {
       ))}
     </>
   );
+  const metricCards = data
+    ? [
+        ["Nouveaux clients", data.kpis.clients],
+        ["Colis reçus", data.kpis.packages],
+        ["Expéditions", data.kpis.shipments],
+        ["Dossiers", data.kpis.dossiers],
+        ["Retraits", data.kpis.pickups],
+        [
+          "Poids traité",
+          `${Number(data.kpis.weight_kg).toLocaleString("fr-FR")} kg`,
+        ],
+      ]
+    : [];
   return (
     <div className="min-h-full bg-[#f6f7f7]">
       <OperationPageHeader
@@ -112,19 +130,48 @@ export function ReportsAnalyticsPage() {
             </button>
           </>
         }
-        tabs={tabs}
       />
-      <main className="p-5 sm:p-6">
-        {error && (
-          <p className="mb-3 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
-            {error}
-          </p>
+      <OperationMetrics>
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+          {(loading
+            ? Array.from({ length: 4 }, (_, index) => [String(index), ""])
+            : metricCards.slice(0, allMetrics ? metricCards.length : 4)
+          ).map(([label, value], index) => (
+            <div
+              key={String(label)}
+              className={`min-h-[72px] px-4 py-1 ${index ? "border-l border-[#e2e5e6]" : ""}`}
+            >
+              {loading ? (
+                <>
+                  <div className="h-3 w-24 animate-pulse rounded bg-[#e8ecea]" />
+                  <div className="mt-3 h-7 w-16 animate-pulse rounded bg-[#e8ecea]" />
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-[#697178]">{label}</p>
+                  <b className="mt-2 block text-[23px] text-[#252b2f]">{value}</b>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        {!loading && metricCards.length > 4 && (
+          <button
+            type="button"
+            onClick={() => setAllMetrics((current) => !current)}
+            className="mt-3 text-[12px] font-medium text-[#08764b] hover:underline"
+          >
+            {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
+          </button>
         )}
+      </OperationMetrics>
+      <OperationTabs>
+        {tabs}
         <select
           aria-label="Autres vues Rapports"
           value={["warehouses", "reports"].includes(tab) ? tab : ""}
           onChange={(event) => event.target.value && setTab(event.target.value)}
-          className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+          className={`mb-1 ml-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
             ["warehouses", "reports"].includes(tab)
               ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
               : "border-[#d6dadd] bg-white text-[#69717a]"
@@ -134,6 +181,13 @@ export function ReportsAnalyticsPage() {
           <option value="warehouses">Entrepôts</option>
           <option value="reports">Rapports exportables</option>
         </select>
+      </OperationTabs>
+      <main className="p-5 sm:p-6">
+        {error && (
+          <p className="mb-3 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+            {error}
+          </p>
+        )}
         {loading ? (
           <LoadingState label="Calcul des indicateurs…" />
         ) : !data ? (
@@ -169,56 +223,9 @@ export function ReportsAnalyticsPage() {
     </div>
   );
 }
-function change(current: number, previous: number) {
-  if (!previous) return current ? 100 : 0;
-  return Math.round(((current - previous) * 100) / previous);
-}
 function Overview({ data }: { data: Analytics }) {
-  const cards = [
-    [
-      "Nouveaux clients",
-      data.kpis.clients,
-      change(data.kpis.clients, data.kpis.previous_clients),
-    ],
-    [
-      "Colis reçus",
-      data.kpis.packages,
-      change(data.kpis.packages, data.kpis.previous_packages),
-    ],
-    [
-      "Expéditions",
-      data.kpis.shipments,
-      change(data.kpis.shipments, data.kpis.previous_shipments),
-    ],
-    ["Dossiers", data.kpis.dossiers, null],
-    ["Retraits", data.kpis.pickups, null],
-    [
-      "Poids traité",
-      `${Number(data.kpis.weight_kg).toLocaleString("fr-FR")} kg`,
-      null,
-    ],
-  ];
   return (
     <div className="grid gap-4">
-      <div className="grid border-b border-[#dfe3e4] bg-white sm:grid-cols-2 lg:grid-cols-4">
-        {cards.slice(0, 4).map(([l, v, c], index) => (
-          <section
-            key={l}
-            className={`min-h-[105px] p-4 ${index ? "border-l border-[#e2e5e6]" : ""}`}
-          >
-            <small className="text-[#697178]">{l}</small>
-            <b className="mt-2 block text-[22px] text-[#252b2f]">{v}</b>
-            {c !== null && (
-              <span
-                className={`text-[11px] ${Number(c) >= 0 ? "text-emerald-700" : "text-red-700"}`}
-              >
-                {Number(c) >= 0 ? "+" : ""}
-                {c}% vs période précédente
-              </span>
-            )}
-          </section>
-        ))}
-      </div>
       <Card
         title="Activité quotidienne"
         subtitle="Nouveaux clients, colis et expéditions sur la période"

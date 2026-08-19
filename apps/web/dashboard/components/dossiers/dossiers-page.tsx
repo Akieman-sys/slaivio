@@ -16,14 +16,17 @@ import {
   Search,
   SlidersHorizontal,
   Upload,
-  X,
   Trash2,
   Truck,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import {
+  OperationPageHeader,
+  OperationTabs,
+} from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
@@ -553,23 +556,6 @@ export function DossiersPage() {
               </PermissionGuard>
             </>
           }
-          tabs={
-            <>
-              {views.map((view) => (
-                <button
-                  key={view.key}
-                  onClick={() => setActiveView(view.key)}
-                  className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
-                    activeView === view.key
-                      ? "border-[#12c76f] text-[#067a45]"
-                      : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
-                  }`}
-                >
-                  {view.label}
-                </button>
-              ))}
-            </>
-          }
         />
 
         <section className="bg-white px-5 py-4">
@@ -587,6 +573,22 @@ export function DossiersPage() {
             ))}
           </div>
         </section>
+
+        <OperationTabs>
+          {views.map((view) => (
+            <button
+              key={view.key}
+              onClick={() => setActiveView(view.key)}
+              className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${
+                activeView === view.key
+                  ? "border-[#12c76f] text-[#067a45]"
+                  : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"
+              }`}
+            >
+              {view.label}
+            </button>
+          ))}
+        </OperationTabs>
 
         <section>
           <div className="border-y border-[#eceef1] px-4 py-2.5">
@@ -1003,18 +1005,6 @@ function DossierDetails({
   onUpdateNote: (note: DossierInternalNote, body: string) => Promise<void>;
   onDeleteNote: (note: DossierInternalNote) => Promise<void>;
 }) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setVisible(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, [dossier.id]);
-
-  function close() {
-    setVisible(false);
-    window.setTimeout(onClose, 180);
-  }
-
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "summary", label: "Résumé" },
     { key: "collaboration", label: "Collaboration" },
@@ -1028,29 +1018,14 @@ function DossierDetails({
   ];
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/10" onClick={close}>
-      <aside
-        onClick={(event) => event.stopPropagation()}
-        className={`ml-auto flex h-full w-full max-w-[720px] flex-col border-l border-[#d8dce2] bg-white shadow-[-18px_0_40px_rgba(15,23,42,0.16)] transition-transform duration-200 ${visible ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <header className="border-b border-[#d8dce2] px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[13px] text-[#687584]">Dossier cargo</p>
-              <h2 className="mt-1 truncate text-[24px] font-semibold tracking-[-0.03em]">
-                {dossier.dossier_reference}
-              </h2>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <StatusBadge status={dossier.status_global} />
-                <PaymentBadge status={dossier.payment_status} />
-                {loading && (
-                  <span className="text-[12px] text-[#687584]">
-                    Actualisation…
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
+    <OperationDrawer
+      open
+      close={onClose}
+      width="max-w-[720px]"
+      title={dossier.dossier_reference}
+      description="Dossier cargo"
+      headerActions={
+        <>
               {!archived && (
                 <PermissionGuard permission="dossiers.update">
                   <button onClick={onEdit} className={buttonClass}>
@@ -1080,18 +1055,11 @@ function DossierDetails({
                   </button>
                 )}
               </PermissionGuard>
-              <button
-                onClick={close}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd5dd] bg-white hover:bg-[#f7f8fa]"
-                aria-label="Fermer"
-              >
-                <X size={17} />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex gap-1 overflow-x-auto border-b border-[#d8dce2] px-4 py-2">
+        </>
+      }
+      headerMeta={<><StatusBadge status={dossier.status_global} /><PaymentBadge status={dossier.payment_status} />{loading && <span className="text-[12px] text-[#687584]">Actualisation…</span>}</>}
+      tabs={
+        <>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -1101,9 +1069,9 @@ function DossierDetails({
               {tab.label}
             </button>
           ))}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        </>
+      }
+    >
           {activeTab === "summary" && <SummaryTab dossier={dossier} />}
           {activeTab === "collaboration" && (
             <CollaborationTab
@@ -1135,9 +1103,7 @@ function DossierDetails({
           {activeTab === "history" && (
             <HistoryTab events={timeline} loading={timelineLoading} />
           )}
-        </div>
-      </aside>
-    </div>
+    </OperationDrawer>
   );
 }
 
@@ -1847,28 +1813,15 @@ function DossierFormModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
-      <div className="max-h-[90dvh] w-full max-w-4xl overflow-hidden rounded-xl border border-[#d8dce2] bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#d8dce2] px-5 py-4">
-          <div>
-            <h2 className="text-[20px] font-semibold">
-              {mode === "edit" ? "Modifier le dossier" : "Nouveau dossier"}
-            </h2>
-            <p className="mt-1 text-[13px] text-[#617083]">
-              Un dossier doit toujours être relié à un client réel de l’agence.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd5dd] bg-white hover:bg-[#f7f8fa]"
-            aria-label="Fermer"
-          >
-            <X size={17} />
-          </button>
-        </div>
+    <OperationDrawer
+      open
+      title={mode === "edit" ? "Modifier le dossier" : "Nouveau dossier"}
+      description="Un dossier doit toujours être relié à un client réel de l’agence."
+      close={onClose}
+      width="max-w-4xl"
+    >
         <form
           onSubmit={onSubmit}
-          className="max-h-[calc(90dvh-76px)] overflow-y-auto p-5"
         >
           {error && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
@@ -2090,8 +2043,7 @@ function DossierFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </OperationDrawer>
   );
 }
 

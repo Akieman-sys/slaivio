@@ -23,6 +23,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { listPackages, type PackageRecord } from "@/services/packages";
 import {PermissionGuard} from "@/components/permissions/permission-guard";
+import {LoadingState} from "@/components/ui/page-state";
 import {
   archiveShipment,
   addShipmentFinancialLine,
@@ -138,7 +139,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
   }, [shipment]);
 
   if (loading) {
-    return <div className="flex min-h-[calc(100vh-56px)] items-center justify-center bg-[#f7f8fa] text-[#64748b]"><Loader2 className="mr-2 animate-spin" size={18} /> Chargement de l&apos;expédition...</div>;
+    return <LoadingState label="Chargement de l’expédition…" />;
   }
 
   if (!shipment) {
@@ -164,7 +165,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
               <div className="mb-2 text-[13px] text-[#5f6b7a]">Operations <span className="mx-1">›</span> Expéditions <span className="mx-1">›</span> {shipment.expedition_reference}</div>
-              <h1 className="text-[34px] font-semibold tracking-[-0.02em]">{shipment.expedition_reference}</h1>
+              <h1 className="text-[21px] font-semibold">{shipment.expedition_reference}</h1>
               <p className="mt-2 text-[15px] text-[#5f6b7a]">
                 {shipment.title || "Expédition cargo"} · {modeLabels[shipment.mode]} · {shipment.route_label || `${shipment.origin_country || "-"} → ${shipment.destination_country || "-"}`}
               </p>
@@ -185,7 +186,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
               {tab}
             </button>
           ))}
-          <select aria-label="Autres sections" value={secondaryTabs.includes(activeTab as typeof secondaryTabs[number])?activeTab:""} onChange={event=>setActiveTab(event.target.value as Tab)} className="ml-1 h-8 self-center rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"><option value="">Plus</option>{secondaryTabs.map(tab=><option key={tab} value={tab}>{tab}</option>)}</select>
+          <select aria-label="Autres sections" value={secondaryTabs.includes(activeTab as typeof secondaryTabs[number])?activeTab:""} onChange={event=>setActiveTab(event.target.value as Tab)} className="ml-1 h-9 self-center rounded-[5px] bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"><option value="">Plus</option>{secondaryTabs.map(tab=><option key={tab} value={tab}>{tab}</option>)}</select>
         </div>
 
         <div className="p-5">

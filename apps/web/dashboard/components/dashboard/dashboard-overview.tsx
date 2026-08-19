@@ -35,7 +35,7 @@ export function DashboardOverviewPage() {
       <header className="border-b border-[#dfe1e3] bg-white px-5 py-3.5 sm:px-6">
         <div className="flex min-h-[44px] items-center justify-between gap-4">
           <div>
-            <h1 className="text-[20px] font-semibold text-[#24282d]">
+            <h1 className="text-[21px] font-semibold text-[#24282d]">
               {data?.workspace.name ? `Vue d’ensemble · ${data.workspace.name}` : "Vue d’ensemble de l’agence"}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#69717a]">
@@ -43,8 +43,8 @@ export function DashboardOverviewPage() {
               {(data?.workspace.city || data?.workspace.country) && <span className="inline-flex items-center gap-1"><MapPin size={12} />{[data.workspace.city, data.workspace.country].filter(Boolean).join(", ")}</span>}
             </div>
           </div>
-          <button type="button" onClick={load} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-[#d2d5d8] bg-white px-3 text-[12px] hover:bg-[#f2f3f3] disabled:opacity-60">
-            <RefreshCcw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
+          <button type="button" onClick={load} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-[#d2d5d8] bg-white px-3 text-[13px] hover:bg-[#f2f3f3] disabled:opacity-60">
+            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
         </div>
       </header>
@@ -97,13 +97,13 @@ export function DashboardOverviewPage() {
                 <div className="flex h-12 items-center border-b border-[#e3e5e7] px-4">
                   <Bell size={16} className="mr-2 text-[#646b73]" />
                   <h2 id="notifications-title" className="text-[13px] font-semibold">Notifications récentes</h2>
-                  {data?.unread_count ? <span className="ml-2 rounded-full bg-[#5550d8] px-2 py-0.5 text-[10px] text-white">{data.unread_count}</span> : null}
-                  <Link href="/app/notifications" className="ml-auto text-[11px] font-medium text-[#514bc5] hover:underline">Tout voir</Link>
+                  {data?.unread_count ? <span className="ml-2 rounded-full bg-[#16855f] px-2 py-0.5 text-[10px] text-white">{data.unread_count}</span> : null}
+                  <Link href="/app/notifications" className="ml-auto text-[11px] font-medium text-[#145f49] hover:underline">Tout voir</Link>
                 </div>
                 <div>
                   {data?.notifications.length ? data.notifications.slice(0, 6).map((item) => (
                     <Link href="/app/notifications" key={item.id} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#5550d8]"}`} />
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#16855f]"}`} />
                       <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-[#727981]">{item.message}</span></span>
                     </Link>
                   )) : <p className="px-5 py-12 text-center text-[12px] text-[#858b92]">Aucune notification récente.</p>}
@@ -116,7 +116,7 @@ export function DashboardOverviewPage() {
               <div className="grid overflow-hidden border-y border-[#d9dcdf] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {(data?.resources || []).map((resource) => (
                   <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[#eef1ff] text-[12px] font-semibold text-[#514bc5]">{resource.name.slice(0, 2).toUpperCase()}</span>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[#eaf7f1] text-[12px] font-semibold text-[#145f49]">{resource.name.slice(0, 2).toUpperCase()}</span>
                     <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium">{resource.name}</span><span className="block truncate text-[10px] text-[#858b92]">{resource.description}</span></span>
                     <ArrowRight size={14} className="text-[#a1a6ac] opacity-0 transition group-hover:opacity-100" />
                   </Link>
@@ -164,7 +164,7 @@ function AttentionRow({ item }: { item: HomeAttentionItem }) {
 function ChevronMarker() { return <ArrowRight size={14} className="text-[#a1a6ac]" />; }
 
 function NoWorkspace() {
-  return <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[7px] border border-[#d9dcdf] bg-white px-6 text-center"><Building2 size={28} className="text-[#8a9097]" /><h2 className="mt-4 text-[15px] font-semibold">Aucune agence active</h2><p className="mt-1 max-w-md text-[12px] leading-5 text-[#737a82]">Sélectionnez ou configurez une agence pour accéder aux opérations.</p><Link href="/app/settings" className="mt-5 inline-flex h-8 items-center rounded-[5px] bg-[#5550d8] px-3 text-[12px] font-medium text-white">Configurer l’agence</Link></div>;
+  return <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[7px] border border-[#d9dcdf] bg-white px-6 text-center"><Building2 size={28} className="text-[#8a9097]" /><h2 className="mt-4 text-[16px] font-semibold">Aucune agence active</h2><p className="mt-1 max-w-md text-[12px] leading-5 text-[#737a82]">Sélectionnez ou configurez une agence pour accéder aux opérations.</p><Link href="/app/settings" className="mt-5 inline-flex h-9 items-center rounded-[5px] bg-[#16855f] px-3 text-[13px] font-medium text-white hover:bg-[#126f50]">Configurer l’agence</Link></div>;
 }
 
 function DashboardSkeleton() {

@@ -23,6 +23,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   createShipment,
@@ -680,22 +681,17 @@ export function ShipmentsPage() {
       </section>
 
       {formOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
+        <OperationDrawer
+          open
+          title="Nouvelle expédition"
+          description="Planifiez le transport, la capacité et les références opérationnelles."
+          close={() => setFormOpen(false)}
+          width="max-w-4xl"
+        >
           <form
-            className="max-h-[88vh] w-full max-w-4xl overflow-auto rounded-lg border border-[#d8dce2] bg-white shadow-2xl"
             onSubmit={handleCreate}
           >
-            <div className="flex items-center justify-between border-b border-[#d8dce2] px-5 py-4">
-              <h2 className="text-[18px] font-semibold">Nouvelle expédition</h2>
-              <button
-                type="button"
-                className={buttonClass}
-                onClick={() => setFormOpen(false)}
-              >
-                Fermer
-              </button>
-            </div>
-            <div className="grid gap-4 p-5 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3">
               <Field
                 name="title"
                 label="Titre"
@@ -801,11 +797,11 @@ export function ShipmentsPage() {
               </label>
             </div>
             {formError ? (
-              <div className="mx-5 mb-3 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-700">
+              <div className="rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-700">
                 {formError}
               </div>
             ) : null}
-            <div className="flex justify-end gap-2 border-t border-[#d8dce2] px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-[#d8dce2] pt-4">
               <button
                 type="button"
                 className={buttonClass}
@@ -827,7 +823,7 @@ export function ShipmentsPage() {
               </button>
             </div>
           </form>
-        </div>
+        </OperationDrawer>
       ) : null}
     </div>
   );

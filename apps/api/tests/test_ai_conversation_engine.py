@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.ai.services.dialogue_validation import correction_from_message, dialogue_act, validate_field
+from app.ai.services.platform_query_service import _client_search_term
 
 
 ROOT=Path(__file__).parents[3]
@@ -65,3 +66,12 @@ def test_paused_workflow_can_be_resumed_from_the_conversation():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     assert "workflow_status in ('PREPARED','PAUSED')" in repository
     assert 'if act == "RESUME"' in service
+
+
+def test_transversal_read_tools_are_checked_before_action_workflows():
+    service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
+    tools=(ROOT/"apps/api/app/ai/services/platform_query_service.py").read_text(encoding="utf-8")
+    for capability in ("clients.search","packages.list","dossiers.list","tracking.read","routes.list","services.list","warehouses.list"):
+        assert capability in tools
+    assert service.index("answer_platform_query(") < service.index("detect_intent(org_id=org_id")
+    assert _client_search_term("est ce qu'il y a un client nomer Bawaba") == "Bawaba"

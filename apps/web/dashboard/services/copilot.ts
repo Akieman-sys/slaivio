@@ -5,7 +5,7 @@ export type CopilotMessage = {
   role: "USER" | "ASSISTANT" | "SYSTEM";
   content: string;
   workflow_id?: string | null;
-  metadata?: { missing_fields?: string[]; intent?: string; dialogue_state?: string; choices?: Array<{value:string;label:string}>; summary?: Record<string, unknown> };
+  metadata?: { missing_fields?: string[]; intent?: string; dialogue_state?: string; choices?: Array<{value:string;label:string}>; summary?: Record<string, unknown>; tool?: string; cards?: Array<{kind:string;id:string;title:string;subtitle:string;href:string}> };
   created_at: string;
 };
 

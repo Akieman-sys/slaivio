@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { listClients, type ClientRecord } from "@/services/clients";
 
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
@@ -222,7 +223,8 @@ function TabButton({ active, onClick, count, children }: { active: boolean; onCl
 function MessageBubble({ message }: { message: CopilotMessage }) {
   const user = message.role === "USER";
   const choices=message.metadata?.choices||[];
-  return <div className={`flex ${user ? "justify-end" : "justify-start"}`}><div className={`max-w-[720px] rounded-[7px] px-4 py-3 text-[13px] leading-5 ${user ? "bg-[#25292d] text-white" : "border border-[#dfe1e3] bg-[#f7f8f8]"}`}>{!user && <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-[#087a46]"><Sparkles size={12} />Slaivio</span>}<p>{message.content}</p>{choices.length>0&&<div className="mt-3 flex flex-wrap gap-2">{choices.map(choice=><span key={choice.value} className="rounded-full border border-[#cfd8d3] bg-white px-2.5 py-1 text-[11px] text-[#315a47]">{choice.label}</span>)}</div>}</div></div>;
+  const cards=message.metadata?.cards||[];
+  return <div className={`flex ${user ? "justify-end" : "justify-start"}`}><div className={`max-w-[720px] rounded-[7px] px-4 py-3 text-[13px] leading-5 ${user ? "bg-[#25292d] text-white" : "border border-[#dfe1e3] bg-[#f7f8f8]"}`}>{!user && <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-[#087a46]"><Sparkles size={12} />Slaivio</span>}<p className="whitespace-pre-line">{message.content}</p>{cards.length>0&&<div className="mt-3 grid gap-2 sm:grid-cols-2">{cards.slice(0,10).map(card=><Link key={`${card.kind}-${card.id}`} href={card.href} className="group rounded-[6px] border border-[#d8dedb] bg-white px-3 py-2.5 hover:border-[#8ab5a1] hover:bg-[#f7fbf9]"><span className="block truncate text-[11px] font-semibold text-[#26312c]">{card.title}</span><span className="mt-0.5 block truncate text-[10px] text-[#737b77]">{card.subtitle}</span><span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-[#087a46]">Ouvrir <ChevronRight size={11}/></span></Link>)}</div>}{choices.length>0&&<div className="mt-3 flex flex-wrap gap-2">{choices.map(choice=><span key={choice.value} className="rounded-full border border-[#cfd8d3] bg-white px-2.5 py-1 text-[11px] text-[#315a47]">{choice.label}</span>)}</div>}</div></div>;
 }
 
 function WelcomeMessage({ setPrompt }: { setPrompt: (value: string) => void }) {

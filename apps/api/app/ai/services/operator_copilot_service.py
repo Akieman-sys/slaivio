@@ -21,6 +21,7 @@ from app.ai.services.dialogue_validation import correction_from_message, dialogu
 from app.ai.services.intent_detector import detect_intent
 from app.ai.services.workflow_actions import build_proposed_actions
 from app.ai.services.workflow_mapping import get_workflow_type
+from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.packages.repository import create_package
@@ -250,6 +251,18 @@ def prepare_operator_message(
         )
 
     try:
+        platform_answer = answer_platform_query(org_id, clean_message, resolved_phone, workspace_id)
+    except Exception:
+        platform_answer = None
+    if platform_answer:
+        response = platform_answer["content"]
+        assistant_message = create_operator_message(
+            org_id, user_id, "ASSISTANT", response,
+            metadata={"dialogue_state":"ANSWERED","tool":platform_answer["tool"],"cards":platform_answer.get("cards") or []},
+        )
+        return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"ANSWERED","tool":platform_answer["tool"]}
+
+    try:
         intent_result = detect_intent(org_id=org_id, message=clean_message)
     except Exception:
         intent_result = {"intent": "UNKNOWN", "confidence": 0.0, "entities": {}}
@@ -385,6 +398,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
             status_code=422,
             detail={"code": "workflow_incomplete", "missing_fields": missing},
         )
+
     if str(workflow["client_phone"]).startswith("internal:"):
         raise HTTPException(status_code=422, detail="client_phone_required")
     if entities.get("requested_operation") == "CREATE_PACKAGE":

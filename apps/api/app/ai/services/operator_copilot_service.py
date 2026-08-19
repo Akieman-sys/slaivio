@@ -1,4 +1,5 @@
 import re
+from datetime import datetime,timedelta,timezone
 
 from fastapi import HTTPException
 
@@ -24,6 +25,7 @@ from app.ai.services.workflow_mapping import get_workflow_type
 from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
+from app.db.followup_repository import create_manual_followup
 from app.packages.repository import create_package
 from app.permissions.services.permission_service import assert_permission
 
@@ -34,12 +36,16 @@ QUESTION_BY_FIELD = {
     "origin_country": "Depuis quel pays le colis sera-t-il envoyé ?",
     "destination_city": "Dans quelle ville le colis doit-il arriver ?",
     "goods_type": "Que contient réellement le colis ? Par exemple : vêtements, téléphones ou pièces automobiles.",
+    "followup_reason":"Pourquoi souhaitez-vous relancer ce client ?",
+    "due_at":"Quand faut-il effectuer la relance ? Par exemple : aujourd’hui à 16 h, demain ou le 25 août à 10 h.",
 }
 
 
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if any(word in normalized for word in create_words) and any(word in normalized for word in ("relance","rappel")):
+        return "FOLLOWUP_CREATION", 0.9
     if any(word in normalized for word in create_words) and "client" in normalized:
         return "CLIENT_CREATION", 0.9
     if any(word in normalized for word in create_words) and "dossier" in normalized:
@@ -64,6 +70,9 @@ def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None
     if workflow_type == "CREATE_CLIENT":
         values={"client_phone":client_phone,**entities}
         return [field for field in ("client_phone","client_name") if not values.get(field)]
+    if workflow_type == "CREATE_FOLLOWUP":
+        values={"client_phone":client_phone if entities.get("client_id") else None,**entities}
+        return [field for field in ("client_phone","followup_reason","due_at") if not values.get(field)]
     if workflow_type not in {"CREATE_SHIPMENT_DRAFT", "CREATE_PACKAGE_DRAFT"}:
         return []
     values = {"client_phone": client_phone, **entities}
@@ -269,6 +278,67 @@ def _continue_client_workflow(org_id:str,user_id:str,workflow:dict,message:str,e
     return {"message":assistant,"workflow":updated,"missing_fields":remaining}
 
 
+def _parse_due_at(value:str):
+    normalized=" ".join(value.lower().replace("’","'").split());now=datetime.now(timezone.utc)
+    hour_match=re.search(r"(?:a|à)?\s*(\d{1,2})\s*h(?:\s*(\d{2}))?",normalized)
+    hour=int(hour_match.group(1)) if hour_match else 9;minute=int(hour_match.group(2) or 0) if hour_match else 0
+    if "aujourd" in normalized:target=now
+    elif "demain" in normalized:target=now+timedelta(days=1)
+    else:
+        delay=re.search(r"dans\s+(\d+)\s+jour",normalized)
+        if delay:target=now+timedelta(days=int(delay.group(1)))
+        else:
+            iso=re.search(r"(20\d{2})-(\d{2})-(\d{2})",normalized)
+            if not iso:return None
+            target=datetime(int(iso.group(1)),int(iso.group(2)),int(iso.group(3)),tzinfo=timezone.utc)
+    target=target.replace(hour=hour,minute=minute,second=0,microsecond=0)
+    if target<=now:return None
+    return target.isoformat()
+
+
+def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None):
+    entities=dict(workflow.get("entities") or {});phone=explicit_phone or workflow.get("client_phone")
+    if str(phone).startswith("internal:"):phone=None
+    missing=_missing_fields("CREATE_FOLLOWUP",entities,phone);act=dialogue_act(message,True)
+    if act=="CANCEL":
+        updated=update_workflow_status(org_id,str(workflow["id"]),"REJECTED",{"reason":"cancelled"})
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","La programmation de la relance a été annulée.",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":updated,"missing_fields":[]}
+    if act=="PAUSE":
+        updated=update_workflow_status(org_id,str(workflow["id"]),"PAUSED",{"reason":"user_pause"})
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","La préparation de la relance est en pause.",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":updated,"missing_fields":missing}
+    if workflow.get("workflow_status")=="PAUSED" and act!="RESUME":
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","Cette relance est en pause. Dites « continue » ou « annule ».",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+    if act=="RESUME":workflow=update_workflow_status(org_id,str(workflow["id"]),"PREPARED",{"resumed_by":user_id})
+    elif missing:
+        field=missing[0]
+        if field=="client_phone":
+            raw=explicit_phone or _phone_from_message(message) or message;validation=validate_field(field,raw)
+            if validation["status"]=="VALID":
+                phone=validation["value"];client=find_client_by_phone(org_id,phone)
+                if not client:validation={"status":"INVALID","value":None,"reason":"client_not_found"}
+                else:entities.update({"client_id":client["id"],"client_name":client.get("display_name")})
+        elif field=="due_at":
+            parsed=_parse_due_at(message);validation={"status":"VALID" if parsed else "INVALID","value":parsed,"reason":None if parsed else "invalid_future_date"}
+            if parsed:entities[field]=parsed
+        else:
+            validation={"status":"VALID" if len(message.strip())>=4 else "INVALID","value":message.strip(),"reason":None}
+            if validation["status"]=="VALID":entities[field]=validation["value"]
+        _save_validation(org_id,workflow,field,message,validation)
+        if validation["status"]!="VALID":
+            assistant=create_operator_message(org_id,user_id,"ASSISTANT",("Je ne trouve aucun client avec ce numéro. " if validation.get("reason")=="client_not_found" else "Je n’ai pas pu valider cette information. ")+_question(field),workflow_id=str(workflow["id"]),metadata={"validation":validation,"missing_fields":missing})
+            return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+    remaining=_missing_fields("CREATE_FOLLOWUP",entities,phone)
+    if not remaining and not entities.get("followup_message"):
+        entities["followup_message"]=f"Bonjour {entities.get('client_name') or ''}, nous vous contactons concernant {entities.get('followup_reason')}. Merci de nous répondre directement."
+    updated=update_workflow_details(org_id=org_id,workflow_id=str(workflow["id"]),client_phone=phone or f"internal:{user_id}",source_message=f'{workflow["source_message"]}\n{message.strip()}',entities=entities,proposed_actions=build_proposed_actions("CREATE_FOLLOWUP",entities),dialogue_state="COLLECTING" if remaining else "READY_FOR_REVIEW",client_id=entities.get("client_id"))
+    response=_question(remaining[0]) if remaining else f"La relance de {entities.get('client_name')} est prête pour le {entities.get('due_at')}. Vérifiez le motif et confirmez la programmation."
+    assistant=create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]),metadata={"missing_fields":remaining,"summary":entities,"dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW"})
+    return {"message":assistant,"workflow":updated,"missing_fields":remaining}
+
+
 def prepare_operator_message(
     org_id: str,
     user_id: str,
@@ -292,6 +362,8 @@ def prepare_operator_message(
     if active_workflow:
         if active_workflow.get("workflow_type")=="CREATE_CLIENT":
             return _continue_client_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
+        if active_workflow.get("workflow_type")=="CREATE_FOLLOWUP":
+            return _continue_followup_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
         return _continue_dossier_workflow(
             org_id, user_id, active_workflow, clean_message, client_phone
         )
@@ -342,6 +414,9 @@ def prepare_operator_message(
     if intent=="CLIENT_CREATION":
         name_match=re.search(r"(?:client\s+(?:nomm?[ée]?|appel[ée]?)?\s*)([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '\-]{1,80})",clean_message,re.IGNORECASE)
         if name_match: entities["client_name"]=name_match.group(1).strip()
+    if intent=="FOLLOWUP_CREATION" and resolved_phone:
+        client=find_client_by_phone(org_id,resolved_phone)
+        if client:entities.update({"client_id":client["id"],"client_name":client.get("display_name")})
 
     if intent == "UNKNOWN":
         response = "Je peux vous aider sur les clients, dossiers, colis, routes, services, tarifs, entrepôts et suivis. Dites-moi simplement le résultat recherché."
@@ -490,7 +565,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -514,6 +589,23 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]})
             raise
+    if workflow["workflow_type"]=="CREATE_FOLLOWUP":
+        assert_permission(actor_id,org_id,"followups.create")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            followup=create_manual_followup(org_id,actor_id,{"workspace_id":workflow.get("workspace_id"),
+                "client_id":entities["client_id"],"dossier_id":None,"followup_type":"MANUAL",
+                "subject_type":"CLIENT","subject_id":entities["client_id"],"subject_reference":entities.get("client_name"),
+                "reason":entities["followup_reason"],"channel":"WHATSAPP","message":entities["followup_message"],
+                "due_at":entities["due_at"],"priority":"NORMAL","responsible_id":actor_id,
+                "responsible_name":workflow.get("manager_name"),"amount_context":None,"currency":None,
+                "consent_type":"OPERATIONAL","condition_snapshot":{"source":"AI_ASSISTANT"},
+                "idempotency_key":f"ai-followup:{workflow_id}"})
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"followup":followup})
+            return {"workflow":updated,"result":{"followup":followup},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
     assert_permission(actor_id,org_id,"clients.create")
     assert_permission(actor_id,org_id,"dossiers.create")
     if entities.get("requested_operation")=="CREATE_PACKAGE": assert_permission(actor_id,org_id,"packages.create")

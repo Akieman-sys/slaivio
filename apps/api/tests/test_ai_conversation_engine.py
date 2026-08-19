@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.ai.services.dialogue_validation import correction_from_message, dialogue_act, validate_field
 from app.ai.services.platform_query_service import _client_search_term
-from app.ai.services.operator_copilot_service import _fallback_intent, _missing_fields
+from app.ai.services.operator_copilot_service import _fallback_intent, _missing_fields, _parse_due_at
 
 
 ROOT=Path(__file__).parents[3]
@@ -73,6 +73,12 @@ def test_client_creation_is_distinct_from_dossier_and_package_creation():
     assert _fallback_intent("crée un client") == ("CLIENT_CREATION",0.9)
     assert _missing_fields("CREATE_CLIENT",{},None)==["client_phone","client_name"]
     assert _missing_fields("CREATE_CLIENT",{"client_name":"Jeremy"},"+243900000001")==[]
+
+
+def test_followup_creation_has_its_own_control_workflow():
+    assert _fallback_intent("crée une relance client") == ("FOLLOWUP_CREATION",0.9)
+    assert _missing_fields("CREATE_FOLLOWUP",{},None)==["client_phone","followup_reason","due_at"]
+    assert _parse_due_at("demain à 16h") is not None
 
 
 def test_transversal_read_tools_are_checked_before_action_workflows():

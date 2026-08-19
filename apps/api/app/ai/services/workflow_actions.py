@@ -6,6 +6,12 @@ def build_proposed_actions(
         return [{"type":"CREATE_CLIENT","label":"Créer le client","payload":{
             "client_name":entities.get("client_name"),"client_phone":entities.get("client_phone")}}]
 
+    if workflow_type == "CREATE_FOLLOWUP":
+        return [{"type":"CREATE_FOLLOWUP","label":"Programmer la relance","payload":{
+            "client_id":entities.get("client_id"),"client_name":entities.get("client_name"),
+            "reason":entities.get("followup_reason"),"due_at":entities.get("due_at"),
+            "message":entities.get("followup_message")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

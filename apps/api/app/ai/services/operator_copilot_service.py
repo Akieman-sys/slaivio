@@ -14,6 +14,7 @@ from app.ai.repositories.workflow_repository import (
     save_field_validation,
     claim_workflow_execution,
 )
+from app.ai.repositories.tool_execution_repository import record_tool_execution
 from app.ai.repositories.copilot_context_repository import (
     client_dossier_choices, find_client_by_phone, location_choices, resolve_location,
 )
@@ -236,7 +237,7 @@ def prepare_operator_message(
 ):
     clean_message = message.strip()
     resolved_phone = client_phone or _phone_from_message(clean_message)
-    create_operator_message(org_id, user_id, "USER", clean_message)
+    user_message = create_operator_message(org_id, user_id, "USER", clean_message)
 
     act = dialogue_act(clean_message, False)
     if act == "GREETING":
@@ -251,11 +252,31 @@ def prepare_operator_message(
         )
 
     try:
-        platform_answer = answer_platform_query(org_id, clean_message, resolved_phone, workspace_id)
+        platform_answer = answer_platform_query(org_id, clean_message, resolved_phone, workspace_id,user_id,channel)
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            record_tool_execution(org_id=org_id,workspace_id=workspace_id,tool_name="platform.query",
+                actor_id=user_id,idempotency_key=f"query:{user_message['id']}:blocked",
+                input_payload={"message":clean_message,"channel":channel},status="BLOCKED",error_code="permission_denied")
+            response="Vous n’avez pas la permission nécessaire pour consulter ces informations. Demandez l’accès à un administrateur de l’agence."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"permission_denied"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        platform_answer = None
+    except PermissionError:
+        record_tool_execution(org_id=org_id,workspace_id=workspace_id,tool_name="platform.query",
+            actor_id=user_id,idempotency_key=f"query:{user_message['id']}:channel-blocked",
+            input_payload={"message":clean_message,"channel":channel},status="BLOCKED",error_code="channel_capability_denied")
+        response="Cette information n’est pas disponible depuis ce canal. Un agent autorisé peut vous assister."
+        assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"channel_capability_denied"})
+        return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
     except Exception:
         platform_answer = None
     if platform_answer:
         response = platform_answer["content"]
+        record_tool_execution(org_id=org_id,workspace_id=workspace_id,tool_name=platform_answer["tool"],
+            actor_id=user_id,idempotency_key=f"query:{user_message['id']}:{platform_answer['tool']}",
+            input_payload={"message":clean_message,"client_phone":resolved_phone,"channel":channel},
+            output_payload={"answer":response,"result_count":len(platform_answer.get("cards") or [])})
         assistant_message = create_operator_message(
             org_id, user_id, "ASSISTANT", response,
             metadata={"dialogue_state":"ANSWERED","tool":platform_answer["tool"],"cards":platform_answer.get("cards") or []},

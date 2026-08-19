@@ -71,7 +71,12 @@ def test_paused_workflow_can_be_resumed_from_the_conversation():
 def test_transversal_read_tools_are_checked_before_action_workflows():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     tools=(ROOT/"apps/api/app/ai/services/platform_query_service.py").read_text(encoding="utf-8")
-    for capability in ("clients.search","packages.list","dossiers.list","tracking.read","routes.list","services.list","warehouses.list"):
+    for capability in ("clients.search","packages.list","dossiers.list","tracking.read","routes.list","services.list","warehouses.list",
+                       "pricing.quote","departures.list","batches.list","shipments.list","pickups.list","finance.list",
+                       "followups.list","broadcasts.list","knowledge.search"):
         assert capability in tools
     assert service.index("answer_platform_query(") < service.index("detect_intent(org_id=org_id")
     assert _client_search_term("est ce qu'il y a un client nomer Bawaba") == "Bawaba"
+    assert "assert_permission(actor_id,org_id,PERMISSIONS[capability])" in tools
+    assert "WHATSAPP_CAPABILITIES" in tools
+    assert "record_tool_execution(" in service

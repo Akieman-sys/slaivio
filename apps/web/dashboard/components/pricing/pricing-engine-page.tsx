@@ -6,12 +6,13 @@ import {
   Download,
   Plus,
   RefreshCcw,
-  Search,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import {
   addGridFee,
   addGridRule,
@@ -29,11 +30,11 @@ import {
   type Grid,
 } from "@/services/pricing-engine";
 const btn =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f6]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium hover:bg-[#f5f6f6]",
   primary =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-[5px] bg-[#16855f] px-4 text-[12px] font-semibold text-white hover:bg-[#126f50]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] bg-[#12c76f] px-4 text-[13px] font-medium text-white hover:bg-[#0fb766]",
   input =
-    "h-9 w-full rounded-[5px] border border-[#d6dadd] bg-white px-3 text-[12px] outline-none focus:border-[#16855f]";
+    "h-9 w-full rounded-[6px] border border-[#d6dadd] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const calculationLabels: Record<string, string> = {
   PER_KG: "Par kilogramme",
   PER_CBM: "Par mètre cube (CBM)",
@@ -139,17 +140,15 @@ export function PricingEnginePage() {
           </>
         }
       />
-      <section className="grid border-b bg-white sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+      <OperationMetrics>
+      <OperationMetricGrid>
         {cards.slice(0, 4).map(([l, v]) => (
-          <Metric key={String(l)} label={String(l)} value={v} />
+          <OperationMetric key={String(l)} label={String(l)} value={v} />
         ))}
-      </section>
+      </OperationMetricGrid>
+      </OperationMetrics>
       <PricingTabs view={view} setView={setView} />
-      {error && (
-        <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState title="Tarification indisponible" description={error} retry={load} />}
       {view === "SIMULATOR" ? (
         <Simulator catalog={catalog} />
       ) : view === "ANALYTICS" ? (
@@ -158,28 +157,21 @@ export function PricingEnginePage() {
         <Settings data={data} />
       ) : (
         <>
-          <div className="flex gap-2 border-b bg-white p-4">
-            <label className="flex h-9 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
-              <Search size={14} />
-              <input
-                className="ml-2 flex-1 outline-none"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Grille, route, service, catégorie…"
-              />
-            </label>
+          <OperationToolbar search={<OperationSearch value={query} onChange={setQuery} placeholder="Grille, route, service, catégorie…" />}>
             <button className={btn} onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
             </button>
-          </div>
+          </OperationToolbar>
           {loading ? (
-            <LoadingState label="Chargement des tarifs…" />
-          ) : (
+            <TableSkeleton rows={7} columns={9} label="Chargement des tarifs…" />
+          ) : grids.length ? (
             <GridTable
               grids={grids}
               open={async (g) => setSelected(await gridDetail(g.id))}
             />
+          ) : (
+            <EmptyState title="Aucune grille tarifaire" description="Créez une grille en sélectionnant une route et un service déjà configurés dans l’agence." />
           )}
         </>
       )}
@@ -497,7 +489,7 @@ function PricingTabs({ view, setView }: { view: View; setView: (next: View) => v
   const moreSelected = moreViews.some(([key]) => key === view);
   return (
     <OperationTabs>
-      {primaryViews.map(([key, label]) => <button key={key} onClick={() => setView(key)} className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${view === key ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}>{label}</button>)}
+      {primaryViews.map(([key, label]) => <OperationTab key={key} onClick={() => setView(key)} active={view === key}>{label}</OperationTab>)}
       <select aria-label="Autres vues Tarification" value={moreSelected ? view : ""} onChange={(event) => event.target.value && setView(event.target.value as View)} className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${moreSelected ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]" : "border-[#d6dadd] bg-white text-[#69717a]"}`}>
         <option value="">Plus</option>
         {moreViews.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -705,24 +697,24 @@ function Simulator({ catalog }: { catalog: Catalog | null }) {
         <h2 className="font-semibold">Explication du calcul</h2>
         {result ? (
           <>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Metric
+            <OperationMetricGrid className="mt-4">
+              <OperationMetric
                 label="Poids réel"
                 value={`${result.actual_weight_kg} kg`}
               />
-              <Metric
+              <OperationMetric
                 label="Poids volumétrique"
                 value={`${result.volumetric_weight_kg.toFixed(2)} kg`}
               />
-              <Metric
+              <OperationMetric
                 label="Poids facturable"
                 value={`${result.chargeable_weight_kg} kg`}
               />
-              <Metric
+              <OperationMetric
                 label="Total"
                 value={`${result.total} ${result.currency}`}
               />
-            </div>
+            </OperationMetricGrid>
             <div className="mt-4">
               {result.breakdown.map((x, i) => (
                 <p
@@ -833,14 +825,6 @@ function Row({ x }: { x: Record<string, unknown> }) {
           .map(([k, v]) => `${k}: ${String(v)}`)
           .join(" · ")}
       </small>
-    </div>
-  );
-}
-function Metric({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="min-h-[78px] border-r p-4">
-      <small className="text-[#68717a]">{label}</small>
-      <b className="mt-2 block text-xl">{String(value)}</b>
     </div>
   );
 }

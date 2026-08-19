@@ -14,7 +14,8 @@ import {
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { ErrorState, LoadingState } from "@/components/ui/page-state";
 const button =
     "inline-flex h-9 items-center gap-2 rounded-[5px] border border-[#d8dddf] bg-white px-3 text-[13px] font-medium text-[#30363a] hover:bg-[#f5f7f6]",
   primary =
@@ -76,13 +77,13 @@ export function ReportsAnalyticsPage() {
         ["finance", "Finance"],
         ["routes", "Routes"],
       ].map(([id, label]) => (
-        <button
+        <OperationTab
           key={id}
           onClick={() => setTab(id)}
-          className={`h-9 border-b-2 px-3 text-[12px] ${tab === id ? "border-[#167d57] font-semibold text-[#145c43]" : "border-transparent text-[#697178] hover:text-[#30363a]"}`}
+          active={tab === id}
         >
           {label}
-        </button>
+        </OperationTab>
       ))}
     </>
   );
@@ -124,37 +125,27 @@ export function ReportsAnalyticsPage() {
                 onChange={(e) => setEnd(e.target.value)}
               />
             </label>
-            <button className={button} onClick={load}>
+            <OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
-            </button>
+            </OperationButton>
           </>
         }
       />
       <OperationMetrics>
-        <div className="grid grid-cols-2 lg:grid-cols-4">
+        <OperationMetricGrid>
           {(loading
             ? Array.from({ length: 4 }, (_, index) => [String(index), ""])
             : metricCards.slice(0, allMetrics ? metricCards.length : 4)
-          ).map(([label, value], index) => (
-            <div
-              key={String(label)}
-              className={`min-h-[72px] px-4 py-1 ${index ? "border-l border-[#e2e5e6]" : ""}`}
-            >
-              {loading ? (
-                <>
-                  <div className="h-3 w-24 animate-pulse rounded bg-[#e8ecea]" />
-                  <div className="mt-3 h-7 w-16 animate-pulse rounded bg-[#e8ecea]" />
-                </>
-              ) : (
-                <>
-                  <p className="text-[11px] text-[#697178]">{label}</p>
-                  <b className="mt-2 block text-[23px] text-[#252b2f]">{value}</b>
-                </>
-              )}
+          ).map(([label, value]) => loading ? (
+            <div key={String(label)} className="min-h-[72px] px-4 py-3.5">
+              <div className="h-3 w-24 animate-pulse rounded bg-[#e8ecea]" />
+              <div className="mt-3 h-7 w-16 animate-pulse rounded bg-[#e8ecea]" />
             </div>
+          ) : (
+            <OperationMetric key={String(label)} label={String(label)} value={value} />
           ))}
-        </div>
+        </OperationMetricGrid>
         {!loading && metricCards.length > 4 && (
           <button
             type="button"
@@ -171,7 +162,7 @@ export function ReportsAnalyticsPage() {
           aria-label="Autres vues Rapports"
           value={["warehouses", "reports"].includes(tab) ? tab : ""}
           onChange={(event) => event.target.value && setTab(event.target.value)}
-          className={`mb-1 ml-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+          className={`mb-1 ml-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${
             ["warehouses", "reports"].includes(tab)
               ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
               : "border-[#d6dadd] bg-white text-[#69717a]"
@@ -183,11 +174,7 @@ export function ReportsAnalyticsPage() {
         </select>
       </OperationTabs>
       <main className="p-5 sm:p-6">
-        {error && (
-          <p className="mb-3 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
-            {error}
-          </p>
-        )}
+        {error && <ErrorState title="Analytics indisponibles" description={error} retry={load} />}
         {loading ? (
           <LoadingState label="Calcul des indicateurs…" />
         ) : !data ? (

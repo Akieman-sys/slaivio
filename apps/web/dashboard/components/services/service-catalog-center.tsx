@@ -7,12 +7,13 @@ import {
   Download,
   Plus,
   RefreshCcw,
-  Search,
   Sparkles,
 } from "lucide-react";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   addServiceCondition,
@@ -177,27 +178,19 @@ export function ServiceCatalogCenter() {
           </>
         }
       />
-      <section className="bg-white px-5 py-4">
-        <div
-          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
-        >
-          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
-            <Metric
-              key={String(l)}
-              label={String(l)}
-              value={v}
-              divided={index > 0}
-              onClick={() => setAllMetrics((current) => !current)}
-            />
+      <OperationMetrics>
+        <OperationMetricGrid className={allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}>
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v]) => (
+            <OperationMetric key={String(l)} label={String(l)} value={v} />
           ))}
-        </div>
+        </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
           className="mt-3 text-[11px] font-medium text-[#5b52c7]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
-      </section>
+      </OperationMetrics>
       <OperationTabs>
           <>
             {(
@@ -208,13 +201,13 @@ export function ServiceCatalogCenter() {
                 ["ACTIVE", "Actifs"],
               ] as const
             ).map(([k, l]) => (
-              <button
+              <OperationTab
                 key={k}
                 onClick={() => setView(k)}
-                className={`h-10 shrink-0 border-b-2 px-3 text-[12px] ${view === k ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}
+                active={view === k}
               >
                 {l}
-              </button>
+              </OperationTab>
             ))}
             <select
               aria-label="Autres vues Services"
@@ -235,7 +228,7 @@ export function ServiceCatalogCenter() {
               onChange={(event) =>
                 event.target.value && setView(event.target.value as View)
               }
-              className={`mb-1 h-8 rounded-[5px] border px-2 text-[12px] outline-none ${
+              className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${
                 [
                   "LIMITED",
                   "SUSPENDED",
@@ -262,11 +255,7 @@ export function ServiceCatalogCenter() {
             </select>
           </>
       </OperationTabs>
-      {error && (
-        <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState title="Services indisponibles" description={error} retry={load} />}
       {view === "RECOMMEND" ? (
         <Recommendation />
       ) : view === "COMPARE" ? (
@@ -277,28 +266,21 @@ export function ServiceCatalogCenter() {
         <Settings />
       ) : (
         <>
-          <div className="flex gap-2 border-b bg-white p-4">
-            <label className="flex h-9 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
-              <Search size={14} />
-              <input
-                className="ml-2 flex-1 outline-none"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Service, type, route, pays, responsable…"
-              />
-            </label>
+          <OperationToolbar search={<OperationSearch value={query} onChange={setQuery} placeholder="Service, type, route, pays, responsable…" />}>
             <button className={btn} onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
             </button>
-          </div>
+          </OperationToolbar>
           {loading ? (
-            <LoadingState label="Chargement des services…" />
-          ) : (
+            <TableSkeleton rows={7} columns={10} label="Chargement des services…" />
+          ) : filtered.length ? (
             <Table
               items={filtered}
               open={async (s) => setSelected(await serviceDetail(s.id))}
             />
+          ) : (
+            <EmptyState title="Aucun service dans cette vue" description="Modifiez les filtres ou ajoutez un service au catalogue de votre agence." />
           )}
         </>
       )}
@@ -1120,30 +1102,6 @@ function Info({ l, v }: { l: string; v: unknown }) {
       <span className="text-[#69717a]">{l}</span>
       <b>{String(v ?? "—")}</b>
     </p>
-  );
-}
-function Metric({
-  label,
-  value,
-  divided,
-  onClick,
-}: {
-  label: string;
-  value: unknown;
-  divided: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-4 py-1 text-left ${divided ? "border-l border-[#eceef1]" : ""}`}
-    >
-      <span className="text-[12px] text-[#6b7580]">{label}</span>
-      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-        {String(value)}
-      </b>
-    </button>
   );
 }
 function Badge({ value }: { value: string }) {

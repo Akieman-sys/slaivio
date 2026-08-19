@@ -1,11 +1,12 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Plus, RefreshCcw, Search } from "lucide-react";
+import { ChevronRight, Download, Plus, RefreshCcw } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
-import { OperationTable } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients, type ClientRecord } from "@/services/clients";
 import {
   createFinance,
@@ -130,22 +131,18 @@ export function FinancePage() {
         }
       />
       <main>
-        <section className="grid border-b border-[#dfe1e3] bg-white sm:grid-cols-2 lg:grid-cols-4">
+        <OperationMetrics>
+        <OperationMetricGrid>
           {[
             ["Factures", stats.invoices],
             ["Brouillons", stats.drafts],
             ["En retard", stats.overdue],
             ["Facturé", cash(stats.invoiced)],
           ].map(([l, v]) => (
-            <div
-              key={l}
-              className="border-b border-r border-[#eceeef] px-4 py-3"
-            >
-              <p className="text-[11px] text-[#68717d]">{l}</p>
-              <b className="mt-1 block text-[20px] font-semibold">{v}</b>
-            </div>
+            <OperationMetric key={String(l)} label={String(l)} value={v} />
           ))}
-        </section>
+        </OperationMetricGrid>
+        </OperationMetrics>
         <OperationTabs>
           {[
             ["", "Tous"],
@@ -153,27 +150,16 @@ export function FinancePage() {
             ["INVOICE", "Factures"],
             ["CREDIT_NOTE", "Avoirs"],
           ].map(([value, label]) => (
-            <button
+            <OperationTab
               key={value || "all"}
               onClick={() => setKind(value)}
-              className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${kind === value ? "border-[#16855f] font-semibold text-[#145f49]" : "border-transparent text-[#69717a]"}`}
+              active={kind === value}
             >
               {label}
-            </button>
+            </OperationTab>
           ))}
         </OperationTabs>
-        <OperationTable className="border-x-0">
-          <div className="flex flex-wrap gap-2 border-b border-[#e5e7e8] p-3">
-            <label className="flex h-9 min-w-64 flex-1 items-center rounded-[5px] border border-[#dfe1e3] bg-[#f7f7f6] px-3">
-              <Search size={14} className="text-[#69717a]" />
-              <input
-                className="ml-2 min-w-0 flex-1 bg-transparent text-[12px] outline-none"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Numéro, client, téléphone…"
-              />
-            </label>
-            <select
+        <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Numéro, client, téléphone…" />} filters={<><select
               className={input}
               value={status}
               onChange={(e) => setStatus(e.target.value)}
@@ -191,18 +177,14 @@ export function FinancePage() {
                   {labels[x]}
                 </option>
               ))}
-            </select>
-            <button className={button} onClick={load}>
+            </select><OperationButton onClick={load}>
               <RefreshCcw size={14} />
-            </button>
-          </div>
-          {error && (
-            <p className="m-4 rounded bg-red-50 p-3 text-[13px] text-red-700">
-              {error}
-            </p>
-          )}
+              Actualiser
+            </OperationButton></>} />
+          {error && <ErrorState title="Facturation indisponible" description={error} retry={load} />}
+        <OperationTable className="border-x-0">
           {loading ? (
-            <LoadingState label="Chargement de la facturation…" />
+            <TableSkeleton rows={7} columns={9} label="Chargement de la facturation…" />
           ) : items.length ? (
             <table className="w-full min-w-[900px] text-left text-[13px]">
               <thead className="bg-[#f6f7f7] text-[#5f6976]">
@@ -255,10 +237,7 @@ export function FinancePage() {
               </tbody>
             </table>
           ) : (
-            <p className="p-12 text-center text-[13px] text-[#68717d]">
-              Aucun document. Créez le premier devis ou la première facture de
-              l’agence.
-            </p>
+            <EmptyState title="Aucun document financier" description="Créez le premier devis ou la première facture de l’agence." />
           )}
         </OperationTable>
       </main>

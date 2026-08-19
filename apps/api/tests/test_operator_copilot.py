@@ -54,7 +54,7 @@ def test_copilot_starts_a_dossier_with_one_question(monkeypatch):
         "destination_city",
         "goods_type",
     ]
-    assert stored_messages[-1] == ("ASSISTANT", "Quel est le numéro WhatsApp du client ?")
+    assert stored_messages[-1] == ("ASSISTANT", "Quel est le numéro WhatsApp du client, avec l’indicatif du pays ?")
 
 
 def test_copilot_continues_the_same_workflow(monkeypatch):
@@ -62,6 +62,9 @@ def test_copilot_continues_the_same_workflow(monkeypatch):
     updated = _workflow(client_phone="+243999000111")
     monkeypatch.setattr(service, "get_active_operator_workflow", lambda *_: active)
     monkeypatch.setattr(service, "update_workflow_details", lambda **_: updated)
+    monkeypatch.setattr(service,"find_client_by_phone",lambda *_:{"id":"685cba84-31f0-4aef-9f33-33294d8795ee","display_name":"Jean"})
+    monkeypatch.setattr(service,"client_dossier_choices",lambda *_:[])
+    monkeypatch.setattr(service,"location_choices",lambda *_:[])
     monkeypatch.setattr(
         service,
         "create_operator_message",
@@ -74,7 +77,45 @@ def test_copilot_continues_the_same_workflow(monkeypatch):
 
     assert result["workflow"]["id"] == active["id"]
     assert result["workflow"]["client_phone"] == "+243999000111"
-    assert result["message"]["content"] == "De quel pays le colis part-il ?"
+    assert result["message"]["content"] == "Depuis quel pays le colis sera-t-il envoyé ?"
+
+
+def test_greeting_is_natural_and_does_not_create_workflow(monkeypatch):
+    monkeypatch.setattr(service, "get_active_operator_workflow", lambda *_: None)
+    monkeypatch.setattr(service, "create_operator_message", lambda _o,_u,role,content,**_: _message(role,content))
+    monkeypatch.setattr(service, "create_workflow_run", lambda **_: pytest.fail("no workflow expected"))
+    result=service.prepare_operator_message("org-1","user-1","Agent","Tu es là ?",None)
+    assert result["workflow"] is None
+    assert "je suis là" in result["message"]["content"].lower()
+
+
+def test_unknown_origin_is_not_stored(monkeypatch):
+    active=_workflow(client_phone="+243999000111")
+    monkeypatch.setattr(service,"get_active_operator_workflow",lambda *_:active)
+    monkeypatch.setattr(service,"location_choices",lambda *_: [{"value":"Chine","label":"Chine"}])
+    monkeypatch.setattr(service,"create_operator_message",lambda _o,_u,role,content,**_:_message(role,content))
+    monkeypatch.setattr(service,"update_workflow_details",lambda **_:pytest.fail("invalid answer must not update workflow"))
+    result=service.prepare_operator_message("org-1","user-1","Agent","je sais pas",None)
+    assert result["validation"]["status"] == "UNKNOWN"
+    assert result["missing_fields"][0] == "origin_country"
+
+
+def test_off_topic_goods_is_rejected(monkeypatch):
+    active=_workflow(client_phone="+243999000111",entities={"origin_country":"Chine","destination_city":"Kinshasa"})
+    monkeypatch.setattr(service,"get_active_operator_workflow",lambda *_:active)
+    monkeypatch.setattr(service,"create_operator_message",lambda _o,_u,role,content,**_:_message(role,content))
+    monkeypatch.setattr(service,"update_workflow_details",lambda **_:pytest.fail("invalid answer must not update workflow"))
+    result=service.prepare_operator_message("org-1","user-1","Agent","je cherche à vendre ma maison",None)
+    assert result["validation"]["status"] == "INVALID"
+    assert result["missing_fields"] == ["goods_type"]
+
+
+def test_creation_status_explains_that_nothing_was_created(monkeypatch):
+    active=_workflow(client_phone="+243999000111",entities={"origin_country":"Chine"})
+    monkeypatch.setattr(service,"get_active_operator_workflow",lambda *_:active)
+    monkeypatch.setattr(service,"create_operator_message",lambda _o,_u,role,content,**_:_message(role,content))
+    result=service.prepare_operator_message("org-1","user-1","Agent","le colis n'est pas créé",None)
+    assert "n’est pas encore créé" in result["message"]["content"]
 
 
 def test_incomplete_dossier_cannot_be_approved(monkeypatch):

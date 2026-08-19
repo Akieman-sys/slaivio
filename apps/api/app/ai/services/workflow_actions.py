@@ -3,11 +3,14 @@ def build_proposed_actions(
     entities: dict,
 ):
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
+        package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [
             {
-                "type": "CREATE_DOSSIER_DRAFT",
-                "label": "Préparer un dossier client",
+                "type": "CREATE_PACKAGE_DRAFT" if package_request else "CREATE_DOSSIER_DRAFT",
+                "label": "Préparer un colis" if package_request else "Préparer un dossier client",
                 "payload": {
+                    "client_id": entities.get("client_id"),
+                    "client_name": entities.get("client_name"),
                     "origin_country": entities.get("origin_country"),
                     "origin_city": entities.get("origin_city"),
                     "destination_country": entities.get("destination_country"),

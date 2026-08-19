@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.ai.repositories.escalation_repository import list_ai_escalation_events
@@ -8,6 +8,7 @@ from app.ai.services.operator_copilot_service import (
     approve_operator_workflow,
     prepare_operator_message,
     reject_operator_workflow,
+    control_operator_workflow,
 )
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
@@ -25,6 +26,10 @@ class CopilotDecisionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class CopilotControlRequest(BaseModel):
+    value: str | None = Field(default=None,max_length=500)
+
+
 @router.get("/messages")
 def get_messages(limit: int = 50, tenant=Depends(get_current_tenant)):
     return {"messages": list_operator_messages(tenant["org_id"], limit)}
@@ -38,6 +43,8 @@ def post_message(body: CopilotMessageRequest, tenant=Depends(get_current_tenant)
         actor_name=tenant.get("actor_name"),
         message=body.message,
         client_phone=body.client_phone,
+        workspace_id=tenant.get("workspace_id"),
+        channel="INTERNAL",
     )
 
 
@@ -56,10 +63,15 @@ def get_workflows(
 
 @router.post(
     "/workflows/{workflow_id}/approve",
-    dependencies=[Depends(require_permission("dossiers.create"))],
+    dependencies=[
+        Depends(require_permission("clients.create")),
+        Depends(require_permission("dossiers.create")),
+        Depends(require_permission("packages.create")),
+        Depends(require_permission("ai.copilot.execute")),
+    ],
 )
 def approve_workflow(workflow_id: str, tenant=Depends(get_current_tenant)):
-    return approve_operator_workflow(tenant["org_id"], workflow_id)
+    return approve_operator_workflow(tenant["org_id"], workflow_id, tenant["user_id"])
 
 
 @router.post(
@@ -72,6 +84,14 @@ def reject_workflow(
     tenant=Depends(get_current_tenant),
 ):
     return {"workflow": reject_operator_workflow(tenant["org_id"], workflow_id, body.reason)}
+
+
+@router.post("/workflows/{workflow_id}/{action}",dependencies=[Depends(require_permission("ai.copilot.execute"))])
+def control_workflow(workflow_id: str,action: str,body: CopilotControlRequest,
+                     tenant=Depends(get_current_tenant)):
+    if action not in {"pause","resume","cancel","correct"}:
+        raise HTTPException(422,"unsupported_workflow_action")
+    return {"workflow":control_operator_workflow(tenant["org_id"],tenant["user_id"],workflow_id,action,body.value)}
 
 
 @router.get("/escalations")

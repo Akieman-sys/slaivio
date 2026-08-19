@@ -11,17 +11,27 @@ from app.ai.repositories.workflow_repository import (
     get_workflow_run,
     update_workflow_details,
     update_workflow_status,
+    save_field_validation,
+    claim_workflow_execution,
 )
+from app.ai.repositories.copilot_context_repository import (
+    client_dossier_choices, find_client_by_phone, location_choices, resolve_location,
+)
+from app.ai.services.dialogue_validation import correction_from_message, dialogue_act, validate_field
 from app.ai.services.intent_detector import detect_intent
 from app.ai.services.workflow_actions import build_proposed_actions
 from app.ai.services.workflow_mapping import get_workflow_type
+from app.clients.repository import create_client
+from app.db.dossier_repository import create_dossier
+from app.packages.repository import create_package
 
 
 QUESTION_BY_FIELD = {
-    "client_phone": "Quel est le numéro WhatsApp du client ?",
-    "origin_country": "De quel pays le colis part-il ?",
+    "client_phone": "Quel est le numéro WhatsApp du client, avec l’indicatif du pays ?",
+    "client_name": "Je ne trouve pas encore ce numéro. Quel est le nom complet du client ?",
+    "origin_country": "Depuis quel pays le colis sera-t-il envoyé ?",
     "destination_city": "Dans quelle ville le colis doit-il arriver ?",
-    "goods_type": "Que contient le colis ?",
+    "goods_type": "Que contient réellement le colis ? Par exemple : vêtements, téléphones ou pièces automobiles.",
 }
 
 
@@ -47,18 +57,38 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
-    if workflow_type != "CREATE_SHIPMENT_DRAFT":
+    if workflow_type not in {"CREATE_SHIPMENT_DRAFT", "CREATE_PACKAGE_DRAFT"}:
         return []
     values = {"client_phone": client_phone, **entities}
+    required = ["client_phone"]
+    if client_phone and entities.get("client_lookup") == "NOT_FOUND":
+        required.append("client_name")
+    required.extend(("origin_country", "destination_city", "goods_type"))
     return [
-        field
-        for field in ("client_phone", "origin_country", "destination_city", "goods_type")
+        field for field in required
         if not values.get(field)
     ]
 
 
 def _is_cancel_message(message: str):
-    return message.lower().strip() in {"annule", "annuler", "abandonne", "abandonner"}
+    return dialogue_act(message, True) == "CANCEL"
+
+
+def _question(field: str, choices: list[dict] | None = None) -> str:
+    base = QUESTION_BY_FIELD[field]
+    if choices:
+        labels = ", ".join(str(item.get("label") or item.get("value")) for item in choices[:6])
+        return f"{base} Options disponibles : {labels}."
+    return base
+
+
+def _save_validation(org_id: str, workflow: dict, field: str, raw: str, result: dict):
+    try:
+        save_field_validation(org_id,str(workflow["id"]),field,raw,result,workflow.get("workspace_id"))
+    except Exception:
+        # Compatibility during rolling deploys: validation still blocks the
+        # workflow even if the new audit table has not been migrated yet.
+        return None
 
 
 def _continue_dossier_workflow(
@@ -72,33 +102,82 @@ def _continue_dossier_workflow(
     current_phone = explicit_phone or workflow["client_phone"]
     resolved_phone = None if str(current_phone).startswith("internal:") else current_phone
     missing = _missing_fields("CREATE_SHIPMENT_DRAFT", entities, resolved_phone)
+    act = dialogue_act(message, True)
 
-    if _is_cancel_message(message):
+    if act == "CANCEL":
         update_workflow_status(org_id, str(workflow["id"]), "REJECTED", {"reason": "cancelled"})
-        response = "La préparation du dossier a été annulée."
+        response = "La préparation du colis a été annulée. Aucune donnée métier n’a été créée."
         assistant_message = create_operator_message(
             org_id, user_id, "ASSISTANT", response, workflow_id=str(workflow["id"])
         )
         return {"message": assistant_message, "workflow": workflow, "missing_fields": []}
 
-    if missing:
+    if act == "PAUSE":
+        updated = update_workflow_status(org_id, str(workflow["id"]), "PAUSED", {"reason": "user_pause"})
+        response = "La préparation est en pause. Dites « continue » lorsque vous souhaitez la reprendre."
+        assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]))
+        return {"message": assistant_message, "workflow": updated, "missing_fields": missing}
+
+    if act == "GREETING":
+        response = "Oui, je suis là. Nous pouvons continuer la préparation du colis ou traiter une autre demande."
+        assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]))
+        return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
+
+    if act == "STATUS_QUESTION":
+        response = "Le colis n’est pas encore créé : je prépare uniquement les informations. " + (
+            f"Il manque encore : {', '.join(QUESTION_BY_FIELD.get(x, x) for x in missing)}."
+            if missing else "Les informations sont prêtes et attendent votre validation."
+        )
+        assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]))
+        return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
+
+    if act == "CORRECTION":
+        field, corrected = correction_from_message(message)
+        if not field or not corrected:
+            response = "Indiquez précisément l’information à corriger, par exemple : « remplace la destination par Goma »."
+            assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]))
+            return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
+        result = validate_field(field, corrected)
+        if result["status"] == "VALID":
+            entities[field] = result["value"]
+        _save_validation(org_id,workflow,field,corrected,result)
+
+    elif missing:
         field = missing[0]
+        raw = explicit_phone or _phone_from_message(message) or message if field == "client_phone" else message
+        result = validate_field(field, raw)
+        choices = []
+        if result["status"] == "VALID" and field in {"origin_country", "destination_city"}:
+            try:
+                result = resolve_location(org_id,field,str(result["value"]))
+            except Exception:
+                pass
+        if result["status"] != "VALID":
+            choices = result.get("choices") or (location_choices(org_id,field) if field in {"origin_country","destination_city"} else [])
+            result["choices"] = choices
+            _save_validation(org_id,workflow,field,raw,result)
+            response = {
+                "UNKNOWN": "Ce n’est pas grave, mais cette information est nécessaire pour éviter une mauvaise opération. ",
+                "AMBIGUOUS": "Plusieurs choix correspondent à votre réponse. ",
+                "INVALID": "Cette réponse ne correspond pas à l’information demandée. ",
+            }.get(result["status"], "Je dois vérifier cette information. ") + _question(field, choices)
+            assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]),metadata={"missing_fields":missing,"choices":choices,"validation":result})
+            return {"message":assistant_message,"workflow":workflow,"missing_fields":missing,"choices":choices,"validation":result}
+        _save_validation(org_id,workflow,field,raw,result)
         if field == "client_phone":
-            parsed_phone = explicit_phone or _phone_from_message(message)
-            if not parsed_phone:
-                response = "Je n’ai pas reconnu le numéro. Indiquez-le avec l’indicatif pays, par exemple +243…"
-                assistant_message = create_operator_message(
-                    org_id,
-                    user_id,
-                    "ASSISTANT",
-                    response,
-                    workflow_id=str(workflow["id"]),
-                    metadata={"missing_fields": missing},
-                )
-                return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
-            resolved_phone = parsed_phone
+            resolved_phone = result["value"]
+            try:
+                client = find_client_by_phone(org_id,resolved_phone)
+            except Exception:
+                client = None
+            if client:
+                entities.update({"client_id":client["id"],"client_name":client["display_name"],"client_lookup":"FOUND"})
+                try: entities["dossier_choices"] = client_dossier_choices(org_id,client["id"])
+                except Exception: entities["dossier_choices"] = []
+            else:
+                entities["client_lookup"] = "NOT_FOUND"
         else:
-            entities[field] = message.strip()
+            entities[field] = result["value"]
 
     remaining = _missing_fields("CREATE_SHIPMENT_DRAFT", entities, resolved_phone)
     actions = build_proposed_actions("CREATE_SHIPMENT_DRAFT", entities)
@@ -109,11 +188,14 @@ def _continue_dossier_workflow(
         source_message=f'{workflow["source_message"]}\n{message.strip()}',
         entities=entities,
         proposed_actions=actions,
+        dialogue_state="COLLECTING" if remaining else "READY_FOR_REVIEW",
+        client_id=entities.get("client_id"),
+        dossier_id=entities.get("dossier_id"),
     )
     response = (
-        QUESTION_BY_FIELD[remaining[0]]
+        _question(remaining[0], location_choices(org_id,remaining[0]) if remaining[0] in {"origin_country","destination_city"} else None)
         if remaining
-        else "Le dossier est complet. Vérifiez le récapitulatif puis validez sa préparation."
+        else "La préparation du colis est complète. Vérifiez le récapitulatif Client → Dossier → Colis avant de l’exécuter."
     )
     assistant_message = create_operator_message(
         org_id,
@@ -121,9 +203,9 @@ def _continue_dossier_workflow(
         "ASSISTANT",
         response,
         workflow_id=str(workflow["id"]),
-        metadata={"missing_fields": remaining, "intent": "SHIPMENT_CREATION"},
+        metadata={"missing_fields": remaining, "intent": "PACKAGE_CREATION", "dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW", "summary":entities},
     )
-    return {"message": assistant_message, "workflow": updated, "missing_fields": remaining}
+    return {"message": assistant_message, "workflow": updated, "missing_fields": remaining, "summary":entities, "dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW"}
 
 
 def prepare_operator_message(
@@ -132,10 +214,18 @@ def prepare_operator_message(
     actor_name: str | None,
     message: str,
     client_phone: str | None,
+    workspace_id: str | None = None,
+    channel: str = "INTERNAL",
 ):
     clean_message = message.strip()
     resolved_phone = client_phone or _phone_from_message(clean_message)
     create_operator_message(org_id, user_id, "USER", clean_message)
+
+    act = dialogue_act(clean_message, False)
+    if act == "GREETING":
+        response = "Bonjour ! Oui, je suis là. Je peux rechercher un client ou un colis, vérifier un suivi, calculer un tarif ou préparer une opération cargo."
+        assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_act":"GREETING"})
+        return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CONVERSATION"}
 
     active_workflow = get_active_operator_workflow(org_id, user_id)
     if active_workflow:
@@ -154,6 +244,14 @@ def prepare_operator_message(
     if intent == "UNKNOWN":
         intent, confidence = _fallback_intent(clean_message)
 
+    if intent == "UNKNOWN":
+        response = "Je peux vous aider sur les clients, dossiers, colis, routes, services, tarifs, entrepôts et suivis. Dites-moi simplement le résultat recherché."
+        assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_act":"CLARIFICATION"})
+        return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CONVERSATION"}
+
+    if "colis" in clean_message.lower() and any(word in clean_message.lower() for word in ("crée","creer","créer","prépare","prepare")):
+        entities["requested_operation"] = "CREATE_PACKAGE"
+
     workflow_type = get_workflow_type(intent)
     proposed_actions = build_proposed_actions(workflow_type, entities)
     storage_phone = resolved_phone or f"internal:{user_id}"
@@ -168,17 +266,19 @@ def prepare_operator_message(
         proposed_actions=proposed_actions,
         manager_id=user_id,
         manager_name=actor_name,
+        workspace_id=workspace_id,
+        channel=channel,
+        dialogue_state="COLLECTING",
     )
 
     missing = _missing_fields(workflow_type, entities, resolved_phone)
     if missing:
-        response = QUESTION_BY_FIELD[missing[0]]
+        response = _question(missing[0])
     elif proposed_actions:
         response = "L’action est prête. Vérifiez les informations puis validez-la avant exécution."
     else:
         response = (
-            "Je n’ai pas identifié d’action suffisamment sûre. "
-            "Précisez le résultat attendu ou transmettez la demande à un responsable."
+            "Je n’ai pas encore assez d’éléments pour préparer cette opération. Précisez ce que vous souhaitez consulter ou créer."
         )
 
     if workflow_type == "ESCALATION_REQUIRED":
@@ -205,7 +305,7 @@ def prepare_operator_message(
     return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
 
 
-def approve_operator_workflow(org_id: str, workflow_id: str):
+def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai-copilot"):
     workflow = get_workflow_run(org_id, workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="workflow_not_found")
@@ -222,6 +322,51 @@ def approve_operator_workflow(org_id: str, workflow_id: str):
         )
     if str(workflow["client_phone"]).startswith("internal:"):
         raise HTTPException(status_code=422, detail="client_phone_required")
+    if entities.get("requested_operation") == "CREATE_PACKAGE":
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:
+            raise HTTPException(status_code=409,detail="workflow_already_decided")
+        workflow=claimed
+        client_id = workflow.get("client_id") or entities.get("client_id")
+        created_client = None
+        if not client_id:
+            if not entities.get("client_name"):
+                raise HTTPException(status_code=422, detail={"code":"client_identity_required","missing_fields":["client_name"]})
+            created_client = create_client(org_id,actor_id,{
+                "name":entities["client_name"],"display_name":entities["client_name"],
+                "phone":workflow["client_phone"],"whatsapp_phone":workflow["client_phone"],
+                "customer_type":"individual","lifecycle_status":"lead",
+                "source":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "manual",
+            })
+            client_id = created_client["id"]
+        dossier_id = workflow.get("dossier_id") or entities.get("dossier_id")
+        created_dossier = None
+        dossier_choices = entities.get("dossier_choices") or []
+        if not dossier_id and len(dossier_choices) == 1:
+            dossier_id = dossier_choices[0]["id"]
+        if not dossier_id:
+            created_dossier = create_dossier(org_id,actor_id,{
+                "client_id":client_id,"workspace_id":workflow.get("workspace_id"),
+                "case_type":"SEND_CARGO","status_global":"LEAD","intake_status":"PARTIAL",
+                "validation_status":"PENDING","primary_channel":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "assistant",
+                "origin_country":entities.get("origin_country"),"destination_city":entities.get("destination_city"),
+                "goods_type":entities.get("goods_type"),"client_full_name":entities.get("client_name"),
+            })
+            dossier_id = created_dossier["id"]
+        package = create_package(org_id,actor_id,{
+            "dossier_id":dossier_id,"source":"api","description":entities.get("goods_type"),
+            "category":entities.get("goods_type"),"origin_country":entities.get("origin_country"),
+            "destination_city":entities.get("destination_city"),"status":"PENDING_VALIDATION",
+            "validation_status":"PENDING","payment_status":"UNKNOWN","package_type":"carton",
+            "package_condition":"UNKNOWN","inventory_status":"NOT_STORED","pieces_count":1,
+            "public_tracking_enabled":True,"priority":"NORMAL","goods_classification":"ORDINARY_GOODS",
+        })
+        result = {
+            "client":created_client or {"id":client_id,"display_name":entities.get("client_name")},
+            "dossier":created_dossier or {"id":dossier_id},"package":package,
+        }
+        updated = update_workflow_status(org_id,workflow_id,"APPROVED",result)
+        return {"workflow":updated,"result":result,"draft":None}
     draft = create_dossier_draft(
         org_id=org_id,
         client_phone=workflow["client_phone"],
@@ -261,3 +406,19 @@ def reject_operator_workflow(org_id: str, workflow_id: str, reason: str | None):
         status="REJECTED",
         result_payload={"reason": reason} if reason else {},
     )
+
+
+def control_operator_workflow(org_id: str, user_id: str, workflow_id: str, action: str,
+                              value: str | None = None):
+    workflow = get_workflow_run(org_id,workflow_id)
+    if not workflow:
+        raise HTTPException(404,"workflow_not_found")
+    if action == "pause" and workflow["workflow_status"] == "PREPARED":
+        return update_workflow_status(org_id,workflow_id,"PAUSED",{"reason":value or "manual_pause"})
+    if action == "resume" and workflow["workflow_status"] == "PAUSED":
+        return update_workflow_status(org_id,workflow_id,"PREPARED",{"resumed":True})
+    if action == "cancel" and workflow["workflow_status"] in {"PREPARED","PAUSED"}:
+        return update_workflow_status(org_id,workflow_id,"REJECTED",{"reason":value or "cancelled"})
+    if action == "correct" and workflow["workflow_status"] == "PREPARED" and value:
+        return _continue_dossier_workflow(org_id,user_id,workflow,value,None)["workflow"]
+    raise HTTPException(409,"invalid_workflow_transition")

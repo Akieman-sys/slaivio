@@ -51,8 +51,8 @@ def decide_response_action(
 ):
     if confidence < 0.45:
         return {
-            "decision": "ESCALATE",
-            "reason": "Low confidence intent detection",
+            "decision": "ASK_CLARIFICATION",
+            "reason": "Low confidence requires clarification",
             "missing_fields": [],
         }
 

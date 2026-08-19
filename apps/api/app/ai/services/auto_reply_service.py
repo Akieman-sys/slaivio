@@ -14,6 +14,7 @@ from app.services.whatsapp_provider_factory import get_whatsapp_provider
 AUTO_SEND_DECISIONS = {
     "AUTO_REPLY",
     "ASK_MORE_INFO",
+    "ASK_CLARIFICATION",
 }
 
 

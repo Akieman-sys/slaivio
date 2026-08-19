@@ -16,6 +16,10 @@ def create_workflow_run(
     proposed_actions: list,
     manager_id: str | None = None,
     manager_name: str | None = None,
+    workspace_id: str | None = None,
+    channel: str = "INTERNAL",
+    dialogue_state: str = "COLLECTING",
+    risk_level: str = "MEDIUM",
 ):
     with engine.connect() as conn:
         row = conn.execute(
@@ -30,7 +34,7 @@ def create_workflow_run(
                     entities,
                     proposed_actions,
                     manager_id,
-                    manager_name
+                    manager_name, workspace_id, channel, dialogue_state, risk_level
                 )
                 values (
                     :org_id,
@@ -42,7 +46,7 @@ def create_workflow_run(
                     cast(:entities as jsonb),
                     cast(:proposed_actions as jsonb),
                     :manager_id,
-                    :manager_name
+                    :manager_name, :workspace_id, :channel, :dialogue_state, :risk_level
                 )
                 returning *
             """),
@@ -57,6 +61,10 @@ def create_workflow_run(
                 "proposed_actions": json.dumps(proposed_actions or []),
                 "manager_id": manager_id,
                 "manager_name": manager_name,
+                "workspace_id": workspace_id,
+                "channel": channel,
+                "dialogue_state": dialogue_state,
+                "risk_level": risk_level,
             },
         ).fetchone()
 
@@ -194,6 +202,9 @@ def update_workflow_details(
     source_message: str,
     entities: dict,
     proposed_actions: list,
+    dialogue_state: str | None = None,
+    client_id: str | None = None,
+    dossier_id: str | None = None,
 ):
     with engine.connect() as conn:
         row = conn.execute(
@@ -204,6 +215,9 @@ def update_workflow_details(
                     source_message = :source_message,
                     entities = cast(:entities as jsonb),
                     proposed_actions = cast(:proposed_actions as jsonb),
+                    dialogue_state = coalesce(:dialogue_state, dialogue_state),
+                    client_id = coalesce(cast(:client_id as uuid), client_id),
+                    dossier_id = coalesce(cast(:dossier_id as uuid), dossier_id),
                     updated_at = now()
                 where id = :workflow_id
                   and org_id = :org_id
@@ -217,8 +231,40 @@ def update_workflow_details(
                 "source_message": source_message,
                 "entities": json.dumps(entities or {}),
                 "proposed_actions": json.dumps(proposed_actions or []),
+                "dialogue_state": dialogue_state,
+                "client_id": client_id,
+                "dossier_id": dossier_id,
             },
         ).fetchone()
 
         conn.commit()
         return dict(row._mapping) if row else None
+
+
+def claim_workflow_execution(org_id: str,workflow_id: str):
+    with engine.begin() as conn:
+        row=conn.execute(text("""update ai_workflow_runs set workflow_status='EXECUTING',
+            dialogue_state='EXECUTING',updated_at=now() where org_id=:org and id=:id
+            and workflow_status='PREPARED' returning *"""),{"org":org_id,"id":workflow_id}).fetchone()
+        return dict(row._mapping) if row else None
+
+
+def save_field_validation(org_id: str, workflow_id: str, field_name: str, raw_value: str,
+                          result: dict, workspace_id: str | None = None):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            insert into ai_workflow_field_validations(
+                org_id,workspace_id,workflow_id,field_name,raw_value,normalized_value,
+                validation_status,reason,choices
+            ) values(:org,:workspace,cast(:workflow as uuid),:field,:raw,cast(:value as jsonb),
+                     :status,:reason,cast(:choices as jsonb))
+            on conflict(workflow_id,field_name) do update set
+                raw_value=excluded.raw_value,normalized_value=excluded.normalized_value,
+                validation_status=excluded.validation_status,reason=excluded.reason,
+                choices=excluded.choices,created_at=now()
+        """), {
+            "org": org_id, "workspace": workspace_id, "workflow": workflow_id,
+            "field": field_name, "raw": raw_value,
+            "value": json.dumps(result.get("value")), "status": result["status"],
+            "reason": result.get("reason"), "choices": json.dumps(result.get("choices") or []),
+        })

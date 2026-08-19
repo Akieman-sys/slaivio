@@ -6,6 +6,7 @@ from app.ai.services.escalation_engine import evaluate_escalation
 from app.ai.services.intent_detector import detect_intent
 from app.ai.services.missing_info_response import build_missing_info_response
 from app.ai.services.response_rules import decide_response_action
+from app.ai.services.dialogue_validation import dialogue_act
 
 
 def orchestrate_ai_response(
@@ -13,6 +14,14 @@ def orchestrate_ai_response(
     client_phone: str,
     user_message: str,
 ):
+    act = dialogue_act(user_message, False)
+    if act == "GREETING":
+        return {
+            "status":"ok","intent":{"intent":"GREETING","confidence":1.0,"entities":{}},
+            "escalation":{"should_escalate":False,"score":0,"rules":[],"event":None},
+            "decision":"AUTO_REPLY","reason":"Natural greeting",
+            "response_text":"Bonjour ! Comment pouvons-nous vous aider aujourd’hui ?","log":None,
+        }
     intent_result = detect_intent(
         org_id=org_id,
         message=user_message,
@@ -49,6 +58,8 @@ def orchestrate_ai_response(
             response_text = build_missing_info_response(
                 decision_result["missing_fields"]
             )
+        elif decision == "ASK_CLARIFICATION":
+            response_text = "Je veux être certain de bien comprendre votre demande. Souhaitez-vous obtenir un tarif, suivre un colis ou préparer un envoi ?"
         elif decision in {"AUTO_REPLY", "DRAFT_ONLY"}:
             ai_result = run_ai_pipeline(
                 org_id=org_id,

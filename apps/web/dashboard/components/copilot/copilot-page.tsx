@@ -102,10 +102,10 @@ export function CopilotPage() {
     try {
       const result = await sendCopilotMessage(content, clientPhone.trim());
       setMessages((current) => [...current.filter((item) => item.id !== temporary.id), temporary, result.message]);
-      if (result.workflow.workflow_status === "PREPARED") {
+      if (result.workflow?.workflow_status === "PREPARED") {
         setWorkflows((current) => [
-          result.workflow,
-          ...current.filter((item) => item.id !== result.workflow.id),
+          result.workflow!,
+          ...current.filter((item) => item.id !== result.workflow!.id),
         ]);
       }
     } catch {
@@ -221,7 +221,8 @@ function TabButton({ active, onClick, count, children }: { active: boolean; onCl
 
 function MessageBubble({ message }: { message: CopilotMessage }) {
   const user = message.role === "USER";
-  return <div className={`flex ${user ? "justify-end" : "justify-start"}`}><div className={`max-w-[720px] rounded-[7px] px-4 py-3 text-[13px] leading-5 ${user ? "bg-[#25292d] text-white" : "border border-[#dfe1e3] bg-[#f7f8f8]"}`}>{!user && <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-[#087a46]"><Sparkles size={12} />Slaivio</span>}{message.content}</div></div>;
+  const choices=message.metadata?.choices||[];
+  return <div className={`flex ${user ? "justify-end" : "justify-start"}`}><div className={`max-w-[720px] rounded-[7px] px-4 py-3 text-[13px] leading-5 ${user ? "bg-[#25292d] text-white" : "border border-[#dfe1e3] bg-[#f7f8f8]"}`}>{!user && <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-[#087a46]"><Sparkles size={12} />Slaivio</span>}<p>{message.content}</p>{choices.length>0&&<div className="mt-3 flex flex-wrap gap-2">{choices.map(choice=><span key={choice.value} className="rounded-full border border-[#cfd8d3] bg-white px-2.5 py-1 text-[11px] text-[#315a47]">{choice.label}</span>)}</div>}</div></div>;
 }
 
 function WelcomeMessage({ setPrompt }: { setPrompt: (value: string) => void }) {
@@ -232,7 +233,7 @@ function WorkflowCard({ workflow, decide, compact = false }: { workflow: Copilot
   const internal = workflow.client_phone.startsWith("internal:");
   const entities = workflow.entities || {};
   const incomplete = internal || !entities.origin_country || !entities.destination_city || !entities.goods_type;
-  return <article className="border-y border-[#d9dcdf] bg-white"><div className="px-4 py-3"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] bg-[#e8f3ee] text-[#087a46]"><FileCheck2 size={16} /></span><div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold">{workflowLabels[workflow.workflow_type] || workflow.workflow_type}</h3><p className={`mt-1 text-[11px] leading-4 text-[#737a82] ${compact ? "line-clamp-2" : ""}`}>{workflow.source_message}</p>{!internal && <p className="mt-2 text-[10px] text-[#596169]">Client · {workflow.client_phone}</p>}{incomplete && workflow.workflow_type === "CREATE_SHIPMENT_DRAFT" && <p className="mt-2 text-[10px] font-medium text-amber-700">Informations à compléter dans la conversation</p>}</div></div></div><div className="flex border-t border-[#eceeef]"><button onClick={() => void decide(workflow.id, "reject")} className="flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-[#eceeef] text-[11px] hover:bg-[#f7f8f8]"><X size={13} />Rejeter</button><button onClick={() => void decide(workflow.id, "approve")} disabled={incomplete || workflow.workflow_type !== "CREATE_SHIPMENT_DRAFT"} title={incomplete ? "Complétez les informations dans la conversation" : undefined} className="flex h-9 flex-1 items-center justify-center gap-1.5 text-[11px] font-medium text-[#087a46] hover:bg-[#f0f7f4] disabled:cursor-not-allowed disabled:text-[#a4aaa7] disabled:hover:bg-white"><Check size={13} />Valider</button></div></article>;
+  return <article className="rounded-[8px] border border-[#d9dcdf] bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]"><div className="px-4 py-3"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] bg-[#e8f3ee] text-[#087a46]"><FileCheck2 size={16} /></span><div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold">{workflow.entities?.requested_operation==="CREATE_PACKAGE"?"Créer un colis":workflowLabels[workflow.workflow_type] || workflow.workflow_type}</h3><p className={`mt-1 text-[11px] leading-4 text-[#737a82] ${compact ? "line-clamp-2" : ""}`}>{workflow.source_message}</p>{!internal && <p className="mt-2 text-[10px] text-[#596169]">Client · {String(workflow.entities?.client_name||workflow.client_phone)}</p>}<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Origine : {String(workflow.entities?.origin_country||"À compléter")}</span><span>Destination : {String(workflow.entities?.destination_city||"À compléter")}</span><span>Marchandise : {String(workflow.entities?.goods_type||"À compléter")}</span></div>{incomplete && workflow.workflow_type === "CREATE_SHIPMENT_DRAFT" && <p className="mt-2 text-[10px] font-medium text-amber-700">Informations à compléter dans la conversation</p>}</div></div></div><div className="flex border-t border-[#eceeef]"><button onClick={() => void decide(workflow.id, "reject")} className="flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-[#eceeef] text-[11px] hover:bg-[#f7f8f8]"><X size={13} />Annuler</button><button onClick={() => void decide(workflow.id, "approve")} disabled={incomplete || workflow.workflow_type !== "CREATE_SHIPMENT_DRAFT"} title={incomplete ? "Complétez les informations dans la conversation" : undefined} className="flex h-9 flex-1 items-center justify-center gap-1.5 text-[11px] font-medium text-[#087a46] hover:bg-[#f0f7f4] disabled:cursor-not-allowed disabled:text-[#a4aaa7] disabled:hover:bg-white"><Check size={13} />Exécuter</button></div></article>;
 }
 
 function ListPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {

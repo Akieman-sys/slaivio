@@ -5,7 +5,7 @@ export type CopilotMessage = {
   role: "USER" | "ASSISTANT" | "SYSTEM";
   content: string;
   workflow_id?: string | null;
-  metadata?: { missing_fields?: string[]; intent?: string };
+  metadata?: { missing_fields?: string[]; intent?: string; dialogue_state?: string; choices?: Array<{value:string;label:string}>; summary?: Record<string, unknown> };
   created_at: string;
 };
 
@@ -38,7 +38,7 @@ export async function getCopilotMessages() {
 }
 
 export async function sendCopilotMessage(message: string, clientPhone?: string) {
-  const response = await api.post<{ message: CopilotMessage; workflow: CopilotWorkflow }>("/ai/copilot/messages", {
+  const response = await api.post<{ message: CopilotMessage; workflow: CopilotWorkflow | null; missing_fields?: string[]; summary?: Record<string,unknown>; dialogue_state?: string }>("/ai/copilot/messages", {
     message,
     client_phone: clientPhone || null,
   });

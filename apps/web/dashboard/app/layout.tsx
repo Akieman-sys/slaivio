@@ -36,7 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" className={`h-full ${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="min-h-full flex flex-col">
+      <body className={`${GeistSans.className} min-h-full flex flex-col`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

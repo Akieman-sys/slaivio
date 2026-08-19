@@ -170,10 +170,8 @@ def update_workflow_status(
                 update ai_workflow_runs
                 set
                     workflow_status = :status,
-                    result_payload = coalesce(
-                        cast(:result_payload as jsonb),
-                        result_payload
-                    ),
+                    result_payload = coalesce(result_payload,'{}'::jsonb) ||
+                        coalesce(cast(:result_payload as jsonb),'{}'::jsonb),
                     updated_at = now()
                 where id = :workflow_id
                   and org_id = :org_id
@@ -245,7 +243,9 @@ def claim_workflow_execution(org_id: str,workflow_id: str):
     with engine.begin() as conn:
         row=conn.execute(text("""update ai_workflow_runs set workflow_status='EXECUTING',
             dialogue_state='EXECUTING',updated_at=now() where org_id=:org and id=:id
-            and workflow_status='PREPARED' returning *"""),{"org":org_id,"id":workflow_id}).fetchone()
+            and (workflow_status in ('PREPARED','FAILED') or
+                 (workflow_status='EXECUTING' and updated_at<now()-interval '2 minutes'))
+            returning *"""),{"org":org_id,"id":workflow_id}).fetchone()
         return dict(row._mapping) if row else None
 
 

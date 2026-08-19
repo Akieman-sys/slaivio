@@ -38,3 +38,12 @@ def test_copilot_exposes_explicit_workflow_controls():
     assert "find_client_by_phone" in service
     assert "create_package" in service
     assert "resolve_location" in service
+
+
+def test_failed_and_stale_executions_are_recoverable():
+    repository=(ROOT/"apps/api/app/ai/repositories/workflow_repository.py").read_text(encoding="utf-8")
+    service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
+    assert "workflow_status in ('PREPARED','FAILED')" in repository
+    assert "updated_at<now()-interval '2 minutes'" in repository
+    assert 'update_workflow_status(org_id,workflow_id,"FAILED"' in service
+    assert "find_client_by_phone(org_id,workflow[\"client_phone\"])" in service

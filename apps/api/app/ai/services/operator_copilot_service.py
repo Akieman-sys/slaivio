@@ -305,11 +305,60 @@ def prepare_operator_message(
     return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
 
 
+def _execute_package_workflow(org_id: str, workflow_id: str, actor_id: str, workflow: dict, entities: dict):
+    previous = workflow.get("result_payload") or {}
+    client_id = workflow.get("client_id") or entities.get("client_id") or (previous.get("client") or {}).get("id")
+    created_client = None
+    if not client_id:
+        existing = find_client_by_phone(org_id,workflow["client_phone"])
+        if existing:
+            client_id = existing["id"]
+            created_client = existing
+        else:
+            if not entities.get("client_name"):
+                raise HTTPException(status_code=422, detail={"code":"client_identity_required","missing_fields":["client_name"]})
+            created_client = create_client(org_id,actor_id,{
+                "name":entities["client_name"],"display_name":entities["client_name"],
+                "phone":workflow["client_phone"],"whatsapp_phone":workflow["client_phone"],
+                "customer_type":"individual","lifecycle_status":"lead",
+                "source":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "manual",
+            })
+            client_id = created_client["id"]
+        update_workflow_status(org_id,workflow_id,"EXECUTING",{"client":created_client or {"id":client_id}})
+    dossier_id = workflow.get("dossier_id") or entities.get("dossier_id") or (previous.get("dossier") or {}).get("id")
+    created_dossier = None
+    dossier_choices = entities.get("dossier_choices") or []
+    if not dossier_id and len(dossier_choices) == 1:
+        dossier_id = dossier_choices[0]["id"]
+    if not dossier_id:
+        created_dossier = create_dossier(org_id,actor_id,{
+            "client_id":client_id,"workspace_id":workflow.get("workspace_id"),
+            "case_type":"SEND_CARGO","status_global":"LEAD","intake_status":"PARTIAL",
+            "validation_status":"PENDING","primary_channel":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "assistant",
+            "origin_country":entities.get("origin_country"),"destination_city":entities.get("destination_city"),
+            "goods_type":entities.get("goods_type"),"client_full_name":entities.get("client_name"),
+        })
+        dossier_id = created_dossier["id"]
+        update_workflow_status(org_id,workflow_id,"EXECUTING",{"client":created_client or {"id":client_id},"dossier":created_dossier})
+    package = create_package(org_id,actor_id,{
+        "dossier_id":dossier_id,"source":"api","description":entities.get("goods_type"),
+        "category":entities.get("goods_type"),"origin_country":entities.get("origin_country"),
+        "destination_city":entities.get("destination_city"),"status":"PENDING_VALIDATION",
+        "validation_status":"PENDING","payment_status":"UNKNOWN","package_type":"carton",
+        "package_condition":"UNKNOWN","inventory_status":"NOT_STORED","pieces_count":1,
+        "public_tracking_enabled":True,"priority":"NORMAL","goods_classification":"ORDINARY_GOODS",
+    })
+    result={"client":created_client or {"id":client_id,"display_name":entities.get("client_name")},
+            "dossier":created_dossier or {"id":dossier_id},"package":package}
+    updated=update_workflow_status(org_id,workflow_id,"APPROVED",result)
+    return {"workflow":updated,"result":result,"draft":None}
+
+
 def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai-copilot"):
     workflow = get_workflow_run(org_id, workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="workflow_not_found")
-    if workflow["workflow_status"] != "PREPARED":
+    if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
     if workflow["workflow_type"] != "CREATE_SHIPMENT_DRAFT":
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
@@ -325,48 +374,15 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
     if entities.get("requested_operation") == "CREATE_PACKAGE":
         claimed=claim_workflow_execution(org_id,workflow_id)
         if not claimed:
-            raise HTTPException(status_code=409,detail="workflow_already_decided")
-        workflow=claimed
-        client_id = workflow.get("client_id") or entities.get("client_id")
-        created_client = None
-        if not client_id:
-            if not entities.get("client_name"):
-                raise HTTPException(status_code=422, detail={"code":"client_identity_required","missing_fields":["client_name"]})
-            created_client = create_client(org_id,actor_id,{
-                "name":entities["client_name"],"display_name":entities["client_name"],
-                "phone":workflow["client_phone"],"whatsapp_phone":workflow["client_phone"],
-                "customer_type":"individual","lifecycle_status":"lead",
-                "source":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "manual",
-            })
-            client_id = created_client["id"]
-        dossier_id = workflow.get("dossier_id") or entities.get("dossier_id")
-        created_dossier = None
-        dossier_choices = entities.get("dossier_choices") or []
-        if not dossier_id and len(dossier_choices) == 1:
-            dossier_id = dossier_choices[0]["id"]
-        if not dossier_id:
-            created_dossier = create_dossier(org_id,actor_id,{
-                "client_id":client_id,"workspace_id":workflow.get("workspace_id"),
-                "case_type":"SEND_CARGO","status_global":"LEAD","intake_status":"PARTIAL",
-                "validation_status":"PENDING","primary_channel":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "assistant",
-                "origin_country":entities.get("origin_country"),"destination_city":entities.get("destination_city"),
-                "goods_type":entities.get("goods_type"),"client_full_name":entities.get("client_name"),
-            })
-            dossier_id = created_dossier["id"]
-        package = create_package(org_id,actor_id,{
-            "dossier_id":dossier_id,"source":"api","description":entities.get("goods_type"),
-            "category":entities.get("goods_type"),"origin_country":entities.get("origin_country"),
-            "destination_city":entities.get("destination_city"),"status":"PENDING_VALIDATION",
-            "validation_status":"PENDING","payment_status":"UNKNOWN","package_type":"carton",
-            "package_condition":"UNKNOWN","inventory_status":"NOT_STORED","pieces_count":1,
-            "public_tracking_enabled":True,"priority":"NORMAL","goods_classification":"ORDINARY_GOODS",
-        })
-        result = {
-            "client":created_client or {"id":client_id,"display_name":entities.get("client_name")},
-            "dossier":created_dossier or {"id":dossier_id},"package":package,
-        }
-        updated = update_workflow_status(org_id,workflow_id,"APPROVED",result)
-        return {"workflow":updated,"result":result,"draft":None}
+            raise HTTPException(status_code=409,detail="workflow_execution_in_progress")
+        try:
+            return _execute_package_workflow(org_id,workflow_id,actor_id,claimed,entities)
+        except HTTPException as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":exc.detail})
+            raise
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]})
+            raise HTTPException(status_code=422,detail="package_creation_failed") from exc
     draft = create_dossier_draft(
         org_id=org_id,
         client_phone=workflow["client_phone"],

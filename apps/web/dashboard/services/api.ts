@@ -94,12 +94,17 @@ api.interceptors.response.use(
         const raw = Array.isArray(detail)
           ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(" · ")
           : typeof detail === "string" ? detail : "";
+        const conflictMessage = raw === "workflow_execution_in_progress"
+          ? "La création est déjà en cours. Patientez quelques instants avant de réessayer."
+          : raw === "workflow_already_decided"
+            ? "Cette action a déjà été traitée. Rechargez la page pour voir son état actuel."
+            : `Cette opération entre en conflit avec l’état actuel.${raw ? ` ${raw}` : ""}`;
         const message = !error.response
           ? "Le serveur est injoignable. Vérifiez le déploiement du backend."
           : error.response.status === 403
             ? "Vous n’avez pas la permission d’effectuer cette action."
             : error.response.status === 409
-              ? `Cette opération entre en conflit avec l’état actuel.${raw ? ` ${raw}` : ""}`
+              ? conflictMessage
               : error.response.status === 422
                 ? `Certaines données sont invalides ou incompatibles.${raw ? ` ${raw}` : ""}`
                 : raw || `L’opération a échoué (erreur ${error.response.status}).`;

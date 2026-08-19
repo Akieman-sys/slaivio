@@ -20,6 +20,7 @@ export type CopilotWorkflow = {
   proposed_actions: Array<{ type: string; label: string; payload: Record<string, unknown> }>;
   result_payload?: Record<string, unknown>;
   created_at: string;
+  updated_at?: string;
 };
 
 export type CopilotEscalation = {
@@ -47,9 +48,11 @@ export async function sendCopilotMessage(message: string, clientPhone?: string) 
 
 export async function getCopilotWorkflows() {
   const response = await api.get<{ workflows: CopilotWorkflow[] }>("/ai/copilot/workflows", {
-    params: { workflow_status: "PREPARED" },
+    params: { workflow_status: null },
   });
-  return response.data.workflows;
+  return response.data.workflows.filter((item) =>
+    ["PREPARED", "FAILED", "EXECUTING"].includes(item.workflow_status),
+  );
 }
 
 export async function approveCopilotWorkflow(workflowId: string) {

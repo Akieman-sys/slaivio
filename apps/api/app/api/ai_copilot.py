@@ -50,7 +50,7 @@ def post_message(body: CopilotMessageRequest, tenant=Depends(get_current_tenant)
 
 @router.get("/workflows")
 def get_workflows(
-    workflow_status: str | None = "PREPARED",
+    workflow_status: str | None = None,
     limit: int = 30,
     tenant=Depends(get_current_tenant),
 ):

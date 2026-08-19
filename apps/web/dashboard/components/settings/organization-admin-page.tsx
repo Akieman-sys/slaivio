@@ -39,6 +39,11 @@ import {
   type AgencyWhatsappNumber,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import {
+  getNotificationPreferences,
+  saveNotificationPreference,
+  type NotificationPreference,
+} from "@/services/notification-center";
 const input =
   "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const button =
@@ -194,7 +199,8 @@ export function OrganizationAdminPage() {
             {tab === "data" && <DataSettings data={data} run={run} />}{" "}
           </div>
         </main>
-    </SettingsDialog>
+      </div>
+    </div>
   );
 }
 

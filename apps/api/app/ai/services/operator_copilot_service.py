@@ -26,7 +26,10 @@ from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.db.followup_repository import create_manual_followup,followup_dashboard,mutate_followup
+from app.departures.repository import create as create_departure
 from app.packages.repository import create_package,list_packages,update_package
+from app.pricing_engine.repository import catalog as pricing_catalog
+from app.routes_services.repository import route_listing,list_all
 from app.permissions.services.permission_service import assert_permission
 
 
@@ -49,6 +52,8 @@ PACKAGE_STATUS_LABELS={"recu":"RECEIVED","reçu":"RECEIVED","confirme":"CONFIRME
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if any(word in normalized for word in create_words+("planifie","programme")) and any(word in normalized for word in ("départ","depart")):
+        return "DEPARTURE_CREATION",0.93
     if re.search(r"\bFUP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("reporte","décale","decale","pause","reprend","termine","escalade","annule")):
         return "FOLLOWUP_STATUS_UPDATE",0.95
     if re.search(r"\b(?:COL)-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("marque","passe","change","mets")):
@@ -76,6 +81,8 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type=="CREATE_DEPARTURE":
+        return [field for field in ("route_id","shipping_service_id","scheduled_at") if not entities.get(field)]
     if workflow_type=="UPDATE_FOLLOWUP":
         return [field for field in ("followup_id","mutation_action","row_version") if not entities.get(field)]
     if workflow_type=="UPDATE_PACKAGE_STATUS":
@@ -302,8 +309,13 @@ def _parse_due_at(value:str):
         if delay:target=now+timedelta(days=int(delay.group(1)))
         else:
             iso=re.search(r"(20\d{2})-(\d{2})-(\d{2})",normalized)
-            if not iso:return None
-            target=datetime(int(iso.group(1)),int(iso.group(2)),int(iso.group(3)),tzinfo=timezone.utc)
+            if iso:target=datetime(int(iso.group(1)),int(iso.group(2)),int(iso.group(3)),tzinfo=timezone.utc)
+            else:
+                weekdays={"lundi":0,"mardi":1,"mercredi":2,"jeudi":3,"vendredi":4,"samedi":5,"dimanche":6}
+                weekday=next((number for label,number in weekdays.items() if label in normalized),None)
+                if weekday is None:return None
+                delta=(weekday-now.weekday())%7;target=now+timedelta(days=delta)
+                if delta==0 and target.replace(hour=hour,minute=minute,second=0,microsecond=0)<=now:target+=timedelta(days=7)
     target=target.replace(hour=hour,minute=minute,second=0,microsecond=0)
     if target<=now:return None
     return target.isoformat()
@@ -424,6 +436,45 @@ def prepare_operator_message(
     fallback_intent,fallback_confidence=_fallback_intent(clean_message)
     if fallback_intent in {"PACKAGE_STATUS_UPDATE","FOLLOWUP_STATUS_UPDATE"} or intent == "UNKNOWN":
         intent, confidence = fallback_intent,fallback_confidence
+
+    if fallback_intent=="DEPARTURE_CREATION":
+        intent,confidence=fallback_intent,fallback_confidence
+        normalized=clean_message.lower();catalog=pricing_catalog(org_id)
+        routes=route_listing(org_id,workspace=workspace_id,limit=100,offset=0)["items"]
+        routes=[r for r in routes if r.get("status") in {"ACTIVE","LIMITED"}]
+        route=next((r for r in routes if str(r.get("route_code") or "").lower() in normalized and r.get("route_code")),None)
+        if not route:
+            route=next((r for r in routes if all(str(v).lower() in normalized for v in (r.get("origin_city") or r.get("origin_country"),r.get("destination_city") or r.get("destination_country")) if v)),None)
+        if not route:
+            options=", ".join(str(r.get("route_name") or r.get("route_code")) for r in routes[:6])
+            response="Quelle route configurée doit utiliser ce départ ?"+(f" Options : {options}." if options else " Aucune route active n’est disponible.")
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        services=[s for s in catalog.get("services",[]) if str(s.get("route_id"))==str(route.get("id"))]
+        service=next((s for s in services if str(s.get("service_code") or "").lower() in normalized and s.get("service_code")),None)
+        if not service:
+            service=next((s for s in services if str(s.get("service_name") or "").lower() in normalized),None)
+        if not service:
+            mode=next((x for x in ("air","sea","express","road") if x in normalized),None)
+            matches=[s for s in services if not mode or mode in str(s.get("shipping_mode") or "").lower()]
+            service=matches[0] if len(matches)==1 else None
+        if not service:
+            options=", ".join(str(s.get("service_name") or s.get("service_code")) for s in services[:6])
+            response=f"Quel service faut-il utiliser sur {route.get('route_name')} ?"+(f" Options : {options}." if options else " Aucun service actif n’est lié à cette route.")
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        scheduled_at=_parse_due_at(clean_message)
+        if not scheduled_at:
+            response="À quelle date et heure le départ est-il prévu ? Exemple : « vendredi à 18 h » ou « 2026-08-28 à 18 h »."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        service_full=next((s for s in list_all(org_id).get("services",[]) if str(s.get("id"))==str(service.get("id"))),{})
+        scheduled_dt=datetime.fromisoformat(scheduled_at);eta_days=service_full.get("eta_max_days") or route.get("eta_max_days")
+        entities.update({"route_id":route["id"],"route_name":route.get("route_name"),
+            "shipping_service_id":service["id"],"service_name":service.get("service_name"),"scheduled_at":scheduled_at,
+            "estimated_arrival_at":(scheduled_dt+timedelta(days=int(eta_days))).isoformat() if eta_days else None,
+            "timezone":route.get("timezone") or "UTC","warehouse_id":route.get("origin_warehouse_id"),
+            "destination_office":route.get("destination_office_city"),"published":False})
 
     if intent=="FOLLOWUP_STATUS_UPDATE":
         reference_match=re.search(r"\bFUP-[A-Z0-9-]+\b",clean_message.upper())
@@ -623,7 +674,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -685,6 +736,23 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
             if not followup:raise HTTPException(409,"followup_was_modified_or_closed")
             updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"followup":followup,"previous_status":entities.get("current_status")})
             return {"workflow":updated,"result":{"followup":followup},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="CREATE_DEPARTURE":
+        assert_permission(actor_id,org_id,"departures.manage")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            departure=create_departure(org_id,actor_id,workflow.get("manager_name") or "Membre de l’agence",{
+                "shipping_service_id":entities["shipping_service_id"],"departure_code":f"DEP-AI-{workflow_id[:8].upper()}",
+                "scheduled_at":entities["scheduled_at"],"cutoff_at":entities.get("cutoff_at"),
+                "estimated_arrival_at":entities.get("estimated_arrival_at"),"capacity_weight_kg":None,
+                "capacity_cbm":None,"capacity_packages":None,"carrier_name":None,"transport_reference":None,
+                "timezone":entities.get("timezone") or "UTC","responsible_name":workflow.get("manager_name"),
+                "warehouse_id":entities.get("warehouse_id"),"destination_office":entities.get("destination_office"),
+                "published":False,"notes":"Départ préparé depuis l’Assistant Slaivio"})
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"departure":departure})
+            return {"workflow":updated,"result":{"departure":departure},"draft":None}
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
     assert_permission(actor_id,org_id,"clients.create")

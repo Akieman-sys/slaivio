@@ -23,6 +23,12 @@ def build_proposed_actions(
             "current_status":entities.get("current_status"),"mutation_action":entities.get("mutation_action"),
             "due_at":entities.get("due_at")}}]
 
+    if workflow_type == "CREATE_DEPARTURE":
+        return [{"type":"CREATE_DEPARTURE","label":"Créer le départ planifié","payload":{
+            "route_id":entities.get("route_id"),"route_name":entities.get("route_name"),
+            "shipping_service_id":entities.get("shipping_service_id"),"service_name":entities.get("service_name"),
+            "scheduled_at":entities.get("scheduled_at"),"cutoff_at":entities.get("cutoff_at")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

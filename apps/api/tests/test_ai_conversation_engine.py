@@ -89,6 +89,14 @@ def test_followup_mutations_have_a_controlled_versioned_workflow():
     assert _parse_due_at("reporte FUP-2026-001284 à demain 16h") is not None
 
 
+def test_departure_creation_uses_a_dedicated_workflow_and_natural_dates():
+    assert _fallback_intent("planifie un départ Air vendredi à 18h") == ("DEPARTURE_CREATION",0.93)
+    assert _missing_fields("CREATE_DEPARTURE",{"route_id":"r-1","shipping_service_id":"s-1","scheduled_at":"2026-08-28T18:00:00+00:00"},None)==[]
+    assert _parse_due_at("vendredi à 18h") is not None
+    repository=(ROOT/"apps/api/app/departures/repository.py").read_text(encoding="utf-8")
+    assert "departure_code=:code" in repository
+
+
 def test_package_status_change_is_controlled_and_delivery_needs_proof():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     assert _fallback_intent("marque COL-2026-00124 comme reçu") == ("PACKAGE_STATUS_UPDATE",0.95)

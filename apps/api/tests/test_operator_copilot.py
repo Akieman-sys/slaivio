@@ -154,6 +154,29 @@ def test_followup_mutation_checks_permission_and_row_version(monkeypatch):
     assert result["result"]["followup"]["status"]=="COMPLETED"
 
 
+def test_departure_creation_is_permissioned_and_idempotent(monkeypatch):
+    workflow=_workflow(
+        workflow_type="CREATE_DEPARTURE",intent="DEPARTURE_CREATION",manager_name="Grace",
+        entities={"route_id":"route-1","route_name":"Guangzhou → Kinshasa","shipping_service_id":"service-1",
+                  "service_name":"Air Cargo","scheduled_at":"2026-08-28T18:00:00+00:00","timezone":"UTC"},
+    )
+    calls={}
+    monkeypatch.setattr(service,"get_workflow_run",lambda *_:workflow)
+    monkeypatch.setattr(service,"assert_permission",lambda user,org,permission:calls.update(permission=permission))
+    monkeypatch.setattr(service,"claim_workflow_execution",lambda *_:workflow)
+    monkeypatch.setattr(service,"create_departure",lambda org,actor,name,payload: calls.update(payload=payload) or {
+        "id":"departure-1","departure_code":payload["departure_code"],"status":"PLANNED"
+    })
+    monkeypatch.setattr(service,"update_workflow_status",lambda *_args,**_kwargs:{**workflow,"workflow_status":"APPROVED"})
+
+    result=service.approve_operator_workflow("org-1","workflow-1","manager-1")
+
+    assert calls["permission"]=="departures.manage"
+    assert calls["payload"]["departure_code"]=="DEP-AI-WORKFLOW"
+    assert calls["payload"]["published"] is False
+    assert result["result"]["departure"]["status"]=="PLANNED"
+
+
 def test_copilot_schema_and_repositories_are_tenant_scoped():
     root = Path(__file__).parents[3]
     migration = (root / "infra/sql/059_ai_operator_copilot.sql").read_text(encoding="utf-8")

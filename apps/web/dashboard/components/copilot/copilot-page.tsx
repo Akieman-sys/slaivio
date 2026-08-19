@@ -2,6 +2,7 @@
 
 import {
   Check,
+  BookOpenCheck,
   ChevronRight,
   FileCheck2,
   Mic,
@@ -19,6 +20,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
   approveCopilotWorkflow,
   getCopilotEscalations,
+  getCopilotCapabilities,
   getCopilotMessages,
   getCopilotWorkflows,
   rejectCopilotWorkflow,
@@ -26,9 +28,10 @@ import {
   type CopilotEscalation,
   type CopilotMessage,
   type CopilotWorkflow,
+  type CopilotCapabilities,
 } from "@/services/copilot";
 
-type Tab = "conversation" | "actions" | "escalations";
+type Tab = "conversation" | "capabilities" | "actions" | "escalations";
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
@@ -43,6 +46,7 @@ type SpeechRecognitionLike = {
 const workflowLabels: Record<string, string> = {
   CREATE_CLIENT: "Créer un client",
   CREATE_FOLLOWUP: "Programmer une relance",
+  UPDATE_PACKAGE_STATUS: "Changer le statut d’un colis",
   CREATE_SHIPMENT_DRAFT: "Préparer un dossier client",
   TRACKING_LOOKUP: "Rechercher un colis",
   PRICING_ANSWER: "Préparer une réponse tarifaire",
@@ -54,6 +58,7 @@ export function CopilotPage() {
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [workflows, setWorkflows] = useState<CopilotWorkflow[]>([]);
   const [escalations, setEscalations] = useState<CopilotEscalation[]>([]);
+  const [capabilities, setCapabilities] = useState<CopilotCapabilities>({ consultations: [], actions: [], safety: [] });
   const [tab, setTab] = useState<Tab>("conversation");
   const [prompt, setPrompt] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -69,16 +74,18 @@ export function CopilotPage() {
     setLoading(true);
     setError("");
     try {
-      const [messageData, workflowData, escalationData, clientData] = await Promise.all([
+      const [messageData, workflowData, escalationData, clientData, capabilityData] = await Promise.all([
         getCopilotMessages(),
         getCopilotWorkflows(),
         getCopilotEscalations(),
         listClients({ page: 1, page_size: 100, sort: "recent" }),
+        getCopilotCapabilities(),
       ]);
       setMessages(messageData);
       setWorkflows(workflowData);
       setEscalations(escalationData);
       setClients(clientData.items);
+      setCapabilities(capabilityData);
     } catch {
       setError("L’espace IA n’a pas pu être chargé.");
     } finally {
@@ -181,6 +188,7 @@ export function CopilotPage() {
 
       <nav className="flex h-11 items-end gap-5 border-b border-[#dfe1e3] bg-white px-5 sm:px-6" aria-label="Vues de l’assistant">
         <TabButton active={tab === "conversation"} onClick={() => setTab("conversation")}>Conversation</TabButton>
+        <TabButton active={tab === "capabilities"} onClick={() => setTab("capabilities")}>Ce que je peux faire</TabButton>
         <TabButton active={tab === "actions"} onClick={() => setTab("actions")} count={workflows.length}>Actions à valider</TabButton>
         <TabButton active={tab === "escalations"} onClick={() => setTab("escalations")} count={escalations.length}>Escalades</TabButton>
       </nav>
@@ -223,6 +231,8 @@ export function CopilotPage() {
         </main>
       )}
 
+      {tab === "capabilities" && <CapabilityPanel capabilities={capabilities} onExample={(example) => { setPrompt(example); setTab("conversation"); }} />}
+
       {tab === "actions" && <ListPanel title="Actions à valider" description="Chaque opération reste en attente jusqu’à votre décision.">{workflows.length ? workflows.map((workflow) => <WorkflowCard key={workflow.id} workflow={workflow} decide={decide} />) : <EmptyLine text="Aucune action en attente de validation." />}</ListPanel>}
       {tab === "escalations" && <ListPanel title="Escalades IA" description="Demandes sensibles ou ambiguës qui attendent une réponse de l’agence.">{escalations.length ? escalations.map((item) => <EscalationRow key={item.id} escalation={item} />) : <EmptyLine text="Aucune escalade à traiter." />}</ListPanel>}
     </div>
@@ -249,10 +259,26 @@ function WorkflowCard({ workflow, decide, compact = false }: { workflow: Copilot
   const entities = workflow.entities || {};
   const clientWorkflow=workflow.workflow_type==="CREATE_CLIENT";
   const followupWorkflow=workflow.workflow_type==="CREATE_FOLLOWUP";
-  const incomplete = clientWorkflow ? internal || !entities.client_name : followupWorkflow ? internal || !entities.client_id || !entities.followup_reason || !entities.due_at : internal || !entities.origin_country || !entities.destination_city || !entities.goods_type;
+  const statusWorkflow=workflow.workflow_type==="UPDATE_PACKAGE_STATUS";
+  const incomplete = clientWorkflow ? internal || !entities.client_name : followupWorkflow ? internal || !entities.client_id || !entities.followup_reason || !entities.due_at : statusWorkflow ? !entities.package_id || !entities.target_status : internal || !entities.origin_country || !entities.destination_city || !entities.goods_type;
   const executionAge = Date.now() - new Date(workflow.updated_at || workflow.created_at).getTime();
   const executing = workflow.workflow_status === "EXECUTING" && executionAge < 120_000;
-  return <article className="rounded-[8px] border border-[#d9dcdf] bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]"><div className="px-4 py-3"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] bg-[#e8f3ee] text-[#087a46]"><FileCheck2 size={16} /></span><div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold">{workflow.entities?.requested_operation==="CREATE_PACKAGE"?"Créer un colis":workflowLabels[workflow.workflow_type] || workflow.workflow_type}</h3><p className={`mt-1 text-[11px] leading-4 text-[#737a82] ${compact ? "line-clamp-2" : ""}`}>{workflow.source_message}</p>{!internal && <p className="mt-2 text-[10px] text-[#596169]">Client · {String(workflow.entities?.client_name||workflow.client_phone)}</p>}{clientWorkflow?<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Nom : {String(entities.client_name||"À compléter")}</span><span>WhatsApp : {internal?"À compléter":workflow.client_phone}</span></div>:followupWorkflow?<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Motif : {String(entities.followup_reason||"À compléter")}</span><span>Programmée : {String(entities.due_at||"À compléter")}</span><span>Canal : WhatsApp</span></div>:<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Origine : {String(workflow.entities?.origin_country||"À compléter")}</span><span>Destination : {String(workflow.entities?.destination_city||"À compléter")}</span><span>Marchandise : {String(workflow.entities?.goods_type||"À compléter")}</span></div>}{incomplete&&<p className="mt-2 text-[10px] font-medium text-amber-700">Informations à compléter dans la conversation</p>}{workflow.workflow_status==="FAILED"&&<p className="mt-2 text-[10px] font-medium text-red-700">La création précédente a échoué. Vous pouvez réessayer sans créer de doublon.</p>}{executing&&<p className="mt-2 text-[10px] font-medium text-amber-700">Création en cours…</p>}</div></div></div><div className="flex border-t border-[#eceeef]"><button onClick={() => void decide(workflow.id, "reject")} disabled={executing} className="flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-[#eceeef] text-[11px] hover:bg-[#f7f8f8] disabled:text-[#a4aaa7]"><X size={13} />Annuler</button><button onClick={() => void decide(workflow.id, "approve")} disabled={executing || incomplete || !["CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP"].includes(workflow.workflow_type)} title={incomplete ? "Complétez les informations dans la conversation" : undefined} className="flex h-9 flex-1 items-center justify-center gap-1.5 text-[11px] font-medium text-[#087a46] hover:bg-[#f0f7f4] disabled:cursor-not-allowed disabled:text-[#a4aaa7] disabled:hover:bg-white"><Check size={13} />{workflow.workflow_status==="FAILED"?"Réessayer":"Exécuter"}</button></div></article>;
+  return <article className="rounded-[8px] border border-[#d9dcdf] bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]"><div className="px-4 py-3"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] bg-[#e8f3ee] text-[#087a46]"><FileCheck2 size={16} /></span><div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold">{workflow.entities?.requested_operation==="CREATE_PACKAGE"?"Créer un colis":workflowLabels[workflow.workflow_type] || workflow.workflow_type}</h3><p className={`mt-1 text-[11px] leading-4 text-[#737a82] ${compact ? "line-clamp-2" : ""}`}>{workflow.source_message}</p>{!internal&&!statusWorkflow && <p className="mt-2 text-[10px] text-[#596169]">Client · {String(workflow.entities?.client_name||workflow.client_phone)}</p>}{clientWorkflow?<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Nom : {String(entities.client_name||"À compléter")}</span><span>WhatsApp : {internal?"À compléter":workflow.client_phone}</span></div>:followupWorkflow?<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Motif : {String(entities.followup_reason||"À compléter")}</span><span>Programmée : {String(entities.due_at||"À compléter")}</span><span>Canal : WhatsApp</span></div>:statusWorkflow?<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Colis : {String(entities.package_reference||"À compléter")}</span><span>Statut actuel : {String(entities.current_status||"Non renseigné")}</span><span>Nouveau statut : {String(entities.target_status||"À compléter")}</span></div>:<div className="mt-2 grid gap-1 text-[10px] text-[#596169]"><span>Origine : {String(workflow.entities?.origin_country||"À compléter")}</span><span>Destination : {String(workflow.entities?.destination_city||"À compléter")}</span><span>Marchandise : {String(workflow.entities?.goods_type||"À compléter")}</span></div>}{incomplete&&<p className="mt-2 text-[10px] font-medium text-amber-700">Informations à compléter dans la conversation</p>}{workflow.workflow_status==="FAILED"&&<p className="mt-2 text-[10px] font-medium text-red-700">La création précédente a échoué. Vous pouvez réessayer sans créer de doublon.</p>}{executing&&<p className="mt-2 text-[10px] font-medium text-amber-700">Création en cours…</p>}</div></div></div><div className="flex border-t border-[#eceeef]"><button onClick={() => void decide(workflow.id, "reject")} disabled={executing} className="flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-[#eceeef] text-[11px] hover:bg-[#f7f8f8] disabled:text-[#a4aaa7]"><X size={13} />Annuler</button><button onClick={() => void decide(workflow.id, "approve")} disabled={executing || incomplete || !["CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS"].includes(workflow.workflow_type)} title={incomplete ? "Complétez les informations dans la conversation" : undefined} className="flex h-9 flex-1 items-center justify-center gap-1.5 text-[11px] font-medium text-[#087a46] hover:bg-[#f0f7f4] disabled:cursor-not-allowed disabled:text-[#a4aaa7] disabled:hover:bg-white"><Check size={13} />{workflow.workflow_status==="FAILED"?"Réessayer":"Exécuter"}</button></div></article>;
+}
+
+function CapabilityPanel({ capabilities, onExample }: { capabilities: CopilotCapabilities; onExample: (value: string) => void }) {
+  return <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f6] px-5 py-6 sm:px-8">
+    <div className="mx-auto max-w-6xl">
+      <div className="flex items-start gap-3 border-b border-[#dfe1e3] pb-5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-[6px] bg-[#e5f3ed] text-[#087a46]"><BookOpenCheck size={18}/></span><div><h2 className="text-[16px] font-semibold">Capacités disponibles pour votre compte</h2><p className="mt-1 text-[12px] text-[#6d747b]">Cette liste respecte vos permissions et les données configurées par votre agence.</p></div></div>
+      <CapabilitySection title="Consulter et analyser" description="Ces demandes sont exécutées immédiatement, sans modifier les données." items={capabilities.consultations} onExample={onExample}/>
+      <CapabilitySection title="Préparer et exécuter" description="Slaivio collecte et vérifie les informations, puis vous présente une action à confirmer." items={capabilities.actions} onExample={onExample}/>
+      <section className="mt-7 border-t border-[#dfe1e3] pt-5"><h3 className="text-[13px] font-semibold">Garanties de fonctionnement</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{capabilities.safety.map(item=><div key={item} className="flex gap-2 rounded-[7px] bg-white px-3 py-3 text-[11px] text-[#596169] shadow-[0_1px_2px_rgba(15,23,42,.04)]"><Check size={14} className="mt-0.5 shrink-0 text-[#087a46]"/>{item}</div>)}</div></section>
+    </div>
+  </div>;
+}
+
+function CapabilitySection({ title, description, items, onExample }: { title: string; description: string; items: CopilotCapabilities["consultations"]; onExample: (value: string) => void }) {
+  return <section className="mt-7"><h3 className="text-[13px] font-semibold">{title}</h3><p className="mt-1 text-[11px] text-[#777e85]">{description}</p>{items.length?<div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{items.map(item=><article key={item.id} className="flex min-h-36 flex-col rounded-[8px] border border-[#dfe1e3] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.03)]"><h4 className="text-[12px] font-semibold">{item.title}</h4><p className="mt-1.5 flex-1 text-[11px] leading-4 text-[#697078]">{item.description}</p><button type="button" onClick={()=>onExample(item.example)} className="mt-4 flex items-center justify-between border-t border-[#eceeef] pt-3 text-left text-[10px] font-medium text-[#087a46]"><span className="truncate">Essayer : « {item.example} »</span><ChevronRight size={12}/></button></article>)}</div>:<p className="mt-3 text-[11px] text-[#777e85]">Aucune capacité disponible avec vos permissions actuelles.</p>}</section>;
 }
 
 function ListPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {

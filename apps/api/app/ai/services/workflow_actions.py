@@ -12,6 +12,11 @@ def build_proposed_actions(
             "reason":entities.get("followup_reason"),"due_at":entities.get("due_at"),
             "message":entities.get("followup_message")}}]
 
+    if workflow_type == "UPDATE_PACKAGE_STATUS":
+        return [{"type":"UPDATE_PACKAGE_STATUS","label":"Changer le statut du colis","payload":{
+            "package_id":entities.get("package_id"),"package_reference":entities.get("package_reference"),
+            "current_status":entities.get("current_status"),"target_status":entities.get("target_status")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

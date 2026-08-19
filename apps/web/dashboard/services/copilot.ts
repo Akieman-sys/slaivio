@@ -33,6 +33,17 @@ export type CopilotEscalation = {
   created_at: string;
 };
 
+export type CopilotCapability = { id: string; title: string; description: string; example: string };
+export type CopilotCapabilities = {
+  consultations: CopilotCapability[];
+  actions: CopilotCapability[];
+  safety: string[];
+};
+
+export async function getCopilotCapabilities() {
+  return (await api.get<CopilotCapabilities>("/ai/copilot/capabilities")).data;
+}
+
 export async function getCopilotMessages() {
   const response = await api.get<{ messages: CopilotMessage[] }>("/ai/copilot/messages");
   return response.data.messages;

@@ -26,7 +26,7 @@ from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.db.followup_repository import create_manual_followup
-from app.packages.repository import create_package
+from app.packages.repository import create_package,list_packages,update_package
 from app.permissions.services.permission_service import assert_permission
 
 
@@ -40,10 +40,17 @@ QUESTION_BY_FIELD = {
     "due_at":"Quand faut-il effectuer la relance ? Par exemple : aujourd’hui à 16 h, demain ou le 25 août à 10 h.",
 }
 
+PACKAGE_STATUS_LABELS={"recu":"RECEIVED","reçu":"RECEIVED","confirme":"CONFIRMED","confirmé":"CONFIRMED",
+    "entrepot":"WAREHOUSED","entrepôt":"WAREHOUSED","pret au groupage":"READY_FOR_BATCH",
+    "prêt au groupage":"READY_FOR_BATCH","bloque":"BLOCKED","bloqué":"BLOCKED","annule":"CANCELLED",
+    "annulé":"CANCELLED","livre":"DELIVERED","livré":"DELIVERED"}
+
 
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if re.search(r"\b(?:COL)-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("marque","passe","change","mets")):
+        return "PACKAGE_STATUS_UPDATE",0.95
     if any(word in normalized for word in create_words) and any(word in normalized for word in ("relance","rappel")):
         return "FOLLOWUP_CREATION", 0.9
     if any(word in normalized for word in create_words) and "client" in normalized:
@@ -67,6 +74,8 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type=="UPDATE_PACKAGE_STATUS":
+        return [field for field in ("package_id","target_status") if not entities.get(field)]
     if workflow_type == "CREATE_CLIENT":
         values={"client_phone":client_phone,**entities}
         return [field for field in ("client_phone","client_name") if not values.get(field)]
@@ -408,8 +417,25 @@ def prepare_operator_message(
     intent = intent_result.get("intent") or "UNKNOWN"
     confidence = float(intent_result.get("confidence") or 0.0)
     entities = intent_result.get("entities") or {}
-    if intent == "UNKNOWN":
-        intent, confidence = _fallback_intent(clean_message)
+    fallback_intent,fallback_confidence=_fallback_intent(clean_message)
+    if fallback_intent=="PACKAGE_STATUS_UPDATE" or intent == "UNKNOWN":
+        intent, confidence = fallback_intent,fallback_confidence
+
+    if intent=="PACKAGE_STATUS_UPDATE":
+        reference_match=re.search(r"\bCOL-[A-Z0-9-]+\b",clean_message.upper())
+        normalized=clean_message.lower();target=next((code for label,code in PACKAGE_STATUS_LABELS.items() if label in normalized),None)
+        package_items=list_packages(org_id,q=reference_match.group(0) if reference_match else clean_message,page=1,page_size=5)["items"]
+        exact=next((x for x in package_items if (x.get("package_reference") or x.get("tracking_id") or "").upper()==(reference_match.group(0) if reference_match else "")),None)
+        if not exact or not target:
+            response="Indiquez la référence exacte du colis et le nouveau statut souhaité. Exemple : « marque COL-2026-00124 comme reçu »."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        if target=="DELIVERED":
+            response="Le statut Livré nécessite une preuve de livraison ou de retrait. Utilisez le workflow Retrait/Livraison afin de conserver le réceptionnaire, la signature, la photo ou l’OTP."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"delivery_proof_required"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        entities.update({"package_id":exact["id"],"package_reference":exact.get("package_reference") or exact.get("tracking_id"),
+            "current_status":exact.get("status"),"target_status":target,"row_version":exact.get("row_version")})
 
     if intent=="CLIENT_CREATION":
         name_match=re.search(r"(?:client\s+(?:nomm?[ée]?|appel[ée]?)?\s*)([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '\-]{1,80})",clean_message,re.IGNORECASE)
@@ -565,7 +591,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -575,7 +601,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
             detail={"code": "workflow_incomplete", "missing_fields": missing},
         )
 
-    if str(workflow["client_phone"]).startswith("internal:"):
+    if workflow["workflow_type"] in {"CREATE_SHIPMENT_DRAFT", "CREATE_CLIENT", "CREATE_FOLLOWUP"} and str(workflow["client_phone"]).startswith("internal:"):
         raise HTTPException(status_code=422, detail="client_phone_required")
     if workflow["workflow_type"]=="CREATE_CLIENT":
         assert_permission(actor_id,org_id,"clients.create")
@@ -604,6 +630,17 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
                 "idempotency_key":f"ai-followup:{workflow_id}"})
             updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"followup":followup})
             return {"workflow":updated,"result":{"followup":followup},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="UPDATE_PACKAGE_STATUS":
+        assert_permission(actor_id,org_id,"packages.update")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            package=update_package(org_id,entities["package_id"],actor_id,{"status":entities["target_status"]})
+            if not package:raise HTTPException(404,"package_not_found")
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"package":package,"previous_status":entities.get("current_status")})
+            return {"workflow":updated,"result":{"package":package},"draft":None}
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
     assert_permission(actor_id,org_id,"clients.create")

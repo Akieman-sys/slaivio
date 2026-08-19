@@ -81,6 +81,14 @@ def test_followup_creation_has_its_own_control_workflow():
     assert _parse_due_at("demain à 16h") is not None
 
 
+def test_package_status_change_is_controlled_and_delivery_needs_proof():
+    service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
+    assert _fallback_intent("marque COL-2026-00124 comme reçu") == ("PACKAGE_STATUS_UPDATE",0.95)
+    assert "UPDATE_PACKAGE_STATUS" in service
+    assert 'target=="DELIVERED"' in service
+    assert "delivery_proof_required" in service
+
+
 def test_transversal_read_tools_are_checked_before_action_workflows():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     tools=(ROOT/"apps/api/app/ai/services/platform_query_service.py").read_text(encoding="utf-8")

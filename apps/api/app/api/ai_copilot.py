@@ -10,6 +10,7 @@ from app.ai.services.operator_copilot_service import (
     control_operator_workflow,
 )
 from app.ai.services.conversation_orchestrator import handle_conversation
+from app.ai.services.capability_catalog import assistant_capabilities
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 
@@ -28,6 +29,11 @@ class CopilotDecisionRequest(BaseModel):
 
 class CopilotControlRequest(BaseModel):
     value: str | None = Field(default=None,max_length=500)
+
+
+@router.get("/capabilities")
+def get_capabilities(tenant=Depends(get_current_tenant)):
+    return assistant_capabilities(tenant["org_id"], tenant["user_id"])
 
 
 @router.get("/messages")
@@ -71,7 +77,7 @@ def approve_workflow(workflow_id: str, tenant=Depends(get_current_tenant)):
 
 @router.post(
     "/workflows/{workflow_id}/reject",
-    dependencies=[Depends(require_permission("dossiers.create"))],
+    dependencies=[Depends(require_permission("ai.copilot.execute"))],
 )
 def reject_workflow(
     workflow_id: str,

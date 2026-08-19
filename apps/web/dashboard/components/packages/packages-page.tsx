@@ -2984,6 +2984,19 @@ function PackageFormModal({
     !dossiers.some((dossier) => dossier.id === item.dossier_id);
   const selectedDossier = dossiers.find((dossier) => dossier.id === selectedDossierId);
 
+  if (mode === "edit" && item) {
+    return (
+      <PackageEditDrawer
+        item={item}
+        warehouses={warehouses}
+        saving={saving}
+        error={error}
+        onClose={onClose}
+        onSubmit={onSubmit}
+      />
+    );
+  }
+
   return (
     <OperationDrawer
       open
@@ -3421,6 +3434,222 @@ function PackageFormModal({
           </div>
         </form>
     </OperationDrawer>
+  );
+}
+
+function PackageEditDrawer({
+  item,
+  warehouses,
+  saving,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  item: PackageRecord;
+  warehouses: ReferenceItem[];
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const formId = `package-edit-${item.id}`;
+
+  return (
+    <OperationDrawer
+      open
+      close={onClose}
+      title="Modifier le colis"
+      description={`${item.package_reference || item.tracking_id || "Colis"} · ${item.client_name || "Client"}`}
+      width="max-w-[800px]"
+      headerLeading={<PackageThumbnail item={item} />}
+      headerMeta={
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={item.status} />
+          <HeaderFact label="Dossier" value={item.dossier_reference || "Non renseigné"} />
+          <HeaderFact label="Route" value={routeLabel(item)} />
+        </div>
+      }
+      footer={
+        <>
+          <OperationButton type="button" onClick={onClose}>
+            Annuler
+          </OperationButton>
+          <OperationButton type="submit" form={formId} variant="primary" disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer les modifications"}
+          </OperationButton>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={onSubmit} className="grid gap-5">
+        <input type="hidden" name="dossier_id" value={item.dossier_id || ""} />
+        <input type="hidden" name="origin_country" value={item.origin_country || ""} />
+        <input type="hidden" name="origin_city" value={item.origin_city || ""} />
+        <input type="hidden" name="destination_country" value={item.destination_country || ""} />
+        <input type="hidden" name="destination_city" value={item.destination_city || ""} />
+        <input type="hidden" name="shipping_mode" value={item.shipping_mode || ""} />
+
+        <div className="rounded-[10px] border border-[#dce5e1] bg-[#f6faf8] px-5 py-4">
+          <p className="text-[13px] font-[650] text-[#273d34]">
+            Informations liées au dossier
+          </p>
+          <div className="mt-3 grid gap-3 text-[13px] sm:grid-cols-3">
+            <Field label="Client" value={item.client_name || "Non renseigné"} />
+            <Field label="Dossier" value={item.dossier_reference || "Non renseigné"} />
+            <Field label="Trajet" value={routeLabel(item)} />
+          </div>
+          <p className="mt-3 text-[12px] leading-5 text-[#68766f]">
+            Le client et le trajet proviennent du dossier. Modifiez le dossier si ces informations doivent changer.
+          </p>
+        </div>
+
+        <FormSection
+          title="Informations essentielles"
+          description="Les informations utilisées quotidiennement pour identifier et traiter ce colis."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextInput
+              name="tracking_id"
+              label="Tracking du fournisseur"
+              defaultValue={item.tracking_id || ""}
+              placeholder="Numéro indiqué par le fournisseur"
+            />
+            <SelectInput
+              name="package_type"
+              label="Type d’emballage"
+              defaultValue={item.package_type || "carton"}
+              options={packageTypeLabels}
+            />
+            <div className="sm:col-span-2">
+              <TextInput
+                name="description"
+                label="Contenu du colis"
+                defaultValue={item.description || ""}
+                placeholder="Ex. vêtements, téléphones, pièces automobiles"
+              />
+            </div>
+            <TextInput name="category" label="Catégorie" defaultValue={item.category || ""} />
+            <TextInput
+              name="weight_kg"
+              label="Poids mesuré (kg)"
+              defaultValue={valueOrEmpty(item.weight_kg)}
+              type="number"
+              step="0.01"
+            />
+            <label className="sm:col-span-2">
+              <FormLabel>Entrepôt actuel</FormLabel>
+              <select name="warehouse_name" defaultValue={item.warehouse_name || ""} className={inputClass}>
+                <option value="">Aucun entrepôt sélectionné</option>
+                {item.warehouse_name && !warehouses.some((warehouse) => warehouse.label === item.warehouse_name) && (
+                  <option value={item.warehouse_name}>{item.warehouse_name}</option>
+                )}
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.label}>{warehouse.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </FormSection>
+
+        <EditDetails title="Traitement opérationnel" description="Statut, validation, stock et responsabilité.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectInput name="status" label="Étape actuelle" defaultValue={item.status} options={statusLabels} />
+            <SelectInput name="validation_status" label="Validation" defaultValue={item.validation_status} options={validationLabels} />
+            <SelectInput name="package_condition" label="État du colis" defaultValue={item.package_condition} options={conditionLabels} />
+            <SelectInput name="inventory_status" label="Situation en stock" defaultValue={item.inventory_status} options={inventoryLabels} />
+            <SelectInput name="payment_clearance_status" label="Situation du paiement" defaultValue={item.payment_clearance_status} options={paymentLabels} />
+            <label>
+              <FormLabel>Priorité</FormLabel>
+              <select name="priority" defaultValue={item.priority || "NORMAL"} className={inputClass}>
+                <option value="LOW">Basse</option>
+                <option value="NORMAL">Normale</option>
+                <option value="HIGH">Haute</option>
+                <option value="URGENT">Urgente</option>
+              </select>
+            </label>
+            <SelectInput name="source" label="Mode d’enregistrement" defaultValue={item.source || "manual"} options={sourceLabels} />
+            <TextInput name="assigned_to" label="Responsable" defaultValue={item.assigned_to || ""} />
+          </div>
+        </EditDetails>
+
+        <EditDetails title="Mesures et valeur" description="Dimensions, volume, poids facturable et valeur déclarée.">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <TextInput name="volumetric_weight_kg" label="Poids volumétrique (kg)" defaultValue={valueOrEmpty(item.volumetric_weight_kg)} type="number" step="0.01" />
+            <TextInput name="length_cm" label="Longueur (cm)" defaultValue={valueOrEmpty(item.length_cm)} type="number" step="0.01" />
+            <TextInput name="width_cm" label="Largeur (cm)" defaultValue={valueOrEmpty(item.width_cm)} type="number" step="0.01" />
+            <TextInput name="height_cm" label="Hauteur (cm)" defaultValue={valueOrEmpty(item.height_cm)} type="number" step="0.01" />
+            <TextInput name="volume_cbm" label="Volume (m³)" defaultValue={valueOrEmpty(item.volume_cbm)} type="number" step="0.001" />
+            <TextInput name="pieces_count" label="Nombre de pièces" defaultValue={valueOrEmpty(item.pieces_count || 1)} type="number" step="1" />
+            <TextInput name="declared_value" label="Valeur déclarée" defaultValue={valueOrEmpty(item.declared_value)} type="number" step="0.01" />
+            <TextInput name="declared_currency" label="Devise déclarée" defaultValue={item.declared_currency || item.currency || ""} />
+            <label className="flex min-h-10 items-center gap-2 self-end pb-2 text-[13px] font-[540] text-[#3f4953]">
+              <input name="is_fragile" type="checkbox" defaultChecked={item.is_fragile} className="h-4 w-4 rounded border-[#c9d0d8]" />
+              Colis fragile
+            </label>
+          </div>
+        </EditDetails>
+
+        <EditDetails title="Entrepôt et expédition" description="Emplacement physique et rattachement au transport.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextInput name="warehouse_zone" label="Zone" defaultValue={item.warehouse_zone || ""} />
+            <TextInput name="warehouse_rack" label="Rack" defaultValue={item.warehouse_rack || ""} />
+            <TextInput name="warehouse_location" label="Emplacement" defaultValue={item.warehouse_location || ""} />
+            <TextInput name="supplier_name" label="Fournisseur" defaultValue={item.supplier_name || ""} />
+            <TextInput name="shipment_reference" label="Expédition liée" defaultValue={item.shipment_reference || ""} />
+            <TextInput name="eta_at" label="Arrivée estimée" defaultValue={toDatetimeLocal(item.eta_at)} type="datetime-local" />
+            <div className="sm:col-span-2">
+              <TextInput name="last_scan_location" label="Dernière localisation scannée" defaultValue={item.last_scan_location || ""} />
+            </div>
+          </div>
+        </EditDetails>
+
+        <EditDetails title="Facturation et informations internes" description="Montants, tracking public et références techniques rarement modifiées.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextInput name="fees_total" label="Montant facturé" defaultValue={valueOrEmpty(item.fees_total)} type="number" step="0.01" />
+            <TextInput name="fees_paid" label="Montant payé" defaultValue={valueOrEmpty(item.fees_paid)} type="number" step="0.01" />
+            <TextInput name="currency" label="Devise" defaultValue={item.currency || ""} />
+            <TextInput name="barcode" label="Code-barres interne" defaultValue={item.barcode || ""} />
+            <TextInput name="qr_code_value" label="QR code interne" defaultValue={item.qr_code_value || ""} />
+            <label className="flex min-h-10 items-center gap-2 self-end pb-2 text-[13px] font-[540] text-[#3f4953]">
+              <input name="public_tracking_enabled" type="checkbox" defaultChecked={item.public_tracking_enabled ?? true} className="h-4 w-4 rounded border-[#c9d0d8]" />
+              Suivi public activé
+            </label>
+            <label className="sm:col-span-2">
+              <FormLabel>Notes internes</FormLabel>
+              <textarea name="notes" defaultValue={item.notes || ""} className={`${inputClass} min-h-24 resize-y py-2.5`} />
+            </label>
+          </div>
+        </EditDetails>
+
+        {error && (
+          <div role="alert" className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+            {error}
+          </div>
+        )}
+      </form>
+    </OperationDrawer>
+  );
+}
+
+function EditDetails({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group rounded-[10px] border border-[#dfe4e8] bg-white">
+      <summary className="flex min-h-[62px] cursor-pointer list-none items-center justify-between gap-4 px-5 marker:content-none">
+        <span className="min-w-0">
+          <span className="block text-[14px] font-[650] text-[#28313a]">{title}</span>
+          <span className="mt-0.5 block text-[12px] leading-5 text-[#717c86]">{description}</span>
+        </span>
+        <ChevronRight size={17} className="shrink-0 text-[#76818b] transition-transform group-open:rotate-90" />
+      </summary>
+      <div className="border-t border-[#e7eaed] px-5 py-5">{children}</div>
+    </details>
   );
 }
 

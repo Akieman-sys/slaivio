@@ -118,10 +118,6 @@ export function RouteIntelligenceCenter() {
         description="Configurez, exploitez et analysez toutes les routes cargo de votre agence."
         actions={
           <>
-            <button className={btn} onClick={() => setView("ENGINE")}>
-              <Sparkles size={14} />
-              Trouver une route
-            </button>
             <a className={btn} href="/api/route-catalog/routes/export.csv">
               <Download size={14} />
               Exporter
@@ -143,7 +139,7 @@ export function RouteIntelligenceCenter() {
         </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          className="mt-3 text-[11px] font-medium text-[#087a46]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
@@ -347,6 +343,10 @@ function RouteDetail({
   changed: () => Promise<void>;
 }) {
   const [tab, setTab] = useState("overview");
+  const detailTabs = [
+    ["overview", "Vue d’ensemble"], ["services", "Services"], ["departures", "Départs"], ["shipments", "Expéditions"],
+    ["performance", "Performance"], ["restrictions", "Restrictions"], ["carriers", "Transporteurs"], ["timeline", "Historique"], ["audit", "Audit"],
+  ] as const;
   return (
     <OperationDrawer
       open
@@ -354,35 +354,10 @@ function RouteDetail({
       description={item.route_code}
       close={close}
       width="max-w-[920px]"
+      headerMeta={<><Badge value={item.status} /><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">{item.transport_mode}</span></>}
+      tabs={<>{detailTabs.slice(0, 4).map(([key, label]) => <OperationTab key={key} active={tab === key} onClick={() => setTab(key)}>{label}</OperationTab>)}<OperationTabMenu items={detailTabs.slice(4)} value={detailTabs.slice(4).some(([key]) => key === tab) ? tab : ""} onChange={setTab} /></>}
     >
-      <div className="flex gap-2">
-        <Badge value={item.status} />
-        <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] text-blue-700">
-          {item.transport_mode}
-        </span>
-      </div>
-      <nav className="mt-4 flex overflow-x-auto border-y border-[#eceef1]">
-        {[
-          "overview",
-          "services",
-          "departures",
-          "shipments",
-          "performance",
-          "restrictions",
-          "carriers",
-          "timeline",
-          "audit",
-        ].map((x) => (
-          <button
-            key={x}
-            className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
-            onClick={() => setTab(x)}
-          >
-            {x}
-          </button>
-        ))}
-      </nav>
-      <main className="pt-5">
+      <main>
         {tab === "overview" ? (
           <Overview item={item} />
         ) : tab === "restrictions" ? (

@@ -26,6 +26,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   TicketCheck,
   Trash2,
   UserRound,
@@ -48,6 +49,7 @@ type FloatingPanel = "account" | "notifications" | "help" | null;
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 const utilityRoutes: readonly AppRoute[] = [
+  { label: "Assistant Slaivio", href: "/app/assistant", icon: Sparkles, keywords: ["assistant", "ia", "automatisation", "escalade"] },
   { label: "Paramètres", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["organisation", "équipe", "rôle", "sécurité", "paramètres"] },
   { label: "Notifications", href: "/app/notifications", icon: Bell, permission: "notifications.read", keywords: ["notification", "alerte", "préférence"] },
   { label: "Centre d’aide", href: "/app/support", icon: CircleHelp, permission: "support.read", keywords: ["aide", "support", "ticket", "documentation"] },
@@ -185,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
           </button>
-          <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:absolute lg:left-[52px] lg:z-10 lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
+          <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:fixed lg:left-[44px] lg:top-[14px] lg:z-[60] lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </div>
@@ -242,6 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
 
           <div className="ml-auto flex items-center gap-1.5">
+            <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />
             <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />
             <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
             <AccountTrigger onClick={() => togglePanel("account")} />

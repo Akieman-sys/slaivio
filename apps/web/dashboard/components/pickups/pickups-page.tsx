@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Download,
-  Ellipsis,
   HandCoins,
   Plus,
   RefreshCcw,
@@ -14,7 +13,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
+import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState, TableSkeleton } from "@/components/ui/page-state";
 import {
   checkInPickup,
@@ -132,22 +131,15 @@ export function PickupsPage() {
         description="Vérifiez le client, le paiement et le code avant toute remise physique."
         actions={
           <>
-            <details className="relative">
-              <summary className={`${button} cursor-pointer list-none`}>
-                <Ellipsis size={16} />
-                Actions
-              </summary>
-              <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+            <OperationActionMenu>
                 <button
                   onClick={() => setAnalyticsOpen(true)}
-                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                 >
                   Analytics
                 </button>
                 <PermissionGuard permission="pickups.notify">
                   <button
                     onClick={reminders}
-                    className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   >
                     Relancer les retraits en attente
                   </button>
@@ -155,13 +147,11 @@ export function PickupsPage() {
                 <PermissionGuard permission="pickups.settings">
                   <button
                     onClick={() => setSettingsOpen(true)}
-                    className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   >
                     Paramètres des retraits
                   </button>
                 </PermissionGuard>
-              </div>
-            </details>
+            </OperationActionMenu>
             <PermissionGuard permission="pickups.export">
               <OperationButton onClick={download}>
                 <Download size={14} />
@@ -193,7 +183,7 @@ export function PickupsPage() {
           </OperationMetricGrid>
           <button
             onClick={() => setAllMetrics((current) => !current)}
-            className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+            className="mt-3 text-[11px] font-medium text-[#087a46]"
           >
             {allMetrics
               ? "Réduire les indicateurs"

@@ -2,6 +2,7 @@
 alter table shipment_batches add column if not exists workspace_id text;
 alter table shipment_batches add column if not exists route_id uuid references shipping_routes(id);
 alter table shipment_batches add column if not exists shipping_service_id uuid references shipping_services(id);
+alter table shipment_batches add column if not exists origin_warehouse_id uuid references warehouses(id);
 alter table shipment_batches add column if not exists departure_id uuid references cargo_departures(id);
 alter table shipment_batches add column if not exists destination_office_id uuid references agency_offices(id);
 alter table shipment_batches add column if not exists responsible_id text;

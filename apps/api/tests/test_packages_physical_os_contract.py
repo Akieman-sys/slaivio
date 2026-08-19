@@ -14,3 +14,8 @@ def test_physical_os_workflows_are_concurrent_and_tenant_scoped():
 def test_physical_os_frontend_has_real_services():
  s=(ROOT/'apps/web/dashboard/services/packages.ts').read_text(encoding='utf-8')
  for endpoint in ('/transition','/quality-control','/pricing','/compatible-departures','/packages/expected','/delivery-proof','/packages/alerts/detect'):assert endpoint in s
+
+def test_package_schema_bootstrap_is_serialized_across_requests_and_processes():
+ r=(ROOT/'apps/api/app/packages/repository.py').read_text(encoding='utf-8')
+ assert '_SCHEMA_LOCK = Lock()' in r
+ assert "pg_advisory_xact_lock(hashtext('slaivio.packages.ensure_schema'))" in r

@@ -162,10 +162,6 @@ export function DeparturesPage() {
         description="Planifiez, suivez et coordonnez tous les départs de votre agence cargo."
         actions={
           <>
-            <OperationButton onClick={load}>
-              <RefreshCcw size={14} />
-              Actualiser
-            </OperationButton>
             <OperationButton onClick={() => exportPlanning(filtered)}>
               <Download size={14} />
               Exporter
@@ -189,7 +185,7 @@ export function DeparturesPage() {
           <button
             type="button"
             onClick={() => setAllMetrics((current) => !current)}
-            className="mt-3 text-[12px] font-medium text-[#08764b] hover:underline"
+            className="mt-3 text-[11px] font-medium text-[#087a46]"
           >
             {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
           </button>
@@ -223,7 +219,7 @@ export function DeparturesPage() {
             />
           }
           filters={<OperationFilterPopover activeCount={mode ? 1 : 0} onReset={() => setMode("")} title="Filtrer les départs"><OperationField label="Mode proposé par l’agence"><select className={`${input} w-full`} value={mode} onChange={(e) => setMode(e.target.value)}><option value="">Tous les modes</option>{Array.from(new Set(services.map((service) => service.shipping_mode).filter(Boolean))).map((serviceMode) => <option key={serviceMode} value={serviceMode}>{({AIR:"Avion",SEA:"Bateau",EXPRESS:"Express",ROAD:"Route",RAIL:"Rail",MULTIMODAL:"Plusieurs modes"} as Record<string,string>)[serviceMode] || serviceMode}</option>)}</select></OperationField></OperationFilterPopover>}
-        />
+        ><OperationButton onClick={load}><RefreshCcw size={14} />Actualiser</OperationButton></OperationToolbar>
         {error && <ErrorState title="Calendrier indisponible" description={error} retry={load} />}
         {loading ? (
           <TableSkeleton rows={7} columns={6} label="Préparation du calendrier des départs…" />

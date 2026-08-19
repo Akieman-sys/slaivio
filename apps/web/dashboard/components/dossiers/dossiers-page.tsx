@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Download,
   Edit3,
-  Ellipsis,
   History,
   MessageCircle,
   Bell,
@@ -27,6 +26,7 @@ import {
 } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
+  OperationActionMenu,
   OperationButton,
   OperationField,
   OperationFilterPopover,
@@ -537,13 +537,8 @@ export function DossiersPage() {
           description="Chaque demande client devient un dossier traçable : route, colis, devis, paiement, messages et expéditions liés."
           actions={
             <>
-              <details className="relative">
-                <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  <Ellipsis size={16} />
-                  Actions
-                </summary>
-                <div className="absolute right-0 z-30 mt-1 w-56 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
-                  <button className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">
+              <OperationActionMenu>
+                  <button className="justify-between">
                     <span className="flex items-center gap-2">
                       <Bell size={14} />
                       Alertes du module
@@ -554,8 +549,7 @@ export function DossiersPage() {
                       </span>
                     )}
                   </button>
-                </div>
-              </details>
+              </OperationActionMenu>
               <PermissionGuard permission="dossiers.export">
                 <OperationButton onClick={handleExport}>
                   <Download size={14} />

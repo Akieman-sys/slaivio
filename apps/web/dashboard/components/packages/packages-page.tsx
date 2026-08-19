@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Download,
   Edit3,
-  Ellipsis,
   FileText,
   History,
   Image as ImageIcon,
@@ -31,6 +30,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "@/services/api";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
+  OperationActionMenu,
   OperationButton,
   OperationField,
   OperationFilterPopover,
@@ -688,15 +688,9 @@ export function PackagesPage() {
           description="Réceptionnez, mesurez, stockez et suivez chaque colis réel. Chaque ligne reste liée à un dossier client pour garder une traçabilité complète."
           actions={
             <>
-              <details className="relative">
-                <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  <Ellipsis size={16} />
-                  Actions
-                </summary>
-                <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+              <OperationActionMenu>
                   <button
                     onClick={() => setScanOpen(true)}
-                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   >
                     <Barcode size={14} />
                     Scanner un colis
@@ -707,7 +701,6 @@ export function PackagesPage() {
                         layoutMode === "kanban" ? "table" : "kanban",
                       )
                     }
-                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   >
                     {layoutMode === "kanban" ? "Vue tableau" : "Vue Kanban"}
                   </button>
@@ -717,12 +710,10 @@ export function PackagesPage() {
                         ? setLayoutMode("table")
                         : showAnalytics()
                     }
-                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   >
                     {layoutMode === "analytics" ? "Vue tableau" : "Analytics"}
                   </button>
-                </div>
-              </details>
+              </OperationActionMenu>
               <OperationButton onClick={() => setImportOpen(true)}>
                 <Upload size={14} />
                 Importer

@@ -289,7 +289,7 @@ export function KnowledgePage() {
         </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          className="mt-3 text-[11px] font-medium text-[#087a46]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>

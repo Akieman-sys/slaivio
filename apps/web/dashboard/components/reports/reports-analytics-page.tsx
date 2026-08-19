@@ -150,7 +150,7 @@ export function ReportsAnalyticsPage() {
           <button
             type="button"
             onClick={() => setAllMetrics((current) => !current)}
-            className="mt-3 text-[12px] font-medium text-[#08764b] hover:underline"
+            className="mt-3 text-[11px] font-medium text-[#087a46]"
           >
             {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
           </button>

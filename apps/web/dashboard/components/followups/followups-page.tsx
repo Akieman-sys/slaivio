@@ -1,12 +1,12 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Ellipsis, Plus, Send } from "lucide-react";
+import { ChevronRight, Download, Plus, Send } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
@@ -146,26 +146,13 @@ export function FollowupsPage() {
               <Download size={14} />
               Exporter
             </OperationButton>
-            <details className="relative">
-              <summary className={`${btn} cursor-pointer list-none`}>
-                <Ellipsis size={16} />
-                Actions
-              </summary>
-              <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+            <OperationActionMenu>
                 <button
-                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   onClick={() => setRules(true)}
                 >
                   Règles et séquences
                 </button>
-                <button
-                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
-                  onClick={load}
-                >
-                  Actualiser
-                </button>
-              </div>
-            </details>
+            </OperationActionMenu>
             <OperationButton variant="primary" onClick={() => setCreate(true)}>
               <Plus size={14} />
               Nouvelle relance
@@ -181,7 +168,7 @@ export function FollowupsPage() {
         </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          className="mt-3 text-[11px] font-medium text-[#087a46]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
@@ -202,7 +189,7 @@ export function FollowupsPage() {
               onChange={setView}
             />
       </OperationTabs>
-      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<OperationFilterPopover activeCount={[channel, priority].filter(Boolean).length} onReset={() => { setChannel(""); setPriority(""); }} title="Filtrer les relances"><OperationField label="Canal de contact"><select className={`${input} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option><option value="WHATSAPP">WhatsApp</option><option value="IN_APP">Tâches internes</option><option value="PHONE">Appels manuels</option></select></OperationField><OperationField label="Priorité"><select className={`${input} w-full`} value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Toutes les priorités</option>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></OperationField></OperationFilterPopover>} />
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<OperationFilterPopover activeCount={[channel, priority].filter(Boolean).length} onReset={() => { setChannel(""); setPriority(""); }} title="Filtrer les relances"><OperationField label="Canal de contact"><select className={`${input} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option><option value="WHATSAPP">WhatsApp</option><option value="IN_APP">Tâches internes</option><option value="PHONE">Appels manuels</option></select></OperationField><OperationField label="Priorité"><select className={`${input} w-full`} value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Toutes les priorités</option>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></OperationField></OperationFilterPopover>}><OperationButton onClick={load}>Actualiser</OperationButton></OperationToolbar>
       {error && <ErrorState title="Relances indisponibles" description={error} retry={load} />}
       {loading ? (
         <TableSkeleton rows={7} columns={10} label="Chargement des relances…" />

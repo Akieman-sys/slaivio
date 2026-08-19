@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   OperationButton,
+  OperationActionMenu,
   OperationField,
   OperationFilterPopover,
   OperationMetric,
@@ -53,6 +54,20 @@ describe("operational design primitives", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Analytics" }));
     expect(change).toHaveBeenCalledWith("analytics");
+  });
+
+  it("opens the compact shared actions menu", () => {
+    render(
+      <OperationActionMenu>
+        <button type="button">Voir les analytics</button>
+      </OperationActionMenu>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    expect(trigger).not.toHaveTextContent("Actions");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voir les analytics" })).toBeInTheDocument();
   });
 
   it("opens the shared filter panel and exposes reset and apply actions", () => {

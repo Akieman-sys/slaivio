@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Download,
   Loader2,
-  MoreHorizontal,
   Plane,
   Plus,
   Ship,
@@ -23,7 +22,7 @@ import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationActionMenu, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -306,29 +305,12 @@ export function ShipmentsPage() {
           description="Pilotez les transports réels de vos colis : routes, ETA, statuts, clients concernés, documents, coûts et risques."
           actions={
             <>
-              <button
-                className={buttonClass}
-                onClick={() => setAnalyticsOpen((value) => !value)}
-              >
-                {analyticsOpen ? "Liste" : "Analytics"}
-              </button>
-              <details className="relative">
-                <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  <MoreHorizontal size={16} />
-                  Actions
-                </summary>
-                <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
-                  <PermissionGuard permission="shipments.read">
-                    <button
-                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
-                      onClick={handleExport}
-                    >
-                      <Download size={14} />
-                      Exporter CSV
-                    </button>
-                  </PermissionGuard>
-                </div>
-              </details>
+              <OperationActionMenu>
+                <button onClick={() => setAnalyticsOpen((value) => !value)}>{analyticsOpen ? "Revenir à la liste" : "Voir les analytics"}</button>
+              </OperationActionMenu>
+              <PermissionGuard permission="shipments.read">
+                <button className={buttonClass} onClick={handleExport}><Download size={14} />Exporter CSV</button>
+              </PermissionGuard>
               <PermissionGuard permission="shipments.create">
                 <button
                   className={primaryButtonClass}
@@ -349,7 +331,7 @@ export function ShipmentsPage() {
           </OperationMetricGrid>
           <button
             onClick={() => setAllMetrics((value) => !value)}
-            className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+            className="mt-3 text-[11px] font-medium text-[#087a46]"
           >
             {allMetrics
               ? "Réduire les indicateurs"
@@ -591,8 +573,8 @@ export function ShipmentsPage() {
                         <td className="px-4 py-3">
                           {shipment.owner_name || "-"}
                         </td>
-                        <td className="px-4 py-3">
-                          <MoreHorizontal size={18} />
+                        <td className="px-4 py-3 text-right">
+                          <ChevronRight size={16} className="ml-auto text-[#66717e]" />
                         </td>
                       </tr>
                     ))}

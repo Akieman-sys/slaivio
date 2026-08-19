@@ -19,8 +19,8 @@ export function OperationToolbar({
   return (
     <div className={`operation-toolbar flex min-h-[54px] flex-col gap-2 border-b border-[#e1e5e9] bg-white px-5 py-2 sm:px-6 lg:flex-row lg:items-center ${className}`}>
       <div className="min-w-0 flex-1">{search}</div>
-      {children}
       {filters && <div className="flex shrink-0 flex-wrap items-center gap-2">{filters}</div>}
+      {children}
     </div>
   );
 }

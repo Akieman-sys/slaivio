@@ -123,10 +123,6 @@ export function PricingEnginePage() {
         description="Configurez vos prix, règles, paliers et frais pour toutes vos routes et services cargo."
         actions={
           <>
-            <button className={btn} onClick={() => setView("SIMULATOR")}>
-              <Calculator size={14} />
-              Simuler
-            </button>
             <a className={btn} href="/api/pricing/export.csv">
               <Download size={14} />
               Exporter

@@ -6,6 +6,7 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 from math import ceil
+from threading import Lock
 from typing import Any
 from uuid import uuid4
 
@@ -52,6 +53,7 @@ ANOMALY_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 NOTIFICATION_CHANNELS = {"whatsapp", "email", "sms", "internal"}
 
 _SCHEMA_READY = False
+_SCHEMA_LOCK = Lock()
 
 
 def _safe(value: Any) -> Any:
@@ -74,6 +76,14 @@ def _ensure_schema() -> None:
     global _SCHEMA_READY
     if _SCHEMA_READY:
         return
+    with _SCHEMA_LOCK:
+        if _SCHEMA_READY:
+            return
+        _initialize_schema()
+        _SCHEMA_READY = True
+
+
+def _initialize_schema() -> None:
     statements = [
         """
         create table if not exists cargo_packages (
@@ -239,9 +249,12 @@ def _ensure_schema() -> None:
         """,
     ]
     with engine.begin() as conn:
+        # Several endpoints (list, stats and references) can bootstrap at the
+        # same time after a deployment. Serialize the legacy backfill across
+        # every API process to avoid competing INSERT ... SELECT transactions.
+        conn.execute(text("select pg_advisory_xact_lock(hashtext('slaivio.packages.ensure_schema'))"))
         for statement in statements:
             conn.execute(text(statement))
-    _SCHEMA_READY = True
 
 
 def generate_package_reference() -> str:

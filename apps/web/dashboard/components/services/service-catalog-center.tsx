@@ -158,13 +158,6 @@ export function ServiceCatalogCenter() {
         description="Configurez et pilotez tous les services proposés par votre agence cargo."
         actions={
           <>
-            <button className={btn} onClick={() => setView("COMPARE")}>
-              Comparer
-            </button>
-            <button className={btn} onClick={() => setView("RECOMMEND")}>
-              <Sparkles size={14} />
-              Recommander
-            </button>
             <a className={btn} href="/api/service-catalog/export.csv">
               <Download size={14} />
               Exporter
@@ -186,7 +179,7 @@ export function ServiceCatalogCenter() {
         </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          className="mt-3 text-[11px] font-medium text-[#087a46]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
@@ -565,6 +558,10 @@ function DetailDrawer({
   changed: () => Promise<void>;
 }) {
   const [tab, setTab] = useState("overview");
+  const detailTabs = [
+    ["overview", "Vue d’ensemble"], ["routes", "Routes"], ["pricing", "Tarification"], ["conditions", "Conditions"],
+    ["options", "Options"], ["documents", "Documents"], ["performance", "Performance"], ["departures", "Départs"], ["timeline", "Historique"], ["audit", "Audit"],
+  ] as const;
   return (
     <OperationDrawer
       open
@@ -572,60 +569,14 @@ function DetailDrawer({
       description={`${item.service_code} · ${item.category} · ${item.shipping_mode} · ${item.eta_min_days}–${item.eta_max_days} jours`}
       close={close}
       width="max-w-[920px]"
+      headerMeta={<Badge value={item.status} />}
+      headerActions={<>
+        <PermissionGuard permission="services.suspend"><button className={btn} onClick={async () => { await transitionService(item.id, item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED", "Décision opérationnelle"); await changed(); }}>{item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}</button></PermissionGuard>
+        <PermissionGuard permission="services.create"><button className={btn} onClick={async () => { await duplicateService(item.id); await changed(); }}><Copy size={13} />Dupliquer</button></PermissionGuard>
+      </>}
+      tabs={<>{detailTabs.slice(0, 4).map(([key, label]) => <OperationTab key={key} active={tab === key} onClick={() => setTab(key)}>{label}</OperationTab>)}<OperationTabMenu items={detailTabs.slice(4)} value={detailTabs.slice(4).some(([key]) => key === tab) ? tab : ""} onChange={setTab} /></>}
     >
-      <div className="mt-3 flex gap-2">
-        <Badge value={item.status} />
-        <PermissionGuard permission="services.suspend">
-          <button
-            className={btn}
-            onClick={async () => {
-              await transitionService(
-                item.id,
-                item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
-                "Décision opérationnelle",
-              );
-              await changed();
-            }}
-          >
-            {item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}
-          </button>
-        </PermissionGuard>
-        <PermissionGuard permission="services.create">
-          <button
-            className={btn}
-            onClick={async () => {
-              await duplicateService(item.id);
-              await changed();
-            }}
-          >
-            <Copy size={13} />
-            Dupliquer
-          </button>
-        </PermissionGuard>
-      </div>
-      <nav className="mt-4 flex overflow-x-auto border-y border-[#eceef1]">
-        {[
-          "overview",
-          "routes",
-          "pricing",
-          "conditions",
-          "options",
-          "documents",
-          "performance",
-          "departures",
-          "timeline",
-          "audit",
-        ].map((x) => (
-          <button
-            key={x}
-            className={`h-9 px-3 text-[11px] capitalize ${tab === x ? "border-b-2 border-[#16855f] font-semibold" : ""}`}
-            onClick={() => setTab(x)}
-          >
-            {x}
-          </button>
-        ))}
-      </nav>
-      <main className="pt-5">
+      <main>
         {tab === "overview" ? (
           <Overview item={item} />
         ) : tab === "routes" ? (

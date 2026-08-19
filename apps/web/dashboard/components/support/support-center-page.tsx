@@ -71,15 +71,12 @@ export function SupportCenterPage() {
         title="Support et Centre d’aide"
         description="Consultez les ressources utiles et suivez les demandes adressées à l’équipe Slaivio."
         actions={
-          <>
-            <OperationButton onClick={load}><RefreshCcw size={15} />Actualiser</OperationButton>
-            <PermissionGuard permission="support.create">
-              <OperationButton variant="primary" onClick={() => setCreating(true)}>
-                <Plus size={15} />
-                Nouveau ticket
-              </OperationButton>
-            </PermissionGuard>
-          </>
+          <PermissionGuard permission="support.create">
+            <OperationButton variant="primary" onClick={() => setCreating(true)}>
+              <Plus size={15} />
+              Nouveau ticket
+            </OperationButton>
+          </PermissionGuard>
         }
       />
       <OperationTabs>
@@ -91,7 +88,9 @@ export function SupportCenterPage() {
         filters={
           tab === "tickets" ? <OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer les tickets"><OperationField label="État du ticket"><select className={input} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tous les états</option>{["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED", "REOPENED"].map((item) => <option key={item} value={item}>{ticketStatusLabel(item)}</option>)}</select></OperationField></OperationFilterPopover> : undefined
         }
-      />
+      >
+        <OperationButton onClick={load}><RefreshCcw size={15} />Actualiser</OperationButton>
+      </OperationToolbar>
 
       <OperationContent>
         {error && <ErrorState title="Support indisponible" description={error} retry={load} />}
@@ -149,11 +148,11 @@ function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) 
     <OperationTable className="rounded-[6px] border border-[#d3d8dd]">
       <table className="w-full min-w-[860px] whitespace-nowrap text-left text-[13px]">
         <thead className="border-b border-[#d9d9d6] bg-[#f7f7f5] text-[#5f6368]">
-          <tr>{["Référence", "Sujet", "Priorité", "Statut", "SLA", "Messages", "Mise à jour"].map((item) => <th className="px-4 py-2 font-medium" key={item}>{item}</th>)}</tr>
+          <tr>{["Référence", "Sujet", "Priorité", "Statut", "SLA", "Messages", "Mise à jour", ""].map((item, index) => <th className="px-4 py-2 font-medium" key={`${item}-${index}`}>{item}</th>)}</tr>
         </thead>
         <tbody>
           {tickets.map((ticket) => (
-            <tr key={ticket.id} className="h-11 cursor-pointer border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]" onClick={() => open(ticket.id)}>
+            <tr key={ticket.id} className="h-11 border-b border-[#eeeeeb] last:border-0 hover:bg-[#f8f8f7]">
               <td className="px-4 py-2 font-semibold">{ticket.ticket_reference}</td>
               <td className="px-4 py-2">{ticket.subject}</td>
               <td className="px-4 py-2">{priorityLabel(ticket.priority)}</td>
@@ -161,6 +160,7 @@ function TicketTable({ tickets, open }: { tickets: Ticket[]; open: (id: string) 
               <td className={`px-4 py-2 ${ticket.first_response_overdue || ticket.resolution_overdue ? "text-red-700" : "text-emerald-700"}`}>{ticket.first_response_overdue || ticket.resolution_overdue ? "Dépassé" : "Dans le délai"}</td>
               <td className="px-4 py-2">{ticket.message_count}</td>
               <td className="px-4 py-2">{new Date(ticket.updated_at).toLocaleDateString("fr-FR")}</td>
+              <td className="px-3 py-2 text-right"><button type="button" onClick={() => open(ticket.id)} aria-label={`Voir ${ticket.ticket_reference}`} className="inline-grid h-8 w-8 place-items-center rounded-[6px] text-[#66717e] hover:bg-[#eef1f3] hover:text-[#087a46]"><ChevronRight size={16} /></button></td>
             </tr>
           ))}
         </tbody>

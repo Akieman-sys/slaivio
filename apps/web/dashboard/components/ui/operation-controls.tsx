@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Ellipsis, SlidersHorizontal, X } from "lucide-react";
+import { Check, Ellipsis, Menu, SlidersHorizontal, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -104,16 +104,17 @@ export function OperationTabMenu<T extends string>({
   }, [open]);
 
   return (
-    <div ref={root} className={`relative ml-auto flex shrink-0 self-center ${className}`}>
+    <div ref={root} className={`relative flex shrink-0 self-center ${className}`}>
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className={`inline-flex h-8 items-center gap-2 rounded-[6px] border px-2.5 text-[12px] font-semibold transition-colors ${selected ? "border-[#b8ddca] bg-[#edf8f2] text-[#087a46]" : "border-transparent text-[#626d77] hover:border-[#d9dde1] hover:bg-[#f4f5f5] hover:text-[#2c333a]"}`}
+        aria-label={selected ? `Autres vues, vue active : ${selected[1]}` : label}
+        title={selected?.[1] || label}
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-[6px] border transition-colors ${selected ? "border-[#b8ddca] bg-[#edf8f2] text-[#087a46]" : "border-transparent text-[#626d77] hover:border-[#d9dde1] hover:bg-[#f4f5f5] hover:text-[#2c333a]"}`}
       >
         <Ellipsis size={16} aria-hidden="true" />
-        <span>{selected?.[1] || label}</span>
       </button>
       {open && anchor && createPortal(
         <div
@@ -148,6 +149,40 @@ export function OperationTabMenu<T extends string>({
       )}
     </div>
   );
+}
+
+export function OperationActionMenu({ children, label = "Actions" }: { children: ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const anchor = root.current?.getBoundingClientRect();
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!root.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnViewportChange = () => setOpen(false);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [open]);
+
+  return <div ref={root} className="relative order-first shrink-0">
+    <OperationButton onClick={() => setOpen((current) => !current)} aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} className="w-9 px-0">
+      <Menu size={17} aria-hidden="true" />
+    </OperationButton>
+    {open && anchor && createPortal(
+      <div ref={menu} role="menu" className="fixed z-[95] min-w-[210px] overflow-hidden rounded-[8px] border border-[#d9dde1] bg-white p-1.5 shadow-[0_14px_36px_rgba(15,23,42,.16)] [&>button]:flex [&>button]:min-h-9 [&>button]:w-full [&>button]:items-center [&>button]:gap-2 [&>button]:rounded-[6px] [&>button]:px-2.5 [&>button]:text-left [&>button]:text-[13px] [&>button]:text-[#3f4851] [&>button:hover]:bg-[#f3f5f5]" style={{ top: anchor.bottom + 6, right: Math.max(8, window.innerWidth - anchor.right) }} onClick={(event) => { if ((event.target as HTMLElement).closest("button,a")) setOpen(false); }}>
+        {children}
+      </div>, document.body,
+    )}
+  </div>;
 }
 
 export function OperationFilterPopover({
@@ -196,6 +231,12 @@ export function OperationFilterPopover({
     ? Math.max(8, Math.min(anchor.right - panelWidth, window.innerWidth - panelWidth - 8))
     : 8;
 
+  const spaceBelow = anchor && typeof window !== "undefined" ? window.innerHeight - anchor.bottom - 12 : 520;
+  const openAbove = Boolean(anchor && spaceBelow < 300 && anchor.top > spaceBelow);
+  const maxPanelHeight = anchor && typeof window !== "undefined"
+    ? Math.max(220, Math.min(560, openAbove ? anchor.top - 14 : spaceBelow))
+    : 560;
+
   return (
     <div ref={root} className="relative">
       <OperationButton
@@ -217,8 +258,8 @@ export function OperationFilterPopover({
           ref={panel}
           role="dialog"
           aria-label={title}
-          className="fixed z-[90] overflow-hidden rounded-[10px] border border-[#d9dde1] bg-white shadow-[0_18px_48px_rgba(15,23,42,.18)]"
-          style={{ top: anchor.bottom + 7, left, width: panelWidth }}
+          className="fixed z-[95] flex overflow-hidden rounded-[10px] border border-[#d9dde1] bg-white shadow-[0_18px_48px_rgba(15,23,42,.18)]"
+          style={{ ...(openAbove ? { bottom: window.innerHeight - anchor.top + 7 } : { top: anchor.bottom + 7 }), left, width: panelWidth, maxHeight: maxPanelHeight, flexDirection: "column" }}
         >
           <header className="flex min-h-12 items-center justify-between border-b border-[#e6e9ec] px-4">
             <div>
@@ -229,7 +270,7 @@ export function OperationFilterPopover({
               <X size={16} />
             </button>
           </header>
-          <div className="grid max-h-[min(62vh,520px)] gap-4 overflow-y-auto p-4">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4">
             {children}
           </div>
           <footer className="flex items-center justify-between border-t border-[#e6e9ec] bg-[#fafbfb] px-4 py-3">

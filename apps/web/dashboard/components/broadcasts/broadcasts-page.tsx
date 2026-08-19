@@ -1,13 +1,13 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Ellipsis, Plus } from "lucide-react";
+import { ChevronRight, Download, Plus } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
+import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients } from "@/services/clients";
 import {
@@ -119,26 +119,13 @@ export function BroadcastsPage() {
             <OperationButton onClick={() => exportCampaigns(items)}>
               <Download size={14} className="inline" /> Exporter
             </OperationButton>
-            <details className="relative">
-              <summary className={`${btn} cursor-pointer list-none`}>
-                <Ellipsis size={16} />
-                Actions
-              </summary>
-              <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
+            <OperationActionMenu>
                 <button
-                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
                   onClick={() => setModal("audience")}
                 >
                   Créer un groupe de destinataires
                 </button>
-                <button
-                  className="flex w-full rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
-                  onClick={load}
-                >
-                  Actualiser
-                </button>
-              </div>
-            </details>
+            </OperationActionMenu>
             <OperationButton variant="primary" onClick={() => setModal("campaign")}>
               <Plus size={14} className="inline" /> Nouvelle campagne
             </OperationButton>
@@ -153,7 +140,7 @@ export function BroadcastsPage() {
         </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
-          className="mt-3 text-[11px] font-medium text-[#5b52c7]"
+          className="mt-3 text-[11px] font-medium text-[#087a46]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
@@ -174,7 +161,7 @@ export function BroadcastsPage() {
               onChange={setStatus}
             />
       </OperationTabs>
-      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<OperationFilterPopover activeCount={channel ? 1 : 0} onReset={() => setChannel("")} title="Filtrer les campagnes"><OperationField label="Canal d’envoi"><select className={`${field} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option>{Array.from(new Set(items.flatMap((item) => item.channels || []))).map((value) => <option key={value} value={value}>{channelLabels[value] || value}</option>)}</select></OperationField></OperationFilterPopover>} />
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<OperationFilterPopover activeCount={channel ? 1 : 0} onReset={() => setChannel("")} title="Filtrer les campagnes"><OperationField label="Canal d’envoi"><select className={`${field} w-full`} value={channel} onChange={(event) => setChannel(event.target.value)}><option value="">Tous les canaux</option>{Array.from(new Set(items.flatMap((item) => item.channels || []))).map((value) => <option key={value} value={value}>{channelLabels[value] || value}</option>)}</select></OperationField></OperationFilterPopover>}><OperationButton onClick={load}>Actualiser</OperationButton></OperationToolbar>
       {error && <ErrorState title="Campagnes indisponibles" description={error} retry={load} />}
       {loading ? <TableSkeleton rows={7} columns={7} label="Chargement des campagnes…" /> : items.length ? <OperationTable className="min-h-[460px]">
         <table className="w-full min-w-[980px] border-collapse bg-white text-left text-[13px]">

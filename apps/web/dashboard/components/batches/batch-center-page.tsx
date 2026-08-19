@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Download, Ellipsis, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
+import { ChevronRight, Download, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
 import { getReferenceCatalog, ReferenceCatalog } from "@/services/references";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -175,21 +175,6 @@ export function BatchCenterPage() {
               <Download size={14} />
               Exporter
             </OperationButton>
-            <details className="relative">
-              <summary className="inline-flex h-9 cursor-pointer list-none items-center justify-center rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]">
-                <Ellipsis size={16} className="mr-2" />
-                Actions
-              </summary>
-              <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
-                <button
-                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]"
-                  onClick={load}
-                >
-                  <RefreshCcw size={14} />
-                  Actualiser
-                </button>
-              </div>
-            </details>
             <OperationButton variant="primary" onClick={showCreate}>
               <Plus size={15} />
               Nouveau batch
@@ -215,7 +200,7 @@ export function BatchCenterPage() {
           </OperationMetricGrid>
           <button
             type="button"
-            className="mt-3 text-[12px] font-medium text-[#137a53] hover:underline xl:hidden"
+            className="mt-3 text-[11px] font-medium text-[#087a46] xl:hidden"
             onClick={() => setAllMetrics((value) => !value)}
           >
             {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
@@ -231,7 +216,7 @@ export function BatchCenterPage() {
               />
             }
             filters={<OperationFilterPopover activeCount={status ? 1 : 0} onReset={() => setStatus("")} title="Filtrer les groupages"><OperationField label="Étape du groupage"><select className={`${input} w-full`} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Toutes les étapes</option>{Object.entries(labels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></OperationField></OperationFilterPopover>}
-          />
+          ><OperationButton onClick={load}><RefreshCcw size={14} />Actualiser</OperationButton></OperationToolbar>
           {error ? (
             <ErrorState title="Groupages indisponibles" description={error} retry={load} />
           ) : loading ? (
@@ -251,6 +236,7 @@ export function BatchCenterPage() {
                       "Cut-off",
                       "Statut",
                       "Responsable",
+                      "",
                     ].map((h) => (
                       <th className="px-4 py-3 font-medium" key={h}>
                         {h}
@@ -305,6 +291,7 @@ export function BatchCenterPage() {
                         </span>
                       </td>
                       <td>{b.responsible_name || "—"}</td>
+                      <td className="w-10 pr-4 text-right text-[#7b848d]"><ChevronRight className="ml-auto" size={17} /></td>
                     </tr>
                   ))}
                 </tbody>

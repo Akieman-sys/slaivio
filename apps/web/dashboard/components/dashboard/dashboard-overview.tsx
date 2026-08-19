@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Bell, Building2, CheckCircle2, Clock3, MapPin, MessageCircleMore, RefreshCcw } from "lucide-react";
+import { ArrowRight, Bell, Building2, CheckCircle2, Clock3, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
@@ -53,8 +53,6 @@ export function DashboardOverviewPage() {
     />
 
     <main className="grid gap-5 p-5 sm:p-6">
-      {(data?.workspace.city || data?.workspace.country) && <div className="flex items-center gap-1.5 text-[11px] text-[#727b84]"><MapPin size={13} />{[data.workspace.city, data.workspace.country].filter(Boolean).join(", ")}</div>}
-
       {error && <div className="flex items-center gap-3 rounded-[7px] border border-[#f1c7c3] bg-[#fff5f4] px-4 py-3 text-[12px] text-[#a52a22]"><span>{error} Les dernières données connues restent affichées.</span><button type="button" onClick={() => load(true)} className="ml-auto font-semibold">Réessayer</button></div>}
 
       <section aria-labelledby="dashboard-kpis">
@@ -62,12 +60,6 @@ export function DashboardOverviewPage() {
         <OperationMetricGrid className="lg:grid-cols-6">
           {(data?.resources || []).slice(0, 6).map((resource) => <Link key={resource.key} href={resource.href} className="group min-w-0"><OperationMetric label={resource.label || resource.name} value={resource.count ?? "—"} detail={resource.description} /></Link>)}
         </OperationMetricGrid>
-      </section>
-
-      <section className="grid overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white sm:grid-cols-3" aria-label="État opérationnel">
-        <OperationalSummary label="Points à traiter" value={data?.attention_items.length || 0} detail="Retards, suivis et paiements" tone={(data?.attention_items.length || 0) > 0 ? "warning" : "success"} />
-        <OperationalSummary label="Notifications non lues" value={data?.unread_count || 0} detail="Mises à jour de l’agence" tone={(data?.unread_count || 0) > 0 ? "info" : "success"} />
-        <OperationalSummary label="Canal WhatsApp" value={data?.whatsapp.configured ? "Connecté" : "À configurer"} detail={data?.whatsapp.phone || "Communication client"} tone={data?.whatsapp.configured ? "success" : "neutral"} icon={<MessageCircleMore size={16} />} />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
@@ -79,14 +71,8 @@ export function DashboardOverviewPage() {
         </DashboardSection>
       </div>
 
-      <section aria-labelledby="quick-access"><h2 id="quick-access" className="mb-2 text-[13px] font-semibold text-[#30363d]">Accès rapide</h2><div className="grid overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{(data?.resources || []).map((resource) => <Link key={resource.key} href={resource.href} className="group flex min-h-16 items-center gap-3 border-b border-r border-[#eceff2] px-4 py-3 hover:bg-[#f7f8f8]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#e8f8ef] text-[11px] font-semibold text-[#087a46]">{resource.name.slice(0, 2).toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium">{resource.name}</span><span className="block truncate text-[10px] text-[#7a838d]">{resource.description}</span></span><ArrowRight size={14} className="text-[#a1a6ac] transition-transform group-hover:translate-x-0.5" /></Link>)}</div></section>
     </main>
   </div>;
-}
-
-function OperationalSummary({ label, value, detail, tone, icon }: { label: string; value: number | string; detail: string; tone: "success" | "warning" | "info" | "neutral"; icon?: ReactNode }) {
-  const statusLabel = tone === "success" ? "À jour" : tone === "warning" ? "À traiter" : tone === "info" ? "Nouveau" : "Configuration requise";
-  return <div className="flex min-h-[78px] items-center gap-3 border-b border-r border-[#eceff2] px-4 py-3 sm:border-b-0"><div className="min-w-0 flex-1"><p className="text-[11px] text-[#69727c]">{label}</p><p className="mt-0.5 truncate text-[17px] font-semibold">{value}</p><p className="truncate text-[10px] text-[#7f8790]">{detail}</p></div><div className="flex flex-col items-end gap-1.5">{icon && <span className="text-[#69727c]">{icon}</span>}<OperationStatus label={statusLabel} tone={tone} /></div></div>;
 }
 
 function DashboardSection({ title, icon, count, action, children }: { title: string; icon: ReactNode; count: number; action?: ReactNode; children: ReactNode }) {

@@ -6,7 +6,7 @@ def read(path): return (ROOT/path).read_text(encoding="utf-8")
 
 def test_batch_migration_is_tenant_scoped_and_relational():
     sql=read("infra/sql/087_batch_groupage_control_center.sql")
-    for token in ("route_id uuid references shipping_routes", "shipping_service_id uuid references shipping_services", "batch_package_items", "expedition_batches", "batches.override"):
+    for token in ("route_id uuid references shipping_routes", "shipping_service_id uuid references shipping_services", "origin_warehouse_id uuid references warehouses", "batch_package_items", "expedition_batches", "batches.override"):
         assert token in sql
     assert "else 'BLOCKED' end" in sql
 
@@ -46,3 +46,9 @@ def test_batch_ui_is_published_and_not_a_dead_button():
     assert "convertBatch(" in ui
     assert "Promise.allSettled" in ui
     assert 'href: "/app/batches"' in nav
+
+def test_batch_origin_warehouse_repair_is_additive_and_backfilled_from_route():
+    sql=read("infra/sql/090_batch_origin_warehouse_repair.sql")
+    assert "add column if not exists origin_warehouse_id uuid references warehouses" in sql
+    assert "set origin_warehouse_id = route.origin_warehouse_id" in sql
+    assert "route.org_id = batch.org_id" in sql

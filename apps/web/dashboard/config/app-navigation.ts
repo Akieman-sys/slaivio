@@ -12,7 +12,6 @@ import {
   Radar,
   ReceiptText,
   Route,
-  Sparkles,
   Truck,
   Users,
   Warehouse,
@@ -81,7 +80,6 @@ export const appNavigation: readonly AppNavigationGroup[] = [
     label: "Pilotage",
     icon: BarChart3,
     routes: [
-      { label: "Assistant Slaivio", href: "/app/assistant", icon: Sparkles, keywords: ["assistant", "ia", "automatisation", "escalade"], pilot: "core" },
       { label: "Base de connaissances", href: "/app/knowledge", icon: BookOpen, permission: "knowledge.read", keywords: ["connaissance", "faq", "procédure", "politique", "knowledge"], pilot: "core" },
       { label: "Rapports & analytics", href: "/app/reports", icon: BarChart3, permission: "analytics.read", keywords: ["rapport", "analytics", "kpi", "performance", "export"], pilot: "core" },
     ],

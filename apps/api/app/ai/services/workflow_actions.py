@@ -2,6 +2,10 @@ def build_proposed_actions(
     workflow_type: str,
     entities: dict,
 ):
+    if workflow_type == "CREATE_CLIENT":
+        return [{"type":"CREATE_CLIENT","label":"Créer le client","payload":{
+            "client_name":entities.get("client_name"),"client_phone":entities.get("client_phone")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

@@ -63,12 +63,7 @@ def get_workflows(
 
 @router.post(
     "/workflows/{workflow_id}/approve",
-    dependencies=[
-        Depends(require_permission("clients.create")),
-        Depends(require_permission("dossiers.create")),
-        Depends(require_permission("packages.create")),
-        Depends(require_permission("ai.copilot.execute")),
-    ],
+    dependencies=[Depends(require_permission("ai.copilot.execute"))],
 )
 def approve_workflow(workflow_id: str, tenant=Depends(get_current_tenant)):
     return approve_operator_workflow(tenant["org_id"], workflow_id, tenant["user_id"])

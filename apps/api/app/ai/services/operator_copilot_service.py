@@ -26,6 +26,7 @@ from app.ai.services.platform_query_service import answer_platform_query
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.packages.repository import create_package
+from app.permissions.services.permission_service import assert_permission
 
 
 QUESTION_BY_FIELD = {
@@ -40,6 +41,8 @@ QUESTION_BY_FIELD = {
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if any(word in normalized for word in create_words) and "client" in normalized:
+        return "CLIENT_CREATION", 0.9
     if any(word in normalized for word in create_words) and "dossier" in normalized:
         return "SHIPMENT_CREATION", 0.62
     if any(word in normalized for word in create_words) and "colis" in normalized:
@@ -59,6 +62,9 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type == "CREATE_CLIENT":
+        values={"client_phone":client_phone,**entities}
+        return [field for field in ("client_phone","client_name") if not values.get(field)]
     if workflow_type not in {"CREATE_SHIPMENT_DRAFT", "CREATE_PACKAGE_DRAFT"}:
         return []
     values = {"client_phone": client_phone, **entities}
@@ -226,6 +232,44 @@ def _continue_dossier_workflow(
     return {"message": assistant_message, "workflow": updated, "missing_fields": remaining, "summary":entities, "dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW"}
 
 
+def _continue_client_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None):
+    entities=dict(workflow.get("entities") or {}); phone=explicit_phone or workflow.get("client_phone")
+    if str(phone).startswith("internal:"):phone=None
+    act=dialogue_act(message,True);missing=_missing_fields("CREATE_CLIENT",entities,phone)
+    if act=="CANCEL":
+        updated=update_workflow_status(org_id,str(workflow["id"]),"REJECTED",{"reason":"cancelled"})
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","La création du client a été annulée.",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":updated,"missing_fields":[]}
+    if act=="PAUSE":
+        updated=update_workflow_status(org_id,str(workflow["id"]),"PAUSED",{"reason":"user_pause"})
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","La création du client est en pause. Dites « continue » pour reprendre.",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":updated,"missing_fields":missing}
+    if workflow.get("workflow_status")=="PAUSED" and act!="RESUME":
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT","Cette création est en pause. Dites « continue » ou « annule ».",workflow_id=str(workflow["id"]))
+        return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+    if act=="RESUME":
+        workflow=update_workflow_status(org_id,str(workflow["id"]),"PREPARED",{"resumed_by":user_id})
+    elif missing:
+        field=missing[0];raw=explicit_phone or _phone_from_message(message) or message if field=="client_phone" else message
+        result=validate_field(field,raw);_save_validation(org_id,workflow,field,raw,result)
+        if result["status"]!="VALID":
+            assistant=create_operator_message(org_id,user_id,"ASSISTANT",_question(field),workflow_id=str(workflow["id"]),metadata={"validation":result,"missing_fields":missing})
+            return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+        if field=="client_phone":
+            phone=result["value"]
+            existing=find_client_by_phone(org_id,phone)
+            if existing:
+                update_workflow_status(org_id,str(workflow["id"]),"REJECTED",{"reason":"client_already_exists","client":existing})
+                assistant=create_operator_message(org_id,user_id,"ASSISTANT",f"Ce numéro appartient déjà à {existing.get('display_name')}. Aucun doublon n’a été créé.",workflow_id=str(workflow["id"]),metadata={"cards":[{"kind":"CLIENT","id":str(existing['id']),"title":existing.get('display_name'),"subtitle":phone,"href":f"/app/clients?open={existing['id']}"}]})
+                return {"message":assistant,"workflow":None,"missing_fields":[]}
+        else:entities[field]=result["value"]
+    remaining=_missing_fields("CREATE_CLIENT",entities,phone)
+    updated=update_workflow_details(org_id=org_id,workflow_id=str(workflow["id"]),client_phone=phone or f"internal:{user_id}",source_message=f'{workflow["source_message"]}\n{message.strip()}',entities=entities,proposed_actions=build_proposed_actions("CREATE_CLIENT",{**entities,"client_phone":phone}),dialogue_state="COLLECTING" if remaining else "READY_FOR_REVIEW")
+    response=_question(remaining[0]) if remaining else f"Le client {entities.get('client_name')} ({phone}) est prêt à être créé. Vérifiez puis confirmez."
+    assistant=create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]),metadata={"missing_fields":remaining,"summary":{**entities,"client_phone":phone},"dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW"})
+    return {"message":assistant,"workflow":updated,"missing_fields":remaining}
+
+
 def prepare_operator_message(
     org_id: str,
     user_id: str,
@@ -247,6 +291,8 @@ def prepare_operator_message(
 
     active_workflow = get_active_operator_workflow(org_id, user_id)
     if active_workflow:
+        if active_workflow.get("workflow_type")=="CREATE_CLIENT":
+            return _continue_client_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
         return _continue_dossier_workflow(
             org_id, user_id, active_workflow, clean_message, client_phone
         )
@@ -293,6 +339,10 @@ def prepare_operator_message(
     entities = intent_result.get("entities") or {}
     if intent == "UNKNOWN":
         intent, confidence = _fallback_intent(clean_message)
+
+    if intent=="CLIENT_CREATION":
+        name_match=re.search(r"(?:client\s+(?:nomm?[ée]?|appel[ée]?)?\s*)([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '\-]{1,80})",clean_message,re.IGNORECASE)
+        if name_match: entities["client_name"]=name_match.group(1).strip()
 
     if intent == "UNKNOWN":
         response = "Je peux vous aider sur les clients, dossiers, colis, routes, services, tarifs, entrepôts et suivis. Dites-moi simplement le résultat recherché."
@@ -410,10 +460,10 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] != "CREATE_SHIPMENT_DRAFT":
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
-    missing = _missing_fields("CREATE_SHIPMENT_DRAFT", entities, workflow["client_phone"])
+    missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
     if missing:
         raise HTTPException(
             status_code=422,
@@ -422,6 +472,21 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
 
     if str(workflow["client_phone"]).startswith("internal:"):
         raise HTTPException(status_code=422, detail="client_phone_required")
+    if workflow["workflow_type"]=="CREATE_CLIENT":
+        assert_permission(actor_id,org_id,"clients.create")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            existing=find_client_by_phone(org_id,workflow["client_phone"])
+            client=existing or create_client(org_id,actor_id,{"name":entities["client_name"],"display_name":entities["client_name"],"phone":workflow["client_phone"],"whatsapp_phone":workflow["client_phone"],"customer_type":"individual","lifecycle_status":"lead","source":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "manual"})
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"client":client,"reused_existing":bool(existing)})
+            return {"workflow":updated,"result":{"client":client},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]})
+            raise
+    assert_permission(actor_id,org_id,"clients.create")
+    assert_permission(actor_id,org_id,"dossiers.create")
+    if entities.get("requested_operation")=="CREATE_PACKAGE": assert_permission(actor_id,org_id,"packages.create")
     if entities.get("requested_operation") == "CREATE_PACKAGE":
         claimed=claim_workflow_execution(org_id,workflow_id)
         if not claimed:

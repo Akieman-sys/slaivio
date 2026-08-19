@@ -245,8 +245,6 @@ const buttonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
 const primaryButtonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#0fb966]";
-const iconButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[#4f5b67] transition hover:border-[#d8dce2] hover:bg-[#f4f6f8]";
 const pagerButtonClass =
   "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
 
@@ -1475,7 +1473,7 @@ function PackageDetails({
   onUpdated: (item: PackageRecord) => void;
 }) {
   const tabs: Array<{ key: DetailTab; label: string }> = [
-    { key: "summary", label: "Résumé" },
+    { key: "summary", label: "Vue d’ensemble" },
     { key: "dossier", label: "Dossier" },
     { key: "measures", label: "Mesures" },
     { key: "warehouse", label: "Entrepôt" },
@@ -1489,6 +1487,10 @@ function PackageDetails({
     { key: "history", label: "Historique" },
     { key: "settings", label: "Paramètres" },
   ];
+  const primaryTabKeys: DetailTab[] = ["summary", "dossier", "warehouse", "shipment", "history"];
+  const primaryTabs = tabs.filter((tab) => primaryTabKeys.includes(tab.key));
+  const secondaryTabs = tabs.filter((tab) => !primaryTabKeys.includes(tab.key));
+  const secondaryActive = secondaryTabs.some((tab) => tab.key === activeTab);
 
   async function refreshPackage(next: PackageRecord) {
     onUpdated(next);
@@ -1500,30 +1502,52 @@ function PackageDetails({
       close={onClose}
       title={item.package_reference || item.tracking_id || "Colis"}
       description={`${item.client_name || "Client"} · ${item.dossier_reference || "Dossier non lié"}`}
-      width="max-w-[680px]"
+      width="max-w-[840px]"
+      tabsVariant="segmented"
+      headerLeading={<PackageThumbnail item={item} />}
       headerActions={
-        <button onClick={onEdit} className={iconButtonClass} aria-label="Modifier le colis" title="Modifier le colis">
+        <button onClick={onEdit} className={buttonClass} aria-label="Modifier le colis">
           <Edit3 size={16} />
+          Modifier
         </button>
       }
       headerMeta={
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <StatusBadge status={item.status} />
-          <InventoryBadge status={item.inventory_status} />
-          <ValidationBadge status={item.validation_status} />
-          <PaymentBadge status={item.payment_clearance_status} />
+          <HeaderFact label="Stock" value={inventoryLabels[item.inventory_status] || item.inventory_status} />
+          <HeaderFact label="Validation" value={validationLabels[item.validation_status] || item.validation_status} />
+          <HeaderFact label="Paiement" value={paymentLabels[item.payment_clearance_status] || item.payment_clearance_status} />
           {loading && <span className="text-[12px] text-[#687584]">Actualisation…</span>}
         </div>
       }
-      tabs={tabs.map((tab) => (
-        <button
-          key={tab.key}
-          onClick={() => onTabChange(tab.key)}
-          className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${activeTab === tab.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#5f6b76] hover:bg-[#f4f6f8]"}`}
-        >
-          {tab.label}
-        </button>
-      ))}
+      tabs={
+        <>
+          {primaryTabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              aria-current={activeTab === tab.key ? "page" : undefined}
+              onClick={() => onTabChange(tab.key)}
+              className={`h-9 whitespace-nowrap rounded-[7px] border px-3.5 text-[13px] font-[580] transition-colors ${activeTab === tab.key ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm" : "border-transparent text-[#5d6873] hover:bg-[#eceff1] hover:text-[#20262c]"}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+          <label className="relative shrink-0">
+            <span className="sr-only">Autres sections</span>
+            <select
+              aria-label="Autres sections du colis"
+              value={secondaryActive ? activeTab : ""}
+              onChange={(event) => event.target.value && onTabChange(event.target.value as DetailTab)}
+              className={`h-9 appearance-none rounded-[7px] border py-0 pl-3.5 pr-8 text-[13px] font-[580] outline-none ${secondaryActive ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm" : "border-transparent bg-transparent text-[#5d6873] hover:bg-[#eceff1]"}`}
+            >
+              <option value="">Plus</option>
+              {secondaryTabs.map((tab) => <option key={tab.key} value={tab.key}>{tab.label}</option>)}
+            </select>
+            <ChevronRight size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-[#77818b]" />
+          </label>
+        </>
+      }
       bodyClassName={loading ? "opacity-60" : undefined}
     >
             {activeTab === "summary" && (
@@ -1571,15 +1595,16 @@ function SummaryTab({
   onUpdated: (item: PackageRecord) => void;
 }) {
   return (
-    <div className="space-y-5">
-      <Section title="Résumé opérationnel">
-        <div className="grid grid-cols-3 gap-3">
+    <div className="space-y-6">
+      <section className="rounded-[10px] border border-[#dfe5e9] bg-[#f8faf9] p-4">
+        <div className="grid grid-cols-3 divide-x divide-[#e1e6e9]">
           <SmallMetric label="Réceptions" value={item.receipt_count} />
           <SmallMetric label="Photos" value={item.media_count} />
           <SmallMetric label="Événements" value={item.event_count} />
         </div>
-      </Section>
-      <Section title="Colis">
+      </section>
+      <div className="grid gap-5 md:grid-cols-2">
+      <Section title="Identité du colis">
         <InfoRow
           icon={Barcode}
           label="Référence"
@@ -1597,7 +1622,7 @@ function SummaryTab({
         />
         <InfoRow icon={Ruler} label="Mesures" value={formatMeasure(item)} />
       </Section>
-      <Section title="Route & dates">
+      <Section title="Parcours logistique">
         <InfoRow icon={MapPin} label="Route" value={routeLabel(item)} />
         <InfoRow icon={Truck} label="Mode" value={item.shipping_mode || "-"} />
         <Field label="ETA" value={formatDate(item.eta_at)} />
@@ -1610,7 +1635,13 @@ function SummaryTab({
           }
         />
       </Section>
-      <Section title="Finance">
+      <Section title="Mesures et traitement">
+        <Field label="Dimensions" value={dimensionsLabel(item)} />
+        <Field label="Nombre de pièces" value={item.pieces_count || 1} />
+        <Field label="État" value={conditionLabels[item.package_condition] || item.package_condition} />
+        <Field label="Fragile" value={item.is_fragile ? "Oui" : "Non"} />
+      </Section>
+      <Section title="Situation financière">
         <Field
           label="Montant facturé"
           value={formatMoney(item.fees_total, item.currency)}
@@ -1627,6 +1658,7 @@ function SummaryTab({
           }
         />
       </Section>
+      </div>
       <PhysicalLifecycle item={item} onUpdated={onUpdated} />
     </div>
   );
@@ -3628,11 +3660,11 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-[#d8dce2] bg-white">
-      <h3 className="border-b border-[#eef0f3] px-4 py-3 text-[13px] font-semibold text-[#1f2328]">
+    <section className="rounded-[10px] border border-[#dfe4e8] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.025)]">
+      <h3 className="text-[14px] font-[650] tracking-[-0.01em] text-[#252b31]">
         {title}
       </h3>
-      <div className="space-y-3 p-4">{children}</div>
+      <div className="mt-4 space-y-3.5">{children}</div>
     </section>
   );
 }
@@ -3769,8 +3801,10 @@ function InfoRow({
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[12px] font-medium text-[#687584]">{label}</p>
-      <p className="mt-0.5 break-words text-[13px] leading-5 text-[#1f2328]">
+      <p className="text-[11px] font-[580] uppercase tracking-[0.035em] text-[#77828c]">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-[14px] font-[520] leading-5 text-[#252b31]">
         {value}
       </p>
     </div>
@@ -3785,9 +3819,9 @@ function SmallMetric({
   value: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-[#d8dce2] bg-[#fbfcfd] p-3">
-      <p className="text-[12px] text-[#687584]">{label}</p>
-      <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]">
+    <div className="min-w-0 px-4 py-1 text-center first:pl-1 last:pr-1">
+      <p className="truncate text-[11px] font-[540] text-[#6c7781]">{label}</p>
+      <p className="mt-1 truncate text-[20px] font-[680] tracking-[-0.035em] text-[#242a30]">
         {value}
       </p>
     </div>
@@ -3828,52 +3862,13 @@ function StatusBadge({ status }: { status: PackageStatus }) {
   );
 }
 
-function InventoryBadge({ status }: { status: InventoryStatus }) {
-  const tone =
-    status === "IN_STOCK"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-      : status === "DISPATCHED"
-        ? "bg-blue-50 text-blue-700 ring-blue-100"
-        : "bg-slate-100 text-slate-700 ring-slate-200";
+function HeaderFact({ label, value }: { label: string; value: string }) {
   return (
-    <span
-      className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}
-    >
-      {inventoryLabels[status] || status}
-    </span>
-  );
-}
-
-function ValidationBadge({ status }: { status: PackageValidationStatus }) {
-  const tone =
-    status === "VALIDATED"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-      : status === "BLOCKED" || status === "REJECTED"
-        ? "bg-red-50 text-red-700 ring-red-100"
-        : status === "NEEDS_REVIEW"
-          ? "bg-amber-50 text-amber-800 ring-amber-100"
-          : "bg-slate-100 text-slate-700 ring-slate-200";
-  return (
-    <span
-      className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}
-    >
-      {validationLabels[status] || status}
-    </span>
-  );
-}
-
-function PaymentBadge({ status }: { status: PaymentClearanceStatus }) {
-  const tone =
-    status === "CLEARED" || status === "PAID"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-      : status === "BLOCKED" || status === "OVERDUE"
-        ? "bg-red-50 text-red-700 ring-red-100"
-        : "bg-amber-50 text-amber-800 ring-amber-100";
-  return (
-    <span
-      className={`inline-flex rounded-full px-2 py-1 text-[12px] font-medium ring-1 ${tone}`}
-    >
-      {paymentLabels[status] || status}
+    <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-[#f1f3f4] px-2.5 text-[11px] text-[#6b7580]">
+      <span>{label}</span>
+      <strong className="max-w-[180px] truncate font-[650] text-[#343c44]">
+        {value}
+      </strong>
     </span>
   );
 }

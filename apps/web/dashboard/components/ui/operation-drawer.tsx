@@ -10,7 +10,9 @@ export function OperationDrawer({
   close,
   children,
   tabs,
+  tabsVariant = "underline",
   headerActions,
+  headerLeading,
   headerMeta,
   footer,
   bodyClassName = "",
@@ -22,7 +24,9 @@ export function OperationDrawer({
   close: () => void;
   children: ReactNode;
   tabs?: ReactNode;
+  tabsVariant?: "underline" | "segmented";
   headerActions?: ReactNode;
+  headerLeading?: ReactNode;
   headerMeta?: ReactNode;
   footer?: ReactNode;
   bodyClassName?: string;
@@ -64,6 +68,7 @@ export function OperationDrawer({
       >
         <header className="shrink-0 border-b border-[#dfe3e7] bg-white px-6 py-5">
           <div className="flex min-h-10 items-center gap-4">
+            {headerLeading && <div className="shrink-0">{headerLeading}</div>}
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-[20px] font-[680] tracking-[-0.02em] text-[#20252b]">
                 {title}
@@ -90,7 +95,14 @@ export function OperationDrawer({
           </div>
           {headerMeta && <div className="mt-2.5 flex flex-wrap items-center gap-2">{headerMeta}</div>}
         </header>
-        {tabs && <div className="operation-tabs flex min-h-[42px] shrink-0 items-end gap-1 overflow-x-auto border-b border-[#dfe1e3] px-5">{tabs}</div>}
+        {tabs && (
+          <div className={tabsVariant === "segmented"
+            ? "operation-drawer-segmented-tabs flex min-h-[58px] shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#dfe3e7] bg-[#f7f8f9] px-6 py-2.5"
+            : "operation-tabs flex min-h-[42px] shrink-0 items-end gap-1 overflow-x-auto border-b border-[#dfe1e3] px-5"}
+          >
+            {tabs}
+          </div>
+        )}
         <div className={`operation-form-surface min-h-0 flex-1 overflow-y-auto bg-white p-6 sm:p-7 ${bodyClassName}`}>
           {children}
         </div>

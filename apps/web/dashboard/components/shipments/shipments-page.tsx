@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Plane,
   Plus,
-  Search,
   Ship,
   Truck,
 } from "lucide-react";
@@ -22,8 +21,11 @@ import type { ReactNode } from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   createShipment,
@@ -339,26 +341,12 @@ export function ShipmentsPage() {
           }
         />
 
-        <div className="bg-white px-5 py-4">
-          <div
-            className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}
-          >
-            {kpis.slice(0, allMetrics ? 6 : 4).map((item, index) => (
-              <button
-                type="button"
-                onClick={() => setAllMetrics((value) => !value)}
-                className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
-                key={item.label}
-              >
-                <div className="text-[12px] text-[#6b7580]">{item.label}</div>
-                <div
-                  className={`mt-1 text-[24px] font-medium tracking-[-.035em] ${item.warm ? "text-[#a65f00]" : ""}`}
-                >
-                  {item.value}
-                </div>
-              </button>
+        <OperationMetrics>
+          <OperationMetricGrid className={allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}>
+            {kpis.slice(0, allMetrics ? 6 : 4).map((item) => (
+              <OperationMetric key={item.label} label={item.label} value={item.value} tone={item.warm ? "warning" : "default"} />
             ))}
-          </div>
+          </OperationMetricGrid>
           <button
             onClick={() => setAllMetrics((value) => !value)}
             className="mt-3 text-[11px] font-medium text-[#5b52c7]"
@@ -367,17 +355,17 @@ export function ShipmentsPage() {
               ? "Réduire les indicateurs"
               : "Voir tous les indicateurs"}
           </button>
-        </div>
+        </OperationMetrics>
 
         {analyticsOpen ? (
           <ShipmentAnalyticsView data={analytics} />
         ) : (
           <>
-            <div className="border-y border-[#eceef1] px-4 pt-2">
-              <div className="flex flex-wrap items-center gap-1">
+            <OperationTabs>
+              <div className="flex flex-wrap items-end gap-1">
                 {views.slice(0, 4).map((view) => (
-                  <button
-                    className={`h-10 border-b-2 px-3 text-[13px] font-medium transition ${activeView === view.key ? "border-[#12c76f] text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
+                  <OperationTab
+                    active={activeView === view.key}
                     key={view.key}
                     onClick={() => {
                       setActiveView(view.key);
@@ -385,7 +373,7 @@ export function ShipmentsPage() {
                     }}
                   >
                     {view.label}
-                  </button>
+                  </OperationTab>
                 ))}
                 <select
                   aria-label="Autres vues"
@@ -398,7 +386,7 @@ export function ShipmentsPage() {
                     setActiveView(event.target.value);
                     setStatus("");
                   }}
-                  className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+                  className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
                 >
                   <option value="">Plus</option>
                   {views.slice(4).map((view) => (
@@ -408,19 +396,9 @@ export function ShipmentsPage() {
                   ))}
                 </select>
               </div>
-            </div>
+            </OperationTabs>
 
-            <div className="border-b border-[#eceef1] px-4 py-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-                  <Search className="text-[#7b8794]" size={16} />
-                  <input
-                    className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
-                    placeholder="Rechercher une expédition…"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
+            <OperationToolbar search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher une expédition…" />}>
                 <button
                   className={buttonClass}
                   onClick={() => setFiltersOpen((value) => !value)}
@@ -428,9 +406,8 @@ export function ShipmentsPage() {
                   <Filter size={15} />
                   Filtres
                 </button>
-              </div>
               {filtersOpen && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-[#f6f7f8] p-3">
+                <div className="basis-full flex flex-wrap items-center gap-2 rounded-md bg-[#f6f7f8] p-3">
                   <select
                     className="h-9 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px]"
                     value={status}
@@ -486,13 +463,9 @@ export function ShipmentsPage() {
                   </select>
                 </div>
               )}
-            </div>
+            </OperationToolbar>
 
-            {error ? (
-              <div className="m-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">
-                {error}
-              </div>
-            ) : null}
+            {error ? <ErrorState title="Expéditions indisponibles" description={error} /> : null}
 
             {selected.length > 0 && (
               <div className="flex items-center justify-between bg-[#f0efff] px-4 py-2 text-[12px] text-[#5149bd]">
@@ -517,25 +490,9 @@ export function ShipmentsPage() {
             )}
             <div className="min-h-[460px] overflow-x-auto">
               {loading ? (
-                <div className="flex h-[360px] items-center justify-center text-[#5f6b7a]">
-                  <Loader2 className="mr-2 animate-spin" size={18} /> Chargement
-                  des expéditions...
-                </div>
+                <TableSkeleton rows={7} columns={10} label="Chargement des expéditions…" />
               ) : shipments.length === 0 ? (
-                <div className="flex h-[380px] flex-col items-center justify-center text-center">
-                  <Plane
-                    className="mb-3 text-[#8b96a5]"
-                    size={30}
-                    strokeWidth={1.6}
-                  />
-                  <h2 className="text-[18px] font-semibold">
-                    Aucune expédition trouvée
-                  </h2>
-                  <p className="mt-2 max-w-md text-[14px] leading-6 text-[#64748b]">
-                    Créez une expédition puis ajoutez les colis prêts à partir.
-                    Les indicateurs se recalculeront automatiquement.
-                  </p>
-                </div>
+                <EmptyState title="Aucune expédition trouvée" description="Créez une expédition puis ajoutez les colis prêts à partir. Les indicateurs se recalculeront automatiquement." />
               ) : (
                 <table className="w-full min-w-[1180px] border-collapse text-left text-[13px]">
                   <thead className="bg-[#fbfcfd] text-[#5f6b7a]">

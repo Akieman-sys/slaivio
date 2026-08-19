@@ -10,7 +10,12 @@ import {
   OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
+import {
+  OperationButton,
+  OperationMetric,
+  OperationMetricGrid,
+} from "@/components/ui/operation-controls";
+import { ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import {
   addBatchPackages,
   Batch,
@@ -28,9 +33,9 @@ import {
 } from "@/services/batch-center";
 
 const button =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d9dcda] bg-white px-3 text-[12px] font-medium hover:bg-[#f6f7f6]";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]";
 const primary =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] bg-[#197653] px-3 text-[12px] font-semibold text-white hover:bg-[#125f43]";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-transparent bg-[#12c76f] px-3 text-[13px] font-medium text-white hover:bg-[#0fb766]";
 const input =
   "h-9 w-full rounded-[6px] border border-[#d9dcda] bg-white px-3 text-[13px] outline-none focus:border-[#197653]";
 const labels: Record<string, string> = {
@@ -163,12 +168,12 @@ export function BatchCenterPage() {
         description="Regroupez les colis compatibles, contrôlez la capacité et préparez les expéditions."
         actions={
           <>
-            <button className={button} onClick={download}>
+            <OperationButton onClick={download}>
               <Download size={14} />
               Exporter
-            </button>
+            </OperationButton>
             <details className="relative">
-              <summary className={`${button} cursor-pointer list-none`}>
+              <summary className="inline-flex h-9 cursor-pointer list-none items-center justify-center rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]">
                 Plus
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
@@ -181,16 +186,16 @@ export function BatchCenterPage() {
                 </button>
               </div>
             </details>
-            <button className={primary} onClick={showCreate}>
+            <OperationButton variant="primary" onClick={showCreate}>
               <Plus size={15} />
               Nouveau batch
-            </button>
+            </OperationButton>
           </>
         }
       />
       <main>
         <OperationMetrics>
-          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          <OperationMetricGrid className="xl:grid-cols-6">
             {[
               ["Batchs ouverts", stats.open_batches],
               ["Prêts au départ", stats.ready],
@@ -201,15 +206,9 @@ export function BatchCenterPage() {
             ]
               .slice(0, allMetrics ? 6 : 4)
               .map(([l, v]) => (
-              <div
-                key={String(l)}
-                className="border-l border-[#eceef1] px-4 py-1 first:border-l-0"
-              >
-                <p className="text-[11px] text-[#707872]">{l}</p>
-                <b className="mt-2 block text-[23px]">{n(v)}</b>
-              </div>
+              <OperationMetric key={String(l)} label={String(l)} value={n(v)} />
               ))}
-          </div>
+          </OperationMetricGrid>
           <button
             type="button"
             className="mt-3 text-[12px] font-medium text-[#137a53] hover:underline xl:hidden"
@@ -243,12 +242,12 @@ export function BatchCenterPage() {
             }
           />
           {error ? (
-            <p className="p-5 text-sm text-red-700">{error}</p>
+            <ErrorState title="Groupages indisponibles" description={error} retry={load} />
           ) : loading ? (
-            <LoadingState label="Chargement des groupages…" />
+            <TableSkeleton rows={7} columns={9} label="Chargement des groupages…" />
           ) : (
             <OperationTable>
-              <table className="w-full min-w-[1100px] text-left text-[12px]">
+              <table className="w-full min-w-[1100px] text-left text-[13px]">
                 <thead className="bg-[#f7f8f7] text-[#68716c]">
                   <tr>
                     {[

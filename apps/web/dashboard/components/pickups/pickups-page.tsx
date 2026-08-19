@@ -8,12 +8,13 @@ import {
   HandCoins,
   Plus,
   RefreshCcw,
-  Search,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationButton, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
+import { ErrorState, LoadingState, TableSkeleton } from "@/components/ui/page-state";
 import {
   checkInPickup,
   createPickup,
@@ -160,25 +161,23 @@ export function PickupsPage() {
               </div>
             </details>
             <PermissionGuard permission="pickups.export">
-              <button onClick={download} className={button}>
+              <OperationButton onClick={download}>
                 <Download size={14} />
                 Exporter
-              </button>
+              </OperationButton>
             </PermissionGuard>
             <PermissionGuard permission="pickups.create">
-              <button onClick={() => setCreateOpen(true)} className={primary}>
+              <OperationButton variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus size={14} />
                 Préparer un retrait
-              </button>
+              </OperationButton>
             </PermissionGuard>
           </>
         }
       />
       <main>
-        <div className="bg-white px-5 py-4">
-          <div
-            className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}`}
-          >
+        <OperationMetrics>
+          <OperationMetricGrid className={allMetrics ? "lg:grid-cols-6" : "lg:grid-cols-4"}>
             {[
               ["En attente", stats.waiting],
               ["Au guichet", stats.at_counter],
@@ -188,20 +187,8 @@ export function PickupsPage() {
               ["Frais de garde", money(stats.storage_fees_due, "USD")],
             ]
               .slice(0, allMetrics ? 6 : 4)
-              .map(([l, v], index) => (
-                <button
-                  type="button"
-                  onClick={() => setAllMetrics((current) => !current)}
-                  key={l}
-                  className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
-                >
-                  <p className="text-[12px] text-[#68717d]">{l}</p>
-                  <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-                    {v}
-                  </b>
-                </button>
-              ))}
-          </div>
+              .map(([l, v]) => <OperationMetric key={String(l)} label={String(l)} value={v} />)}
+          </OperationMetricGrid>
           <button
             onClick={() => setAllMetrics((current) => !current)}
             className="mt-3 text-[11px] font-medium text-[#5b52c7]"
@@ -210,19 +197,9 @@ export function PickupsPage() {
               ? "Réduire les indicateurs"
               : "Voir tous les indicateurs"}
           </button>
-        </div>
+        </OperationMetrics>
         <section className="overflow-hidden bg-white">
-          <div className="flex flex-wrap gap-2 border-b border-[#e5e7e8] p-3">
-            <label className="flex h-9 min-w-64 flex-1 items-center rounded-[5px] bg-[#f3f4f4] px-3">
-              <Search size={15} />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="ml-2 w-full bg-transparent text-[13px] outline-none"
-                placeholder="Téléphone, nom, colis ou tracking…"
-              />
-            </label>
-            <select
+          <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Téléphone, nom, colis ou tracking…" />} filters={<><select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               className={input}
@@ -233,18 +210,12 @@ export function PickupsPage() {
                   {l}
                 </option>
               ))}
-            </select>
-            <button onClick={load} className={button}>
+            </select><OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
-            </button>
-          </div>
-          {error && (
-            <p className="m-4 bg-red-50 p-3 text-[13px] text-red-700">
-              {error}
-            </p>
-          )}
-          {loading ? <Skeleton /> : <Table items={items} open={open} />}
+            </OperationButton></>} />
+          {error && <ErrorState title="Retraits indisponibles" description={error} retry={load} />}
+          {loading ? <TableSkeleton rows={7} columns={8} label="Chargement des retraits…" /> : <Table items={items} open={open} />}
         </section>
       </main>
       {createOpen && (
@@ -1085,15 +1056,6 @@ function Empty() {
           Les colis prêts au retrait peuvent être regroupés par client.
         </p>
       </div>
-    </div>
-  );
-}
-function Skeleton() {
-  return (
-    <div className="space-y-2 p-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-12 animate-pulse rounded bg-[#eff1f2]" />
-      ))}
     </div>
   );
 }

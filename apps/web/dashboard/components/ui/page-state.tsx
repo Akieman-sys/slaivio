@@ -27,13 +27,14 @@ function SkeletonLine({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-[5px] bg-[#e9ecee] ${className}`} />;
 }
 
-export function TableSkeleton({ rows = 6 }: { rows?: number }) {
-  return <div className="bg-white" role="status" aria-label="Chargement du tableau">
-    <div className="grid h-11 grid-cols-[1.5fr_1fr_1fr_.8fr_32px] items-center gap-5 border-b border-[#e4e7ea] bg-[#f7f8fa] px-5">
-      {["w-28", "w-20", "w-24", "w-16", "w-4"].map((width, index) => <SkeletonLine key={index} className={`h-2.5 ${width}`} />)}
+export function TableSkeleton({ rows = 6, columns = 5, label = "Chargement du tableau" }: { rows?: number; columns?: number; label?: string }) {
+  const cells = Array.from({ length: Math.max(2, columns) });
+  return <div className="bg-white" role="status" aria-label={label}>
+    <div className="grid h-11 items-center gap-5 border-b border-[#e4e7ea] bg-[#f7f8fa] px-5" style={{ gridTemplateColumns: `repeat(${columns}, minmax(72px, 1fr))` }}>
+      {cells.map((_, index) => <SkeletonLine key={index} className={`h-2.5 ${index % 3 === 0 ? "w-24" : index % 3 === 1 ? "w-16" : "w-20"}`} />)}
     </div>
-    {Array.from({ length: rows }, (_, index) => <div key={index} className="grid h-14 grid-cols-[1.5fr_1fr_1fr_.8fr_32px] items-center gap-5 border-b border-[#eef0f2] px-5">
-      <SkeletonLine className="h-3 w-2/3" /><SkeletonLine className="h-3 w-1/2" /><SkeletonLine className="h-3 w-3/5" /><SkeletonLine className="h-5 w-16 rounded-full" /><SkeletonLine className="h-5 w-5" />
+    {Array.from({ length: rows }, (_, index) => <div key={index} className="grid h-14 items-center gap-5 border-b border-[#eef0f2] px-5" style={{ gridTemplateColumns: `repeat(${columns}, minmax(72px, 1fr))` }}>
+      {cells.map((_, cell) => <SkeletonLine key={cell} className={`h-3 ${cell % 3 === 0 ? "w-2/3" : cell % 3 === 1 ? "w-1/2" : "w-3/5"}`} />)}
     </div>)}
   </div>;
 }

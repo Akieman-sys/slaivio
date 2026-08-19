@@ -20,6 +20,7 @@ describe("operational design primitives", () => {
     </>);
 
     expect(screen.getByRole("button", { name: /En entrepôt 12/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /En entrepôt 12/i })).toHaveAttribute("data-ui", "operation-tab");
     expect(screen.getByText("Choisissez un pays configuré")).toBeInTheDocument();
   });
 
@@ -30,8 +31,9 @@ describe("operational design primitives", () => {
       <OperationStatus label="Actif" tone="success" />
     </>);
 
-    expect(screen.getByRole("button", { name: "Créer" })).toBeInTheDocument();
-    expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByText("Actif")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Créer" })).toHaveAttribute("data-ui", "operation-button");
+    expect(screen.getByText("42")).toHaveAttribute("data-ui", "metric-value");
+    expect(screen.getByText("Colis")).toHaveAttribute("data-ui", "metric-label");
+    expect(screen.getByText("Actif")).toHaveAttribute("data-ui", "operation-status");
   });
 });

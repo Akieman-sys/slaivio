@@ -22,6 +22,7 @@ export function OperationButton({
   return (
     <button
       type={type}
+      data-ui="operation-button"
       className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
       {...props}
     />
@@ -43,6 +44,7 @@ export function OperationTab({
     <button
       type="button"
       aria-current={active ? "page" : undefined}
+      data-ui="operation-tab"
       className={`shrink-0 border-b-2 px-3 text-[13px] font-medium ${active ? "border-[#12c76f] text-[#087a46]" : "border-transparent text-[#68717b] hover:text-[#25292e]"} ${className}`}
       {...props}
     >
@@ -63,7 +65,7 @@ export function OperationMetricGrid({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={`grid grid-cols-2 divide-x divide-y divide-[#eceff2] overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white md:grid-cols-4 md:divide-y-0 ${className}`}>{children}</div>;
+  return <div data-ui="metric-grid" className={`grid grid-cols-2 divide-x divide-y divide-[#eceff2] overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white md:grid-cols-4 md:divide-y-0 ${className}`}>{children}</div>;
 }
 
 export function OperationMetric({
@@ -87,9 +89,9 @@ export function OperationMetric({
   };
   return (
     <div className={`min-w-0 px-4 py-3.5 ${className}`} {...props}>
-      <p className="truncate text-[11px] font-medium text-[#6a737d]">{label}</p>
-      <p className={`mt-1 truncate text-[23px] font-semibold tracking-[-0.035em] ${colors[tone]}`}>{value}</p>
-      {detail && <p className="mt-1 truncate text-[11px] text-[#7a838d]">{detail}</p>}
+      <p data-ui="metric-label" className="truncate text-[11px] font-medium text-[#6a737d]">{label}</p>
+      <p data-ui="metric-value" className={`mt-1 truncate text-[23px] font-semibold tracking-[-0.035em] ${colors[tone]}`}>{value}</p>
+      {detail && <p data-ui="metric-detail" className="mt-1 truncate text-[11px] text-[#7a838d]">{detail}</p>}
     </div>
   );
 }
@@ -108,7 +110,7 @@ export function OperationStatus({
     danger: "bg-[#fff0f0] text-[#b42318]",
     info: "bg-[#edf4ff] text-[#285ea8]",
   };
-  return <span className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[tone]}`}>{label}</span>;
+  return <span data-ui="operation-status" className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[tone]}`}>{label}</span>;
 }
 
 export function FormSection({

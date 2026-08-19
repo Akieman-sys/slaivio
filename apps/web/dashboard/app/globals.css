@@ -514,8 +514,49 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 /* Operational design system — Expéditions is the visual reference. */
 .slaivio-operations {
+  --operation-text-title: 21px;
+  --operation-text-metric: 23px;
+  --operation-text-body: 13px;
+  --operation-text-label: 12px;
+  --operation-text-caption: 11px;
   color: #25292e;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Semantic type scale: the same visual role always has the same size. */
+.slaivio-operations .operation-page-header h1 {
+  font-size: var(--operation-text-title) !important;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.slaivio-operations .operation-page-header p {
+  font-size: var(--operation-text-label) !important;
+  line-height: 20px;
+}
+
+.slaivio-operations [data-ui="metric-label"] {
+  font-size: var(--operation-text-caption) !important;
+  line-height: 16px;
+}
+
+.slaivio-operations [data-ui="metric-value"] {
+  font-size: var(--operation-text-metric) !important;
+  line-height: 28px;
+}
+
+.slaivio-operations [data-ui="metric-detail"],
+.slaivio-operations [data-ui="operation-status"] {
+  font-size: var(--operation-text-caption) !important;
+  line-height: 16px;
+}
+
+.slaivio-operations .operation-toolbar,
+.slaivio-operations .operation-content,
+.slaivio-operations table tbody {
+  font-size: var(--operation-text-body);
+  line-height: 18px;
 }
 
 .slaivio-operations button,
@@ -537,7 +578,8 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-right: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--operation-text-body, 13px);
+  font-weight: 500;
   transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
 }
 
@@ -591,7 +633,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-top: 0 !important;
   background: #f7f8fa;
   color: #5f6b76;
-  font-size: 12px;
+  font-size: var(--operation-text-label);
 }
 
 .slaivio-operations table thead tr:first-child,
@@ -603,6 +645,16 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-color: #edf0f3 !important;
 }
 
+.operation-tabs select {
+  min-height: 32px;
+  font-size: var(--operation-text-body, 13px) !important;
+  font-weight: 500;
+}
+
+.slaivio-operations table tbody {
+  font-size: var(--operation-text-body) !important;
+}
+
 .slaivio-operations table th {
   font-weight: 500;
 }
@@ -611,7 +663,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .slaivio-operations form label,
 .operation-form-surface form label {
   color: #3f4a56;
-  font-size: 12px;
+  font-size: var(--operation-text-label, 12px);
   font-weight: 500;
 }
 
@@ -626,7 +678,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-radius: 6px !important;
   background-color: #fff;
   color: #25292e;
-  font-size: 13px !important;
+  font-size: var(--operation-text-body, 13px) !important;
   outline: none;
   box-shadow: none;
 }
@@ -634,6 +686,26 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .operation-form-surface form {
   display: grid;
   gap: 1.25rem;
+}
+
+.operation-form-surface h2 {
+  font-size: 17px !important;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.operation-form-surface h3,
+.operation-content h3 {
+  font-size: var(--operation-text-body, 13px) !important;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.operation-drawer-footer button {
+  min-height: 36px;
+  border-radius: 6px !important;
+  font-size: var(--operation-text-body, 13px) !important;
+  font-weight: 500;
 }
 
 .operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),

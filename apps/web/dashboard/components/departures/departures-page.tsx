@@ -18,7 +18,13 @@ import {
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { LoadingState } from "@/components/ui/page-state";
+import {
+  OperationButton,
+  OperationMetric,
+  OperationMetricGrid,
+  OperationTab,
+} from "@/components/ui/operation-controls";
+import { ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { getReferenceCatalog, type ReferenceItem } from "@/services/references";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { catalog, type Service } from "@/services/route-catalog";
@@ -37,9 +43,9 @@ import {
   type DepartureStats,
 } from "@/services/departures";
 const btn =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]",
   primary =
-    "inline-flex h-9 items-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-transparent bg-[#12c76f] px-3 text-[13px] font-medium text-white hover:bg-[#0fb766]",
   input =
     "h-9 w-full rounded-md border border-[#d2d7dc] bg-white px-3 text-[13px] outline-none focus:border-[#1688e8]";
 const labels: Record<string, string> = {
@@ -154,30 +160,30 @@ export function DeparturesPage() {
         description="Planifiez, suivez et coordonnez tous les départs de votre agence cargo."
         actions={
           <>
-            <button className={btn} onClick={load}>
+            <OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Actualiser
-            </button>
-            <button className={btn} onClick={() => exportPlanning(filtered)}>
+            </OperationButton>
+            <OperationButton onClick={() => exportPlanning(filtered)}>
               <Download size={14} />
               Exporter
-            </button>
+            </OperationButton>
             <PermissionGuard permission="departures.manage">
-              <button className={primary} onClick={() => setOpen(true)}>
+              <OperationButton variant="primary" onClick={() => setOpen(true)}>
                 <Plus size={15} />
                 Nouveau départ
-              </button>
+              </OperationButton>
             </PermissionGuard>
           </>
         }
       />
       <main>
         <OperationMetrics>
-          <div className="grid grid-cols-2 lg:grid-cols-4">
+          <OperationMetricGrid>
             {cards.slice(0, allMetrics ? cards.length : 4).map(([l, v]) => (
-              <Metric key={l} label={String(l)} value={v} />
+              <OperationMetric key={l} label={String(l)} value={v} />
             ))}
-          </div>
+          </OperationMetricGrid>
           <button
             type="button"
             onClick={() => setAllMetrics((current) => !current)}
@@ -197,13 +203,13 @@ export function DeparturesPage() {
               ["history", "Historique"],
             ] as const
           ).map(([k, l]) => (
-            <button
+            <OperationTab
               key={k}
               onClick={() => setView(k)}
-              className={view === k ? "is-active" : ""}
+              active={view === k}
             >
               {l}
-            </button>
+            </OperationTab>
           ))}
         </OperationTabs>
         <OperationToolbar
@@ -244,13 +250,9 @@ export function DeparturesPage() {
             </select>
           }
         />
-        {error && (
-          <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
-            {error}
-          </p>
-        )}
+        {error && <ErrorState title="Calendrier indisponible" description={error} retry={load} />}
         {loading ? (
-          <LoadingState label="Préparation du calendrier des départs…" />
+          <TableSkeleton rows={7} columns={6} label="Préparation du calendrier des départs…" />
         ) : view === "calendar" ? (
           <Calendar
             items={filtered}
@@ -319,16 +321,6 @@ function exportPlanning(items: Departure[]) {
   a.download = "planning-departs-slaivio.csv";
   a.click();
   URL.revokeObjectURL(url);
-}
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
-      <small className="text-[#69727d]">{label}</small>
-      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-        {value}
-      </b>
-    </div>
-  );
 }
 function Calendar({
   items,

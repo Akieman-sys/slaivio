@@ -1,9 +1,15 @@
-import type {
-  ButtonHTMLAttributes,
-  HTMLAttributes,
-  ReactNode,
-} from "react";
+"use client";
 
+import { Check, Ellipsis } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const buttonVariants: Record<ButtonVariant, string> = {
@@ -55,6 +61,91 @@ export function OperationTab({
         </span>
       )}
     </button>
+  );
+}
+
+export function OperationTabMenu<T extends string>({
+  items,
+  value,
+  onChange,
+  label = "Autres",
+  className = "",
+}: {
+  items: ReadonlyArray<readonly [T, string]>;
+  value?: T | "";
+  onChange: (value: T) => void;
+  label?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const selected = items.find(([key]) => key === value);
+  const anchor = root.current?.getBoundingClientRect();
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (
+        !root.current?.contains(event.target as Node) &&
+        !menu.current?.contains(event.target as Node)
+      ) setOpen(false);
+    };
+    const closeOnViewportChange = () => setOpen(false);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className={`relative ml-auto flex shrink-0 self-center ${className}`}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={`inline-flex h-8 items-center gap-2 rounded-[6px] border px-2.5 text-[12px] font-semibold transition-colors ${selected ? "border-[#b8ddca] bg-[#edf8f2] text-[#087a46]" : "border-transparent text-[#626d77] hover:border-[#d9dde1] hover:bg-[#f4f5f5] hover:text-[#2c333a]"}`}
+      >
+        <Ellipsis size={16} aria-hidden="true" />
+        <span>{selected?.[1] || label}</span>
+      </button>
+      {open && anchor && createPortal(
+        <div
+          ref={menu}
+          role="menu"
+          className="fixed z-[90] min-w-[220px] overflow-hidden rounded-[8px] border border-[#d9dde1] bg-white p-1.5 shadow-[0_14px_36px_rgba(15,23,42,.16)]"
+          style={{ top: anchor.bottom + 6, right: Math.max(8, window.innerWidth - anchor.right) }}
+        >
+          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a939c]">
+            Autres vues
+          </p>
+          {items.map(([key, itemLabel]) => {
+            const active = key === value;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onChange(key);
+                  setOpen(false);
+                }}
+                className={`flex min-h-9 w-full items-center justify-between gap-4 rounded-[6px] px-2.5 text-left text-[13px] transition-colors ${active ? "bg-[#edf8f2] font-semibold text-[#087a46]" : "text-[#3f4851] hover:bg-[#f3f5f5]"}`}
+              >
+                <span>{itemLabel}</span>
+                {active && <Check size={14} aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 

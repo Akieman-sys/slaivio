@@ -13,7 +13,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import {
   createRoute,
@@ -166,47 +166,19 @@ export function RouteIntelligenceCenter() {
                 {l}
               </OperationTab>
             ))}
-            <select
-              aria-label="Autres vues Routes"
-              value={
-                [
-                  "EXPRESS",
-                  "LIMITED",
-                  "SUSPENDED",
-                  "INACTIVE",
-                  "ARCHIVED",
-                  "ANALYTICS",
-                  "ENGINE",
-                ].includes(view)
-                  ? view
-                  : ""
-              }
-              onChange={(event) =>
-                event.target.value && setView(event.target.value as View)
-              }
-              className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${
-                [
-                  "EXPRESS",
-                  "LIMITED",
-                  "SUSPENDED",
-                  "INACTIVE",
-                  "ARCHIVED",
-                  "ANALYTICS",
-                  "ENGINE",
-                ].includes(view)
-                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
-                  : "border-[#d6dadd] bg-white text-[#69717a]"
-              }`}
-            >
-              <option value="">Plus</option>
-              <option value="EXPRESS">Express</option>
-              <option value="LIMITED">Capacité limitée</option>
-              <option value="SUSPENDED">Suspendues</option>
-              <option value="INACTIVE">Inactives</option>
-              <option value="ARCHIVED">Archivées</option>
-              <option value="ANALYTICS">Analytics</option>
-              <option value="ENGINE">Trouver une route</option>
-            </select>
+            <OperationTabMenu
+              items={[
+                ["EXPRESS", "Express"],
+                ["LIMITED", "Capacité limitée"],
+                ["SUSPENDED", "Suspendues"],
+                ["INACTIVE", "Inactives"],
+                ["ARCHIVED", "Archivées"],
+                ["ANALYTICS", "Analytics"],
+                ["ENGINE", "Trouver une route"],
+              ]}
+              value={["EXPRESS", "LIMITED", "SUSPENDED", "INACTIVE", "ARCHIVED", "ANALYTICS", "ENGINE"].includes(view) ? view : ""}
+              onChange={setView}
+            />
           </>
       </OperationTabs>
       {view === "ENGINE" ? (

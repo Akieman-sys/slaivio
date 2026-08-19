@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Download,
   Edit3,
+  Ellipsis,
   History,
   MessageCircle,
   Bell,
@@ -536,7 +537,8 @@ export function DossiersPage() {
             <>
               <details className="relative">
                 <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  Plus
+                  <Ellipsis size={16} />
+                  Actions
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-56 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                   <button className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-[13px] hover:bg-[#f5f6f7]">

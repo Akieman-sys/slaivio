@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   OperationButton,
@@ -8,6 +8,7 @@ import {
   OperationMetricGrid,
   OperationStatus,
   OperationTab,
+  OperationTabMenu,
 } from "./operation-controls";
 
 describe("operational design primitives", () => {
@@ -35,5 +36,21 @@ describe("operational design primitives", () => {
     expect(screen.getByText("42")).toHaveAttribute("data-ui", "metric-value");
     expect(screen.getByText("Colis")).toHaveAttribute("data-ui", "metric-label");
     expect(screen.getByText("Actif")).toHaveAttribute("data-ui", "operation-status");
+  });
+
+  it("opens the shared secondary navigation without a Plus select", () => {
+    const change = vi.fn();
+    render(
+      <OperationTabMenu
+        items={[["analytics", "Analytics"], ["settings", "Paramètres"]]}
+        value=""
+        onChange={change}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Autres" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Analytics" }));
+    expect(change).toHaveBeenCalledWith("analytics");
   });
 });

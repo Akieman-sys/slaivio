@@ -40,6 +40,7 @@ import {
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
+  OperationTabMenu,
 } from "@/components/ui/operation-controls";
 import {
   OperationMetrics,
@@ -577,21 +578,11 @@ export function ClientsPage() {
           >
             Archivés{archivedAllowed ? "" : " · verrouillé"}
           </OperationTab>
-          <select
-            aria-label="Autres vues clients"
-            value={
-              activeView === "business"
-                ? activeView
-                : ""
-            }
-            onChange={(event) =>
-              setActiveView(event.target.value as ClientView["key"])
-            }
-            className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-          >
-            <option value="">Plus</option>
-            <option value="business">Entreprises</option>
-          </select>
+          <OperationTabMenu
+            items={[["business", "Entreprises"]]}
+            value={activeView === "business" ? activeView : ""}
+            onChange={setActiveView}
+          />
         </OperationTabs>
 
         <section>

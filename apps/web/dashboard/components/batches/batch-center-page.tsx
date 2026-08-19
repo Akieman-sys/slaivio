@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Download, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
+import { Download, Ellipsis, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
 import { getReferenceCatalog, ReferenceCatalog } from "@/services/references";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -176,7 +176,8 @@ export function BatchCenterPage() {
             </OperationButton>
             <details className="relative">
               <summary className="inline-flex h-9 cursor-pointer list-none items-center justify-center rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]">
-                Plus
+                <Ellipsis size={16} className="mr-2" />
+                Actions
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                 <button

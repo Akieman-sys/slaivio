@@ -1,13 +1,13 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Plus } from "lucide-react";
+import { ChevronRight, Download, Ellipsis, Plus } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients } from "@/services/clients";
 import {
@@ -121,7 +121,8 @@ export function BroadcastsPage() {
             </OperationButton>
             <details className="relative">
               <summary className={`${btn} cursor-pointer list-none`}>
-                Plus
+                <Ellipsis size={16} />
+                Actions
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                 <button
@@ -158,7 +159,6 @@ export function BroadcastsPage() {
         </button>
       </OperationMetrics>
       <OperationTabs>
-        <div className="flex items-end gap-1">
             {tabs.slice(0, 4).map(([v, l]) => (
               <OperationTab
                 key={v}
@@ -168,20 +168,11 @@ export function BroadcastsPage() {
                 {l}
               </OperationTab>
             ))}
-            <select
-              aria-label="Autres vues"
+            <OperationTabMenu
+              items={tabs.slice(4).map(([key, label]) => [key, label] as const)}
               value={tabs.slice(4).some(([v]) => v === status) ? status : ""}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              {tabs.slice(4).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-        </div>
+              onChange={setStatus}
+            />
       </OperationTabs>
       <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<select
           className={`${field} w-44`}

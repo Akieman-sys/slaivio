@@ -11,7 +11,7 @@ import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import {
   addGridFee,
@@ -490,10 +490,7 @@ function PricingTabs({ view, setView }: { view: View; setView: (next: View) => v
   return (
     <OperationTabs>
       {primaryViews.map(([key, label]) => <OperationTab key={key} onClick={() => setView(key)} active={view === key}>{label}</OperationTab>)}
-      <select aria-label="Autres vues Tarification" value={moreSelected ? view : ""} onChange={(event) => event.target.value && setView(event.target.value as View)} className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${moreSelected ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]" : "border-[#d6dadd] bg-white text-[#69717a]"}`}>
-        <option value="">Plus</option>
-        {moreViews.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-      </select>
+      <OperationTabMenu items={moreViews} value={moreSelected ? view : ""} onChange={setView} />
     </OperationTabs>
   );
 }

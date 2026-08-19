@@ -24,6 +24,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { listPackages, type PackageRecord } from "@/services/packages";
 import {PermissionGuard} from "@/components/permissions/permission-guard";
 import {LoadingState} from "@/components/ui/page-state";
+import {OperationTabMenu} from "@/components/ui/operation-controls";
 import {
   archiveShipment,
   addShipmentFinancialLine,
@@ -186,7 +187,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
               {tab}
             </button>
           ))}
-          <select aria-label="Autres sections" value={secondaryTabs.includes(activeTab as typeof secondaryTabs[number])?activeTab:""} onChange={event=>setActiveTab(event.target.value as Tab)} className="ml-1 h-9 self-center rounded-[5px] bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"><option value="">Plus</option>{secondaryTabs.map(tab=><option key={tab} value={tab}>{tab}</option>)}</select>
+          <OperationTabMenu items={secondaryTabs.map(tab=>[tab,tab] as const)} value={secondaryTabs.includes(activeTab as typeof secondaryTabs[number])?activeTab:""} onChange={setActiveTab}/>
         </div>
 
         <div className="p-5">

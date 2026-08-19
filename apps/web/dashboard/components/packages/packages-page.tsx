@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Download,
   Edit3,
+  Ellipsis,
   FileText,
   History,
   Image as ImageIcon,
@@ -36,6 +37,7 @@ import {
   OperationMetric,
   OperationMetricGrid,
   OperationTab,
+  OperationTabMenu,
 } from "@/components/ui/operation-controls";
 import {
   OperationMetrics,
@@ -663,7 +665,8 @@ export function PackagesPage() {
             <>
               <details className="relative">
                 <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  Plus
+                  <Ellipsis size={16} />
+                  Actions
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                   <button
@@ -734,23 +737,11 @@ export function PackagesPage() {
               {view.label}
             </OperationTab>
           ))}
-          <select
-            aria-label="Autres vues colis"
-            value={
-              views.slice(5).some((view) => view.key === activeView)
-                ? activeView
-                : ""
-            }
-            onChange={(event) => setActiveView(event.target.value)}
-            className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
-          >
-            <option value="">Plus</option>
-            {views.slice(5).map((view) => (
-              <option key={view.key} value={view.key}>
-                {view.label}
-              </option>
-            ))}
-          </select>
+          <OperationTabMenu
+            items={views.slice(5).map((view) => [view.key, view.label] as const)}
+            value={views.slice(5).some((view) => view.key === activeView) ? activeView : ""}
+            onChange={setActiveView}
+          />
         </OperationTabs>
 
         <section className={selected ? "xl:pr-[380px]" : ""}>
@@ -1533,19 +1524,12 @@ function PackageDetails({
               {tab.label}
             </button>
           ))}
-          <label className="relative shrink-0">
-            <span className="sr-only">Autres sections</span>
-            <select
-              aria-label="Autres sections du colis"
-              value={secondaryActive ? activeTab : ""}
-              onChange={(event) => event.target.value && onTabChange(event.target.value as DetailTab)}
-              className={`h-9 appearance-none rounded-[7px] border py-0 pl-3.5 pr-8 text-[13px] font-[580] outline-none ${secondaryActive ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm" : "border-transparent bg-transparent text-[#5d6873] hover:bg-[#eceff1]"}`}
-            >
-              <option value="">Plus</option>
-              {secondaryTabs.map((tab) => <option key={tab.key} value={tab.key}>{tab.label}</option>)}
-            </select>
-            <ChevronRight size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-[#77818b]" />
-          </label>
+          <OperationTabMenu
+            items={secondaryTabs.map((tab) => [tab.key, tab.label] as const)}
+            value={secondaryActive ? activeTab : ""}
+            onChange={onTabChange}
+            className="self-center"
+          />
         </>
       }
       bodyClassName={loading ? "opacity-60" : undefined}

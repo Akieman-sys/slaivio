@@ -29,7 +29,7 @@ import {
   OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -402,19 +402,11 @@ function KnowledgeTabs({
           {label}
         </OperationTab>
       ))}
-      <select
-        aria-label="Autres vues"
+      <OperationTabMenu
+        items={secondaryViews}
         value={secondaryViews.some(([key]) => key === view) ? view : ""}
-        onChange={(event) => setView(event.target.value as View)}
-        className="mb-1 ml-1 h-8 rounded-md border border-[#d4d9df] bg-white px-2 text-[13px] text-[#59636e] outline-none"
-      >
-        <option value="">Plus</option>
-        {secondaryViews.map(([key, label]) => (
-          <option key={key} value={key}>
-            {label}
-          </option>
-        ))}
-      </select>
+        onChange={setView}
+      />
     </OperationTabs>
   );
 }

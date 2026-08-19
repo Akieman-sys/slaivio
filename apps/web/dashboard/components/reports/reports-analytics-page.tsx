@@ -14,7 +14,7 @@ import {
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 const button =
     "inline-flex h-9 items-center gap-2 rounded-[5px] border border-[#d8dddf] bg-white px-3 text-[13px] font-medium text-[#30363a] hover:bg-[#f5f7f6]",
@@ -158,20 +158,11 @@ export function ReportsAnalyticsPage() {
       </OperationMetrics>
       <OperationTabs>
         {tabs}
-        <select
-          aria-label="Autres vues Rapports"
+        <OperationTabMenu
+          items={[["warehouses", "Entrepôts"], ["reports", "Rapports exportables"]]}
           value={["warehouses", "reports"].includes(tab) ? tab : ""}
-          onChange={(event) => event.target.value && setTab(event.target.value)}
-          className={`mb-1 ml-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${
-            ["warehouses", "reports"].includes(tab)
-              ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
-              : "border-[#d6dadd] bg-white text-[#69717a]"
-          }`}
-        >
-          <option value="">Plus</option>
-          <option value="warehouses">Entrepôts</option>
-          <option value="reports">Rapports exportables</option>
-        </select>
+          onChange={setTab}
+        />
       </OperationTabs>
       <main className="p-5 sm:p-6">
         {error && <ErrorState title="Analytics indisponibles" description={error} retry={load} />}

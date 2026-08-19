@@ -24,7 +24,7 @@ import { API_BASE_URL } from "@/services/api";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -315,7 +315,8 @@ export function ShipmentsPage() {
               </button>
               <details className="relative">
                 <summary className={`${buttonClass} cursor-pointer list-none`}>
-                  Plus
+                  <MoreHorizontal size={16} />
+                  Actions
                 </summary>
                 <div className="absolute right-0 z-30 mt-1 w-44 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                   <PermissionGuard permission="shipments.read">
@@ -375,26 +376,14 @@ export function ShipmentsPage() {
                     {view.label}
                   </OperationTab>
                 ))}
-                <select
-                  aria-label="Autres vues"
-                  value={
-                    views.slice(4).some((view) => view.key === activeView)
-                      ? activeView
-                      : ""
-                  }
-                  onChange={(event) => {
-                    setActiveView(event.target.value);
+                <OperationTabMenu
+                  items={views.slice(4).map((view) => [view.key, view.label] as const)}
+                  value={views.slice(4).some((view) => view.key === activeView) ? activeView : ""}
+                  onChange={(next) => {
+                    setActiveView(next);
                     setStatus("");
                   }}
-                  className="ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
-                >
-                  <option value="">Plus</option>
-                  {views.slice(4).map((view) => (
-                    <option key={view.key} value={view.key}>
-                      {view.label}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </OperationTabs>
 

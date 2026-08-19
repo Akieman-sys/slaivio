@@ -1,12 +1,12 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Plus, Send } from "lucide-react";
+import { ChevronRight, Download, Ellipsis, Plus, Send } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
@@ -148,7 +148,8 @@ export function FollowupsPage() {
             </OperationButton>
             <details className="relative">
               <summary className={`${btn} cursor-pointer list-none`}>
-                Plus
+                <Ellipsis size={16} />
+                Actions
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                 <button
@@ -186,7 +187,6 @@ export function FollowupsPage() {
         </button>
       </OperationMetrics>
       <OperationTabs>
-        <div className="flex items-end gap-1">
             {views.slice(0, 4).map(([k, l]) => (
               <OperationTab
                 key={k}
@@ -196,20 +196,11 @@ export function FollowupsPage() {
                 {l}
               </OperationTab>
             ))}
-            <select
-              aria-label="Autres vues"
+            <OperationTabMenu
+              items={views.slice(4).map(([key, label]) => [key, label] as const)}
               value={views.slice(4).some(([k]) => k === view) ? view : ""}
-              onChange={(e) => setView(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
-            >
-              <option value="">Plus</option>
-              {views.slice(4).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}
-                </option>
-              ))}
-            </select>
-        </div>
+              onChange={setView}
+            />
       </OperationTabs>
       <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<><select
           className={`${input} w-44`}

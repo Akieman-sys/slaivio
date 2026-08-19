@@ -12,7 +12,7 @@ import {
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
-import { OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
@@ -209,50 +209,20 @@ export function ServiceCatalogCenter() {
                 {l}
               </OperationTab>
             ))}
-            <select
-              aria-label="Autres vues Services"
-              value={
-                [
-                  "LIMITED",
-                  "SUSPENDED",
-                  "ARCHIVED",
-                  "BUNDLES",
-                  "COMPARE",
-                  "RECOMMEND",
-                  "ANALYTICS",
-                  "SETTINGS",
-                ].includes(view)
-                  ? view
-                  : ""
-              }
-              onChange={(event) =>
-                event.target.value && setView(event.target.value as View)
-              }
-              className={`mb-1 h-8 rounded-[5px] border px-2 text-[13px] outline-none ${
-                [
-                  "LIMITED",
-                  "SUSPENDED",
-                  "ARCHIVED",
-                  "BUNDLES",
-                  "COMPARE",
-                  "RECOMMEND",
-                  "ANALYTICS",
-                  "SETTINGS",
-                ].includes(view)
-                  ? "border-[#16855f] bg-[#edf7f2] font-semibold text-[#145f49]"
-                  : "border-[#d6dadd] bg-white text-[#69717a]"
-              }`}
-            >
-              <option value="">Plus</option>
-              <option value="LIMITED">Capacité limitée</option>
-              <option value="SUSPENDED">Suspendus</option>
-              <option value="ARCHIVED">Archivés</option>
-              <option value="BUNDLES">Bundles</option>
-              <option value="COMPARE">Comparateur</option>
-              <option value="RECOMMEND">Recommandation</option>
-              <option value="ANALYTICS">Analytics</option>
-              <option value="SETTINGS">Paramètres</option>
-            </select>
+            <OperationTabMenu
+              items={[
+                ["LIMITED", "Capacité limitée"],
+                ["SUSPENDED", "Suspendus"],
+                ["ARCHIVED", "Archivés"],
+                ["BUNDLES", "Bundles"],
+                ["COMPARE", "Comparateur"],
+                ["RECOMMEND", "Recommandation"],
+                ["ANALYTICS", "Analytics"],
+                ["SETTINGS", "Paramètres"],
+              ]}
+              value={["LIMITED", "SUSPENDED", "ARCHIVED", "BUNDLES", "COMPARE", "RECOMMEND", "ANALYTICS", "SETTINGS"].includes(view) ? view : ""}
+              onChange={setView}
+            />
           </>
       </OperationTabs>
       {error && <ErrorState title="Services indisponibles" description={error} retry={load} />}

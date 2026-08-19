@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Download,
+  Ellipsis,
   HandCoins,
   Plus,
   RefreshCcw,
@@ -133,7 +134,8 @@ export function PickupsPage() {
           <>
             <details className="relative">
               <summary className={`${button} cursor-pointer list-none`}>
-                Plus
+                <Ellipsis size={16} />
+                Actions
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-52 rounded-md bg-white p-1 shadow-[0_8px_30px_rgba(15,23,42,.14)] ring-1 ring-[#e8eaed]">
                 <button

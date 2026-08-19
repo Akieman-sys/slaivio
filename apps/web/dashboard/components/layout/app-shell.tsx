@@ -64,7 +64,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [floatingPanel, setFloatingPanel] = useState<FloatingPanel>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    Clients: true,
+    "Opérations": true,
+    "Offre commerciale": false,
+    Communication: false,
+    Pilotage: false,
+  });
 
   const groupedRoutes = useMemo(
     () => appNavigation.map((group) => ({
@@ -93,6 +99,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       try { setOpenGroups(JSON.parse(savedGroups) as Record<string, boolean>); } catch { /* Ignore stale preferences. */ }
     }
   }, []);
+
+  useEffect(() => {
+    const activeGroup = groupedRoutes.find((group) =>
+      group.routes.some((route) => pathname === route.href || pathname.startsWith(`${route.href}/`)),
+    );
+    if (!activeGroup) return;
+    setOpenGroups((current) => current[activeGroup.label] === false
+      ? { ...current, [activeGroup.label]: true }
+      : current);
+  }, [groupedRoutes, pathname]);
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {

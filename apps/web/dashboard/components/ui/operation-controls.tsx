@@ -1,0 +1,152 @@
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+
+const buttonVariants: Record<ButtonVariant, string> = {
+  primary: "border-transparent bg-[#12c76f] text-white hover:bg-[#0fb766]",
+  secondary: "border-[#d4d9df] bg-white text-[#30363d] hover:bg-[#f6f7f7]",
+  ghost: "border-transparent bg-transparent text-[#4f5964] hover:bg-[#f0f2f2]",
+  danger: "border-[#efc7c7] bg-white text-[#b42318] hover:bg-[#fff5f5]",
+};
+
+export function OperationButton({
+  variant = "secondary",
+  className = "",
+  type = "button",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+  return (
+    <button
+      type={type}
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
+      {...props}
+    />
+  );
+}
+
+export function OperationTab({
+  active,
+  count,
+  children,
+  className = "",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  active?: boolean;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      className={`shrink-0 border-b-2 px-3 text-[13px] font-medium ${active ? "border-[#12c76f] text-[#087a46]" : "border-transparent text-[#68717b] hover:text-[#25292e]"} ${className}`}
+      {...props}
+    >
+      {children}
+      {typeof count === "number" && (
+        <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-[#e8f8ef] text-[#087a46]" : "bg-[#f0f2f3] text-[#6d7680]"}`}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+export function OperationMetricGrid({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`grid grid-cols-2 divide-x divide-y divide-[#eceff2] overflow-hidden rounded-[8px] border border-[#e2e6e9] bg-white md:grid-cols-4 md:divide-y-0 ${className}`}>{children}</div>;
+}
+
+export function OperationMetric({
+  label,
+  value,
+  detail,
+  tone = "default",
+  className = "",
+  ...props
+}: HTMLAttributes<HTMLDivElement> & {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+  tone?: "default" | "success" | "warning" | "danger";
+}) {
+  const colors = {
+    default: "text-[#25292e]",
+    success: "text-[#087a46]",
+    warning: "text-[#a15c00]",
+    danger: "text-[#b42318]",
+  };
+  return (
+    <div className={`min-w-0 px-4 py-3.5 ${className}`} {...props}>
+      <p className="truncate text-[11px] font-medium text-[#6a737d]">{label}</p>
+      <p className={`mt-1 truncate text-[23px] font-semibold tracking-[-0.035em] ${colors[tone]}`}>{value}</p>
+      {detail && <p className="mt-1 truncate text-[11px] text-[#7a838d]">{detail}</p>}
+    </div>
+  );
+}
+
+export function OperationStatus({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "neutral" | "success" | "warning" | "danger" | "info";
+}) {
+  const colors = {
+    neutral: "bg-[#f0f2f3] text-[#59636e]",
+    success: "bg-[#e8f8ef] text-[#087a46]",
+    warning: "bg-[#fff4df] text-[#8b5400]",
+    danger: "bg-[#fff0f0] text-[#b42318]",
+    info: "bg-[#edf4ff] text-[#285ea8]",
+  };
+  return <span className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[tone]}`}>{label}</span>;
+}
+
+export function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="grid gap-4 border-b border-[#e8ebee] pb-5 last:border-b-0 last:pb-0">
+      <div>
+        <h3 className="text-[13px] font-semibold text-[#2f363d]">{title}</h3>
+        {description && <p className="mt-1 text-[11px] leading-5 text-[#737d87]">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function OperationField({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className="grid min-w-0 gap-1.5">
+      <span>{label}{required && <span className="ml-1 text-[#b42318]">*</span>}</span>
+      {children}
+      {hint && <small className="text-[11px] font-normal leading-4 text-[#7a838d]">{hint}</small>}
+    </label>
+  );
+}

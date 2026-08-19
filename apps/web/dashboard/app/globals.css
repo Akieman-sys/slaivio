@@ -19,6 +19,14 @@
   --violet: #5b55e7;
   --shadow-soft: 0 22px 60px rgba(17, 24, 39, 0.1);
   --shadow-panel: 0 12px 36px rgba(17, 24, 39, 0.06);
+  --app-surface: #ffffff;
+  --app-surface-muted: #f7f8fa;
+  --app-border: #dfe3e7;
+  --app-border-subtle: #eceff2;
+  --app-text: #25292e;
+  --app-text-muted: #69727c;
+  --app-green: #12c76f;
+  --app-green-dark: #087a46;
 }
 
 * {

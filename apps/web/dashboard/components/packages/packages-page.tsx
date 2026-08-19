@@ -2918,6 +2918,11 @@ function PackageFormModal({
   const [dossiers, setDossiers] = useState<DossierRecord[]>([]);
   const [warehouses, setWarehouses] = useState<ReferenceItem[]>([]);
   const [loadingDossiers, setLoadingDossiers] = useState(true);
+  const [selectedDossierId, setSelectedDossierId] = useState(item?.dossier_id || "");
+
+  useEffect(() => {
+    setSelectedDossierId(item?.dossier_id || "");
+  }, [item?.dossier_id]);
 
   useEffect(() => {
     let active = true;
@@ -2945,6 +2950,7 @@ function PackageFormModal({
   const selectedDossierMissing =
     item?.dossier_id &&
     !dossiers.some((dossier) => dossier.id === item.dossier_id);
+  const selectedDossier = dossiers.find((dossier) => dossier.id === selectedDossierId);
 
   return (
     <OperationDrawer
@@ -2958,13 +2964,17 @@ function PackageFormModal({
           onSubmit={onSubmit}
           className="grid gap-5"
         >
-          <div className="grid gap-5 md:grid-cols-2">
-            <FormSection title="Lien dossier">
+          <div className={mode === "create" ? "grid gap-6" : "grid gap-5 md:grid-cols-2"}>
+            <FormSection
+              title="Dossier et identification"
+              description="Le client, le trajet, le service et la destination seront repris automatiquement depuis le dossier."
+            >
               <label className="block">
                 <FormLabel>Dossier réel</FormLabel>
                 <select
                   name="dossier_id"
-                  defaultValue={item?.dossier_id || ""}
+                  value={selectedDossierId}
+                  onChange={(event) => setSelectedDossierId(event.target.value)}
                   disabled={mode === "edit"}
                   className={inputClass}
                   required
@@ -2990,6 +3000,17 @@ function PackageFormModal({
                   ))}
                 </select>
               </label>
+              {mode === "create" && selectedDossier && (
+                <div className="rounded-[8px] border border-[#dce5e1] bg-[#f5faf7] px-4 py-3">
+                  <p className="text-[13px] font-[620] text-[#29483b]">
+                    {selectedDossier.client_name || selectedDossier.client_full_name || "Client"}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-5 text-[#607068]">
+                    {routeLabelFromDossier(selectedDossier)}
+                    {selectedDossier.goods_type ? ` · ${selectedDossier.goods_type}` : ""}
+                  </p>
+                </div>
+              )}
               <TextInput
                 name="tracking_id"
                 label="Tracking du fournisseur (facultatif)"
@@ -3102,33 +3123,34 @@ function PackageFormModal({
               </FormSection>
             )}
 
-            <FormSection title="Marchandise & mesures">
-              {mode === "create" && (
-                <SelectInput
-                  name="package_type"
-                  label="Type d’emballage"
-                  defaultValue={item?.package_type || "carton"}
-                  options={packageTypeLabels}
-                />
-              )}
+            <FormSection
+              title="Marchandise et poids"
+              description={mode === "create" ? "Ajoutez seulement ce qui est connu au moment de la réception." : undefined}
+            >
               <TextInput
                 name="description"
-                label="Description"
+                label="Contenu du colis"
                 defaultValue={item?.description || ""}
-                placeholder="Électronique, textile..."
+                placeholder="Ex. vêtements, téléphones, pièces automobiles"
               />
+              {mode === "edit" && (
+                <>
               <TextInput
                 name="category"
                 label="Catégorie"
                 defaultValue={item?.category || ""}
               />
+                </>
+              )}
               <TextInput
                 name="weight_kg"
-                label="Poids kg"
+                label="Poids mesuré (kg)"
                 defaultValue={valueOrEmpty(item?.weight_kg)}
                 type="number"
                 step="0.01"
               />
+              {mode === "edit" && (
+                <>
               <TextInput
                 name="volumetric_weight_kg"
                 label="Poids volumétrique kg"
@@ -3197,9 +3219,16 @@ function PackageFormModal({
                 />
                 Colis fragile
               </label>
+                </>
+              )}
             </FormSection>
 
-            <FormSection title="Entrepôt">
+            <FormSection
+              title="Réception"
+              description={mode === "create" ? "Choisissez le site qui reçoit physiquement le colis." : undefined}
+            >
+              {mode === "edit" && (
+                <>
               <label>
                 <FormLabel>Priorité</FormLabel>
                 <select
@@ -3223,6 +3252,8 @@ function PackageFormModal({
                 label="Fournisseur"
                 defaultValue={item?.supplier_name || ""}
               />
+                </>
+              )}
               <label>
                 <FormLabel>Entrepôt de réception</FormLabel>
                 <select
@@ -3238,6 +3269,8 @@ function PackageFormModal({
                   ))}
                 </select>
               </label>
+              {mode === "edit" && (
+                <>
               <TextInput
                 name="warehouse_zone"
                 label="Zone"
@@ -3253,7 +3286,41 @@ function PackageFormModal({
                 label="Emplacement"
                 defaultValue={item?.warehouse_location || ""}
               />
+                </>
+              )}
             </FormSection>
+
+            {mode === "create" && (
+              <details className="group rounded-[9px] border border-[#dfe4e8] bg-[#fbfcfc]">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-[13px] font-[620] text-[#3b4650] marker:content-none">
+                  Ajouter des détails facultatifs
+                  <ChevronRight size={16} className="text-[#7a858f] transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="grid gap-5 border-t border-[#e5e9ec] p-4 sm:grid-cols-2">
+                  <SelectInput name="package_type" label="Type d’emballage" defaultValue="carton" options={packageTypeLabels} />
+                  <TextInput name="pieces_count" label="Nombre de pièces" defaultValue="1" type="number" step="1" />
+                  <TextInput name="length_cm" label="Longueur (cm)" type="number" step="0.01" />
+                  <TextInput name="width_cm" label="Largeur (cm)" type="number" step="0.01" />
+                  <TextInput name="height_cm" label="Hauteur (cm)" type="number" step="0.01" />
+                  <TextInput name="supplier_name" label="Fournisseur" />
+                  <TextInput name="declared_value" label="Valeur déclarée" type="number" step="0.01" />
+                  <TextInput name="declared_currency" label="Devise" placeholder="Ex. USD" />
+                  <label>
+                    <FormLabel>Priorité</FormLabel>
+                    <select name="priority" defaultValue="NORMAL" className={inputClass}>
+                      <option value="LOW">Basse</option>
+                      <option value="NORMAL">Normale</option>
+                      <option value="HIGH">Haute</option>
+                      <option value="URGENT">Urgente</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 self-end pb-3 text-[13px] text-[#334155]">
+                    <input name="is_fragile" type="checkbox" className="rounded border-[#c9d0d8]" />
+                    Colis fragile
+                  </label>
+                </div>
+              </details>
+            )}
 
             {mode === "edit" && (
               <FormSection title="Informations financières">
@@ -3299,7 +3366,7 @@ function PackageFormModal({
           </div>
 
           {error && (
-            <div className="mx-5 mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+            <div role="alert" className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
               {error}
             </div>
           )}
@@ -3572,22 +3639,27 @@ function Section({
 
 function FormSection({
   title,
+  description,
   children,
 }: {
   title: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-md border border-[#d8dce2] p-4">
-      <h3 className="text-[13px] font-semibold text-[#1f2328]">{title}</h3>
-      {children}
+    <section data-ui="form-section" className="space-y-4 rounded-[9px] border border-[#dfe4e8] bg-white p-5">
+      <div>
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-[#1f2328]">{title}</h3>
+        {description && <p className="mt-1 text-[12px] leading-5 text-[#6c7782]">{description}</p>}
+      </div>
+      <div className="grid gap-4">{children}</div>
     </section>
   );
 }
 
 function FormLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mb-1 block text-[12px] font-medium text-[#5f6b76]">
+    <span className="mb-2 block text-[13px] font-[620] text-[#3f4953]">
       {children}
     </span>
   );

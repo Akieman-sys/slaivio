@@ -170,6 +170,8 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
         return None
     if re.search(r"\bFUP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("reporte","decale","décale","pause","reprend","termine","escalade","annule")):
         return None
+    if re.search(r"\bEXP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("passe","marque","mets","change")):
+        return None
     if any(word in normalized for word in ("cree","crée","creer","créer","planifie","programme")) and any(word in normalized for word in ("depart","départ")):
         return None
     if any(word in normalized for word in ("cree","crée","creer","créer","prepare","prépare")) and any(word in normalized for word in ("batch","groupage")):

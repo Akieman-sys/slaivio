@@ -43,6 +43,12 @@ def build_proposed_actions(
             "route_name":entities.get("route_name"),"service_name":entities.get("service_name"),
             "package_count":entities.get("package_count")}}]
 
+    if workflow_type == "UPDATE_SHIPMENT_STATUS":
+        return [{"type":"UPDATE_SHIPMENT_STATUS","label":"Mettre à jour l’expédition","payload":{
+            "expedition_id":entities.get("expedition_id"),"expedition_reference":entities.get("expedition_reference"),
+            "current_status":entities.get("current_status"),"target_status":entities.get("target_status"),
+            "row_version":entities.get("row_version")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

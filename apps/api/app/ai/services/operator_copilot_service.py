@@ -28,6 +28,7 @@ from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.db.followup_repository import create_manual_followup,followup_dashboard,mutate_followup
 from app.departures.repository import create as create_departure
+from app.expeditions.repository import EXPEDITION_TRANSITIONS,list_expeditions,update_expedition
 from app.packages.repository import create_package,list_packages,update_package
 from app.pricing_engine.repository import catalog as pricing_catalog
 from app.routes_services.repository import route_listing,list_all
@@ -48,11 +49,27 @@ PACKAGE_STATUS_LABELS={"recu":"RECEIVED","reçu":"RECEIVED","confirme":"CONFIRME
     "entrepot":"WAREHOUSED","entrepôt":"WAREHOUSED","pret au groupage":"READY_FOR_BATCH",
     "prêt au groupage":"READY_FOR_BATCH","bloque":"BLOCKED","bloqué":"BLOCKED","annule":"CANCELLED",
     "annulé":"CANCELLED","livre":"DELIVERED","livré":"DELIVERED"}
+SHIPMENT_STATUS_LABELS={
+    "en préparation":"PREPARING","en preparation":"PREPARING","en chargement":"LOADING",
+    "prête au départ":"READY_FOR_DEPARTURE","prêt au départ":"READY_FOR_DEPARTURE","pret au depart":"READY_FOR_DEPARTURE",
+    "expédiée":"DISPATCHED","expediee":"DISPATCHED","expédié":"DISPATCHED","expedie":"DISPATCHED",
+    "en transit":"IN_TRANSIT","arrivée à destination":"ARRIVED_DESTINATION","arrivee a destination":"ARRIVED_DESTINATION",
+    "en douane":"CUSTOMS_CLEARANCE","dédouanement":"CUSTOMS_CLEARANCE","dedouanement":"CUSTOMS_CLEARANCE",
+    "disponible au retrait":"AVAILABLE_FOR_PICKUP","en livraison":"OUT_FOR_DELIVERY","livrée":"DELIVERED","livree":"DELIVERED",
+    "bloquée":"BLOCKED","bloquee":"BLOCKED","annulée":"CANCELLED","annulee":"CANCELLED",
+}
+SHIPMENT_STATUS_NAMES={"DRAFT":"Brouillon","PREPARING":"En préparation","LOADING":"En chargement",
+    "READY_FOR_DEPARTURE":"Prête au départ","DISPATCHED":"Expédiée","IN_TRANSIT":"En transit",
+    "ARRIVED_DESTINATION":"Arrivée à destination","CUSTOMS_CLEARANCE":"En dédouanement",
+    "AVAILABLE_FOR_PICKUP":"Disponible au retrait","OUT_FOR_DELIVERY":"En livraison","DELIVERED":"Livrée",
+    "BLOCKED":"Bloquée","CANCELLED":"Annulée","ARCHIVED":"Archivée"}
 
 
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if re.search(r"\bEXP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("passe","marque","mets","change")):
+        return "SHIPMENT_STATUS_UPDATE",0.97
     if re.search(r"\bBAT-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("convertis","convertir","crée l’expédition","créer l’expédition","cree l'expedition","créer une expédition","cree une expedition")):
         return "BATCH_CONVERSION",0.97
     if any(word in normalized for word in create_words) and any(word in normalized for word in ("batch","groupage")):
@@ -86,6 +103,8 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type=="UPDATE_SHIPMENT_STATUS":
+        return [field for field in ("expedition_id","target_status","row_version") if entities.get(field) is None]
     if workflow_type=="CONVERT_BATCH_TO_SHIPMENT":
         return [field for field in ("batch_id","batch_code") if not entities.get(field)]
     if workflow_type=="CREATE_BATCH":
@@ -373,7 +392,7 @@ def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str
     return {"message":assistant,"workflow":updated,"missing_fields":remaining}
 
 
-REVIEW_ONLY_WORKFLOWS={"UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT"}
+REVIEW_ONLY_WORKFLOWS={"UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT","UPDATE_SHIPMENT_STATUS"}
 
 
 def _continue_review_workflow(org_id,user_id,workflow,message,workspace_id,channel):
@@ -474,8 +493,35 @@ def prepare_operator_message(
     confidence = float(intent_result.get("confidence") or 0.0)
     entities = intent_result.get("entities") or {}
     fallback_intent,fallback_confidence=_fallback_intent(clean_message)
-    if fallback_intent in {"PACKAGE_STATUS_UPDATE","FOLLOWUP_STATUS_UPDATE"} or intent == "UNKNOWN":
+    if fallback_intent in {"PACKAGE_STATUS_UPDATE","FOLLOWUP_STATUS_UPDATE","SHIPMENT_STATUS_UPDATE"} or intent == "UNKNOWN":
         intent, confidence = fallback_intent,fallback_confidence
+
+    if intent=="SHIPMENT_STATUS_UPDATE":
+        reference_match=re.search(r"\bEXP-[A-Z0-9-]+\b",clean_message.upper())
+        reference=reference_match.group(0) if reference_match else ""
+        normalized=clean_message.lower()
+        target=next((code for label,code in SHIPMENT_STATUS_LABELS.items() if label in normalized),None)
+        matches=list_expeditions(org_id,q=reference,page=1,page_size=5)["items"] if reference else []
+        exact=next((x for x in matches if str(x.get("expedition_reference") or "").upper()==reference),None)
+        if not exact or not target:
+            response="Indiquez la référence exacte et le nouvel état. Exemple : « passe EXP-2026-00458 en transit »."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        if target=="DELIVERED":
+            response="Une expédition ne peut pas être déclarée livrée depuis une simple instruction. Utilisez Retrait/Livraison afin d’enregistrer le réceptionnaire et la preuve requise."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"delivery_proof_required"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        current=str(exact.get("status") or "")
+        allowed=EXPEDITION_TRANSITIONS.get(current,set())
+        if target!=current and target not in allowed:
+            next_labels=", ".join(SHIPMENT_STATUS_NAMES.get(item,item) for item in sorted(allowed)) or "aucune transition"
+            response=f"Cette transition n’est pas autorisée depuis « {SHIPMENT_STATUS_NAMES.get(current,current)} ». Étapes possibles : {next_labels}."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"invalid_status_transition"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        entities.update({"expedition_id":exact["id"],"expedition_reference":exact.get("expedition_reference"),
+            "current_status":current,"current_status_label":SHIPMENT_STATUS_NAMES.get(current,current),
+            "target_status":target,"target_status_label":SHIPMENT_STATUS_NAMES.get(target,target),
+            "row_version":exact.get("shipment_row_version")})
 
     if fallback_intent=="BATCH_CONVERSION":
         intent,confidence=fallback_intent,fallback_confidence
@@ -771,7 +817,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT","UPDATE_SHIPMENT_STATUS"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -878,6 +924,21 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         try:
             expedition=convert_batch(org_id,entities["batch_id"],{"user_id":actor_id,"actor_name":workflow.get("manager_name") or "Membre de l’agence"})
             updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"expedition":expedition,"batch_id":entities["batch_id"]})
+            return {"workflow":updated,"result":{"expedition":expedition},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="UPDATE_SHIPMENT_STATUS":
+        assert_permission(actor_id,org_id,"shipments.update")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            target=entities["target_status"];payload={"status":target}
+            now=datetime.now(timezone.utc).isoformat()
+            if target=="DISPATCHED":payload["departed_at"]=now
+            if target=="ARRIVED_DESTINATION":payload["arrived_at"]=now
+            expedition=update_expedition(org_id,entities["expedition_id"],actor_id,payload,int(entities["row_version"]))
+            if not expedition:raise HTTPException(404,"expedition_not_found")
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"expedition":expedition,"previous_status":entities.get("current_status")})
             return {"workflow":updated,"result":{"expedition":expedition},"draft":None}
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise

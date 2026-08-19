@@ -239,6 +239,30 @@ def test_pending_review_action_does_not_consume_an_unrelated_question(monkeypatc
     assert result["tool"]=="batches.list"
 
 
+def test_shipment_transition_uses_permission_and_optimistic_version(monkeypatch):
+    workflow=_workflow(
+        workflow_type="UPDATE_SHIPMENT_STATUS",intent="SHIPMENT_STATUS_UPDATE",
+        entities={"expedition_id":"shipment-1","expedition_reference":"EXP-2026-00458",
+                  "current_status":"READY_FOR_DEPARTURE","target_status":"DISPATCHED","row_version":7},
+    )
+    calls={}
+    monkeypatch.setattr(service,"get_workflow_run",lambda *_:workflow)
+    monkeypatch.setattr(service,"assert_permission",lambda user,org,permission:calls.update(permission=permission))
+    monkeypatch.setattr(service,"claim_workflow_execution",lambda *_:workflow)
+    monkeypatch.setattr(service,"update_expedition",lambda org,item,actor,payload,version:calls.update(
+        org=org,item=item,actor=actor,payload=payload,version=version
+    ) or {"id":"shipment-1","expedition_reference":"EXP-2026-00458","status":"DISPATCHED"})
+    monkeypatch.setattr(service,"update_workflow_status",lambda *_args,**_kwargs:{**workflow,"workflow_status":"APPROVED"})
+
+    result=service.approve_operator_workflow("org-1","workflow-1","manager-1")
+
+    assert calls["permission"]=="shipments.update"
+    assert calls["version"]==7
+    assert calls["payload"]["status"]=="DISPATCHED"
+    assert calls["payload"]["departed_at"]
+    assert result["result"]["expedition"]["status"]=="DISPATCHED"
+
+
 def test_copilot_schema_and_repositories_are_tenant_scoped():
     root = Path(__file__).parents[3]
     migration = (root / "infra/sql/059_ai_operator_copilot.sql").read_text(encoding="utf-8")

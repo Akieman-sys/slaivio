@@ -34,6 +34,7 @@ ACTION_CAPABILITIES = (
     ("create_departure", "Planifier un départ", "Sélectionne une route et un service existants, puis prépare un départ à confirmer.", "departures.manage", "Planifie un départ Air Guangzhou vers Kinshasa vendredi à 18 h."),
     ("create_batch", "Créer un batch", "Utilise une route, un service et un entrepôt déjà configurés pour préparer un groupage contrôlé.", "batches.create", "Crée un batch Air Guangzhou vers Kinshasa."),
     ("convert_batch", "Créer une expédition depuis un batch", "Convertit uniquement un batch validé et prêt à expédier, sans dupliquer l’expédition.", "batches.convert", "Crée l’expédition depuis BAT-2026-00184."),
+    ("shipment_status", "Faire progresser une expédition", "Applique uniquement une transition opérationnelle autorisée avec contrôle de version.", "shipments.update", "Passe EXP-2026-00458 en transit."),
 )
 
 

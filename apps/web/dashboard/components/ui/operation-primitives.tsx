@@ -54,7 +54,7 @@ export function ActiveFilterBar({ children }: { children?: ReactNode }) {
 
 export function OperationTable({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`operation-table min-w-0 bg-white ${className}`}>
+    <section className={`operation-table min-w-0 overflow-hidden rounded-[8px] border border-[#dfe3e7] bg-white ${className}`}>
       <div className="max-w-full overflow-auto">{children}</div>
     </section>
   );

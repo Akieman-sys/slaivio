@@ -645,6 +645,38 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-color: #edf0f3 !important;
 }
 
+.slaivio-operations .operation-table table thead tr {
+  height: 42px;
+}
+
+.slaivio-operations .operation-table table tbody tr {
+  height: 48px;
+}
+
+.slaivio-operations .operation-table table th,
+.slaivio-operations .operation-table table td {
+  padding-inline: 14px;
+}
+
+.slaivio-operations .operation-table table tbody tr:hover {
+  background-color: #f8faf9;
+}
+
+@media (max-width: 640px) {
+  .operation-actions {
+    width: 100%;
+  }
+
+  .operation-actions > button,
+  .operation-actions > a {
+    flex: 1 1 auto;
+  }
+
+  .operation-form-surface {
+    padding: 20px !important;
+  }
+}
+
 .operation-tabs select {
   min-height: 32px;
   font-size: var(--operation-text-body, 13px) !important;
@@ -710,6 +742,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),
 .operation-form-surface form select {
+  min-height: 40px;
   padding-inline: 0.75rem;
 }
 

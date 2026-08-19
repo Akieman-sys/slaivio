@@ -65,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [floatingPanel, setFloatingPanel] = useState<FloatingPanel>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    Clients: true,
+    Clients: false,
     "Opérations": true,
     "Offre commerciale": false,
     Communication: false,
@@ -96,7 +96,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     const savedGroups = window.localStorage.getItem("slaivio.sidebar.groups");
     setSidebarCollapsed(savedCollapsed === "1");
     if (savedGroups) {
-      try { setOpenGroups(JSON.parse(savedGroups) as Record<string, boolean>); } catch { /* Ignore stale preferences. */ }
+      try {
+        const parsed = JSON.parse(savedGroups) as Record<string, boolean>;
+        const selected = appNavigation.find((group) => parsed[group.label])?.label || "Opérations";
+        setOpenGroups(Object.fromEntries(appNavigation.map((group) => [group.label, group.label === selected])));
+      } catch { /* Ignore stale preferences. */ }
     }
   }, []);
 
@@ -105,9 +109,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       group.routes.some((route) => pathname === route.href || pathname.startsWith(`${route.href}/`)),
     );
     if (!activeGroup) return;
-    setOpenGroups((current) => current[activeGroup.label] === false
-      ? { ...current, [activeGroup.label]: true }
-      : current);
+    setOpenGroups((current) => {
+      const next = Object.fromEntries(groupedRoutes.map((group) => [group.label, group.label === activeGroup.label]));
+      return Object.keys(next).every((key) => current[key] === next[key]) ? current : next;
+    });
   }, [groupedRoutes, pathname]);
 
   useEffect(() => {
@@ -153,10 +158,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function toggleGroup(label: string) {
     setOpenGroups((current) => {
-      const next = { ...current, [label]: current[label] === false };
+      const willOpen = current[label] === false;
+      const next = Object.fromEntries(groupedRoutes.map((group) => [group.label, willOpen && group.label === label]));
       window.localStorage.setItem("slaivio.sidebar.groups", JSON.stringify(next));
       return next;
     });
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+      window.localStorage.setItem("slaivio.sidebar.collapsed", "0");
+    }
   }
 
   return (
@@ -180,15 +190,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className={`min-h-0 flex-1 overflow-y-auto py-3 ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
+        <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
           <SidebarLink href="/app" icon={<Home size={17} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
           {groupedRoutes.map((group) => (
-            <section key={group.label} className={sidebarCollapsed ? "mt-2" : "mt-4"}>
-              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} className={`flex w-full items-center text-[#747c85] hover:text-[#33383e] ${sidebarCollapsed ? "h-9 justify-center rounded-[5px] hover:bg-[#f0f1f1]" : "h-7 gap-2 px-2"}`}>
+            <section key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-2"}>
+              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#67717c] hover:text-[#25292e] ${sidebarCollapsed ? "h-9 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-8 gap-2 px-2"}`}>
                 <group.icon size={15} className="shrink-0" />
-                {!sidebarCollapsed && <><span className="truncate text-[10px] font-semibold uppercase">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+                {!sidebarCollapsed && <><span className="truncate text-[11px] font-semibold">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
               </button>
-              <div className={`space-y-0.5 ${openGroups[group.label] === false && !sidebarCollapsed ? "hidden" : ""}`}>
+              <div className={`space-y-0.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
                   <SidebarLink
                     key={route.href}

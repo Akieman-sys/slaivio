@@ -344,7 +344,7 @@ function Calendar({
         ? new Date(cursor.getFullYear(), cursor.getMonth(), 1)
         : new Date(cursor),
     start = new Date(first);
-  if (period !== "day") start.setDate(start.getDate() - start.getDay());
+  if (period !== "day") start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const count = period === "month" ? 42 : period === "week" ? 7 : 1,
     days = Array.from({ length: count }, (_, i) => {
       const d = new Date(start);
@@ -357,49 +357,38 @@ function Calendar({
     else d.setDate(d.getDate() + delta * (period === "week" ? 7 : 1));
     setCursor(d);
   }
+  const title = cursor.toLocaleDateString("fr-FR", {
+    month: "long",
+    year: "numeric",
+    day: period === "day" ? "numeric" : undefined,
+  });
+  const today = new Date().toDateString();
   return (
-    <section className="m-4 border bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
-        <div className="flex gap-1">
-          <button className={btn} onClick={() => shift(-1)}>
-            <ChevronLeft size={14} />
-          </button>
-          <button className={btn} onClick={() => setCursor(new Date())}>
-            Aujourd’hui
-          </button>
-          <button className={btn} onClick={() => shift(1)}>
-            <ChevronRight size={14} />
-          </button>
-        </div>
-        <b>
-          {cursor.toLocaleDateString("fr-FR", {
-            month: "long",
-            year: "numeric",
-            day: period === "day" ? "numeric" : undefined,
-          })}
-        </b>
-        <div className="flex gap-1">
-          <select
-            className={input}
-            value={direction}
-            onChange={(e) =>
-              setDirection(e.target.value as "departures" | "arrivals")
-            }
-          >
-            <option value="departures">Départs</option>
-            <option value="arrivals">Arrivées</option>
+    <section className="m-5 overflow-hidden rounded-[8px] border border-[#d9dee3] bg-white sm:m-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dfe3e7] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <select className={`${input} w-auto min-w-32`} value={direction} onChange={(e) => setDirection(e.target.value as "departures" | "arrivals")}>
+            <option value="departures">Départs prévus</option>
+            <option value="arrivals">Arrivées prévues</option>
           </select>
-          {(["day", "week", "month"] as const).map((p) => (
-            <button
-              key={p}
-              className={`${btn} ${period === p ? "bg-[#edf8f2]" : ""}`}
-              onClick={() => setPeriod(p)}
-            >
-              {p === "day" ? "Jour" : p === "week" ? "Semaine" : "Mois"}
-            </button>
-          ))}
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button className={btn} onClick={() => setCursor(new Date())}>Aujourd’hui</button>
+          <div className="flex h-9 items-center overflow-hidden rounded-[6px] border border-[#d4d9df] bg-white">
+            <button className="grid h-full w-9 place-items-center hover:bg-[#f4f6f7]" onClick={() => shift(-1)} aria-label="Période précédente"><ChevronLeft size={15} /></button>
+            <b className="min-w-36 border-x border-[#e2e5e8] px-3 text-center text-[13px] font-semibold capitalize">{title}</b>
+            <button className="grid h-full w-9 place-items-center hover:bg-[#f4f6f7]" onClick={() => shift(1)} aria-label="Période suivante"><ChevronRight size={15} /></button>
+          </div>
+          <select className={`${input} w-auto`} value={period} onChange={(event) => setPeriod(event.target.value as "day" | "week" | "month")}>
+            <option value="day">Jour</option><option value="week">Semaine</option><option value="month">Mois</option>
+          </select>
         </div>
       </header>
+      <div className="max-w-full overflow-x-auto">
+      <div className={count === 1 ? "min-w-[520px]" : "min-w-[840px]"}>
+      {count !== 1 && <div className="grid grid-cols-7 border-b border-[#dfe3e7] bg-[#fafbfc]">
+        {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => <div key={day} className="border-r border-[#e2e6e9] px-3 py-2.5 text-center text-[11px] font-semibold text-[#56616d] last:border-r-0">{day}</div>)}
+      </div>}
       <div className={`grid ${count === 1 ? "grid-cols-1" : "grid-cols-7"}`}>
         {days.map((d) => {
           const list = items.filter((x) => {
@@ -409,19 +398,16 @@ function Calendar({
           return (
             <div
               key={d.toISOString()}
-              className={`min-h-36 border-b border-r p-2 ${period === "month" && d.getMonth() !== cursor.getMonth() ? "bg-[#fafafa] text-[#a1a7ae]" : ""}`}
+              className={`min-h-32 border-b border-r border-[#e2e6e9] p-2.5 last:border-r-0 ${period === "month" && d.getMonth() !== cursor.getMonth() ? "bg-[#fafbfc] text-[#9aa3ad]" : "bg-white"}`}
             >
-              <b className="text-[11px]">
-                {d.toLocaleDateString("fr-FR", {
-                  weekday: "short",
-                  day: "numeric",
-                })}
-              </b>
+              <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[5px] px-1 text-[11px] font-medium ${d.toDateString() === today ? "bg-[#dff8eb] text-[#087a46]" : ""}`}>
+                {period === "day" ? d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" }) : d.getDate()}
+              </span>
               {list.map((x) => (
                 <button
                   key={x.id}
                   onClick={() => select(x)}
-                  className="mt-2 block w-full rounded bg-[#edf8f2] px-2 py-1.5 text-left text-[11px]"
+                  className="mt-1.5 block w-full rounded-[5px] border-l-2 border-[#12c76f] bg-[#eef9f3] px-2 py-1.5 text-left text-[11px] text-[#26332d] hover:bg-[#e2f5eb]"
                 >
                   <b>
                     {new Date(x[field]!).toLocaleTimeString("fr-FR", {
@@ -430,14 +416,16 @@ function Calendar({
                     })}
                   </b>{" "}
                   {x.route_name}
-                  <small className="block">
-                    {x.service_name} · {labels[x.status]}
+                  <small className="mt-0.5 block truncate text-[#64716a]">
+                    {x.service_name} · {labels[x.status] || x.status}
                   </small>
                 </button>
               ))}
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
     </section>
   );

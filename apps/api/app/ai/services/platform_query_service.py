@@ -22,6 +22,7 @@ from app.pricing_engine.repository import catalog as pricing_catalog, quote as p
 from app.reports.repository import dashboard as reports_dashboard
 from app.permissions.services.permission_service import assert_permission
 from app.routes_services.repository import list_all, route_listing
+from app.service_catalog.repository import recommend as recommend_services
 from app.tracking.repository import tracking_detail, list_alerts as list_tracking_alerts
 from app.warehouses.repository import list_warehouses
 
@@ -33,6 +34,7 @@ PERMISSIONS={"clients.search":"clients.read","packages.list":"packages.read","pa
     "shipments.list":"shipments.read","pickups.list":"pickups.read","finance.list":"finance.read",
     "followups.list":"followups.read","broadcasts.list":"broadcasts.read","knowledge.search":"knowledge.read"}
 PERMISSIONS["operations.overview"] = "analytics.read"
+PERMISSIONS["services.recommend"] = "services.read"
 WHATSAPP_CAPABILITIES={"packages.list","packages.search","dossiers.list","routes.list","services.list",
                        "warehouses.list","pricing.quote","pricing.clarify","departures.list","knowledge.search"}
 
@@ -110,6 +112,50 @@ def _pricing_answer(org_id: str, message: str, selected: dict | None,
         "priced_at":datetime.now(timezone.utc),"freeze":False},"ai-assistant")
     breakdown="\n".join(f"• {x.get('label')}: {x.get('amount')} {result['currency']}" for x in result.get("breakdown",[]))
     return {"content":f"Tarif calculé par le moteur officiel : {result['total']} {result['currency']}.\nPoids facturable : {result['chargeable_weight_kg']} kg.\n{breakdown}","tool":"pricing.quote","cards":[]}
+
+
+def _route_service_recommendation(org_id: str, message: str, workspace_id: str | None) -> dict:
+    intent=_intent_text(message)
+    route_data=route_listing(org_id,workspace=workspace_id,limit=100,offset=0)["items"]
+    active=[r for r in route_data if r.get("status") in {"ACTIVE","LIMITED"}]
+    destination_match=re.search(r"\bvers\s+([a-z0-9 -]{2,50})",intent)
+    destination_hint=(destination_match.group(1).strip() if destination_match else "")
+
+    def present(value):
+        normalized=_intent_text(str(value or ""))
+        return bool(normalized and (normalized in intent or (destination_hint and normalized in destination_hint)))
+
+    destination_routes=[r for r in active if present(r.get("destination_city")) or present(r.get("destination_country"))]
+    if not destination_routes:
+        choices=", ".join(dict.fromkeys(str(r.get("destination_city") or r.get("destination_country")) for r in active if r.get("destination_city") or r.get("destination_country")))
+        return {"content":"Indiquez une destination desservie par l’agence."+(f" Destinations configurées : {choices}." if choices else " Aucune route active n’est actuellement configurée."),"tool":"services.recommend","cards":[]}
+    origin_routes=[r for r in destination_routes if present(r.get("origin_city")) or present(r.get("origin_country"))]
+    candidates=origin_routes or destination_routes
+    weight_match=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:kg|kilo)",intent)
+    cbm_match=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:cbm|m3)",intent)
+    mode=next((x.upper() for x in ("air","sea","express","road") if x in intent),None)
+    catalog=pricing_catalog(org_id)
+    goods=next((str(c.get("code")) for c in catalog.get("categories",[]) if _intent_text(str(c.get("name") or c.get("code"))) in intent),None)
+    items=[]
+    for route in candidates:
+        recommendation=recommend_services(org_id,{"origin_country":route.get("origin_country"),
+            "destination_country":route.get("destination_country"),"shipping_mode":mode,
+            "goods_category":goods,"weight_kg":float(weight_match.group(1).replace(",",".")) if weight_match else 0,
+            "volume_cbm":float(cbm_match.group(1).replace(",",".")) if cbm_match else 0,
+            "urgency":"URGENT" if "urgent" in intent else None,"budget":None,"workspace_id":workspace_id})
+        items.extend(x for x in recommendation.get("items",[]) if str(x.get("route_id"))==str(route.get("id")))
+    unique={f"{x.get('route_id')}:{x.get('id')}":x for x in items}
+    items=list(unique.values())[:10]
+    if not items:
+        return {"content":"Aucune combinaison Route + Service compatible n’a été trouvée. Vérifiez la marchandise, le poids, le volume ou la disponibilité de la route.","tool":"services.recommend","cards":[]}
+    lines=[];cards=[]
+    for item in items:
+        eta=f"{item.get('eta_min_days') or '?'} à {item.get('eta_max_days') or '?'} jours"
+        pricing="tarif actif" if item.get("pricing_grid_id") else "tarif à configurer ou sur devis"
+        lines.append(f"• {item.get('service_name')} — {item.get('route_name')} — {eta} — {item.get('availability')} — {pricing}")
+        cards.append({"kind":"SERVICE","id":str(item.get("id")),"title":item.get("service_name") or "Service",
+            "subtitle":f"{item.get('route_name')} · {eta} · {pricing}","href":f"/app/services?open={item.get('id')}"})
+    return {"content":"Voici les options compatibles configurées par l’agence :\n"+"\n".join(lines)+"\nLa sélection reste à confirmer avant de créer une opération.","tool":"services.recommend","cards":cards}
 
 
 def answer_platform_query(org_id: str, message: str, client_phone: str | None = None,
@@ -197,6 +243,14 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
         total=sum(counts.values())
         content="Aucune priorité opérationnelle n’est actuellement remontée." if not total else "Voici les priorités opérationnelles détectées :\n"+"\n".join(lines)
         return {"content":content,"tool":"operations.overview","cards":cards[:10]}
+
+    recommendation_requested=any(phrase in intent_text for phrase in (
+        "recommande une route", "recommande un service", "quelle route", "quel service convient",
+        "meilleure option", "comment envoyer", "option pour envoyer",
+    ))
+    if recommendation_requested:
+        _require(org_id,actor_id,channel,"services.recommend")
+        return _route_service_recommendation(org_id,message,workspace_id)
 
     if any(word in normalized for word in ("prix","tarif","combien coute","combien pour","devis")) and not creation:
         _require(org_id,actor_id,channel,"pricing.quote")

@@ -11,6 +11,7 @@ READ_CAPABILITIES = (
     ("tracking", "Tracking", "Lire le statut, la position et l’ETA depuis le suivi officiel.", "tracking.read", "Où se trouve COL-2026-008452 ?"),
     ("routes", "Routes", "Présenter uniquement les routes actives configurées par l’agence.", "routes.read", "Quelles routes vers Kinshasa sont actives ?"),
     ("services", "Services", "Présenter les services réellement disponibles dans l’agence.", "services.read", "Quels services proposons-nous ?"),
+    ("recommendation", "Recommander Route + Service", "Vérifier destination, disponibilité, capacité et restrictions avec les moteurs officiels.", "services.read", "Quelle route et quel service pour 45 kg de Guangzhou vers Kinshasa ?"),
     ("pricing", "Tarification", "Calculer un prix avec le moteur tarifaire, jamais depuis un texte obsolète.", "pricing.simulate", "Calcule 45 kg Guangzhou vers Kinshasa en Air."),
     ("warehouses", "Entrepôts", "Retrouver les adresses et horaires configurés.", "warehouses.read", "Donne l’adresse de l’entrepôt de Guangzhou."),
     ("departures", "Départs", "Consulter le calendrier réel des prochains départs.", "departures.read", "Quels départs sont prévus cette semaine ?"),

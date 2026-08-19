@@ -72,3 +72,26 @@ def test_daily_priorities_merge_operational_sources(monkeypatch):
     assert "2 relance(s)" in result["content"]
     assert "1 alerte(s) colis" in result["content"]
     assert [card["title"] for card in result["cards"]] == ["FUP-1", "COL-1"]
+
+
+def test_route_service_recommendation_uses_configured_engine(monkeypatch):
+    monkeypatch.setattr(platform_query_service,"route_listing",lambda *args,**kwargs:{"items":[{
+        "id":"route-1","status":"ACTIVE","route_name":"Guangzhou → Kinshasa",
+        "origin_country":"Chine","origin_city":"Guangzhou","destination_country":"RDC","destination_city":"Kinshasa",
+    }]})
+    monkeypatch.setattr(platform_query_service,"pricing_catalog",lambda _org:{"categories":[{"code":"ELECTRONICS","name":"Electronics"}]})
+    captured={}
+    monkeypatch.setattr(platform_query_service,"recommend_services",lambda _org,payload: captured.update(payload) or {"items":[{
+        "id":"service-1","route_id":"route-1","service_name":"Air Cargo","route_name":"Guangzhou → Kinshasa",
+        "eta_min_days":8,"eta_max_days":12,"availability":"AVAILABLE","pricing_grid_id":"grid-1",
+    }]})
+
+    result=platform_query_service._route_service_recommendation(
+        "agency-a","Quelle route pour 45 kg Electronics de Guangzhou vers Kinshasa en Air ?",None
+    )
+
+    assert captured["weight_kg"]==45
+    assert captured["goods_category"]=="ELECTRONICS"
+    assert captured["shipping_mode"]=="AIR"
+    assert result["tool"]=="services.recommend"
+    assert result["cards"][0]["title"]=="Air Cargo"

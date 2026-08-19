@@ -4,6 +4,7 @@ from app.permissions.services.permission_service import list_permissions_for_use
 
 
 READ_CAPABILITIES = (
+    ("overview", "Pilotage de l’agence", "Résumer les volumes et faire remonter les relances, alertes et blocages prioritaires.", "analytics.read", "Que dois-je traiter aujourd’hui ?"),
     ("clients", "Clients", "Rechercher et identifier un client sans créer de doublon.", "clients.read", "Est-ce qu’un client nommé Bawaba existe ?"),
     ("dossiers", "Dossiers", "Consulter les dossiers d’un client et leur état réel.", "dossiers.read", "Montre les dossiers de ce client."),
     ("packages", "Colis", "Lister les colis et consulter leur situation opérationnelle.", "packages.read", "Montre les colis enregistrés de ce client."),

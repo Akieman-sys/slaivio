@@ -1,12 +1,14 @@
 """Read-only transversal tools used by the SLAIVIO conversational engine."""
 
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from app.ai.repositories.copilot_context_repository import find_client_by_phone
 from app.ai.services.dialogue_validation import normalize_text
 from app.clients.repository import list_clients
 from app.db.dossier_repository import list_dossiers
+from app.db.dossier_alert_repository import list_dossier_alerts
 from app.db.batch_repository import list_batches
 from app.db.broadcast_repository import dashboard as broadcast_dashboard
 from app.db.followup_repository import followup_dashboard
@@ -14,12 +16,13 @@ from app.departures.repository import listing as departure_listing
 from app.expeditions.repository import list_expeditions
 from app.finance.repository import list_documents as list_finance_documents, stats as finance_stats
 from app.knowledge.repository import search as search_knowledge
-from app.packages.repository import list_packages
+from app.packages.repository import list_packages, package_alerts
 from app.pickups.repository import queue as pickup_queue
 from app.pricing_engine.repository import catalog as pricing_catalog, quote as pricing_quote
+from app.reports.repository import dashboard as reports_dashboard
 from app.permissions.services.permission_service import assert_permission
 from app.routes_services.repository import list_all, route_listing
-from app.tracking.repository import tracking_detail
+from app.tracking.repository import tracking_detail, list_alerts as list_tracking_alerts
 from app.warehouses.repository import list_warehouses
 
 
@@ -29,8 +32,15 @@ PERMISSIONS={"clients.search":"clients.read","packages.list":"packages.read","pa
     "pricing.clarify":"pricing.simulate","departures.list":"departures.read","batches.list":"batches.read",
     "shipments.list":"shipments.read","pickups.list":"pickups.read","finance.list":"finance.read",
     "followups.list":"followups.read","broadcasts.list":"broadcasts.read","knowledge.search":"knowledge.read"}
+PERMISSIONS["operations.overview"] = "analytics.read"
 WHATSAPP_CAPABILITIES={"packages.list","packages.search","dossiers.list","routes.list","services.list",
                        "warehouses.list","pricing.quote","pricing.clarify","departures.list","knowledge.search"}
+
+
+def _intent_text(value: str) -> str:
+    value=re.sub(r"[’']"," ",value)
+    value=unicodedata.normalize("NFKD",value.lower()).encode("ascii","ignore").decode("ascii")
+    return " ".join(re.sub(r"[^a-z0-9]+"," ",value).split())
 
 
 def _require(org_id: str, actor_id: str | None, channel: str, capability: str):
@@ -107,6 +117,7 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
                           channel: str = "INTERNAL") -> dict | None:
     """Return an immediate tenant-scoped answer, or None for action workflows."""
     normalized = normalize_text(message)
+    intent_text = _intent_text(message)
     selected = _selected_client(org_id, client_phone)
     lookup_words = ("trouve", "cherche", "recherche", "affiche", "montre", "liste", "existe", "enregistre", "enregistré")
     if re.search(r"\bCOL-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("marque","passe","change","mets")):
@@ -124,6 +135,66 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
         return {"content": f"J’ai trouvé {len(items)} client(s) correspondant(s) : {summary}.", "tool":"clients.search", "cards":cards}
 
     creation = any(word in normalized for word in ("cree", "creer", "prepare", "ajoute", "nouveau"))
+
+    overview_requested = any(phrase in intent_text for phrase in (
+        "resume de l agence", "resume l agence", "situation de l agence", "situation aujourd hui",
+        "vue d ensemble", "activite aujourd hui", "activite de l agence", "indicateurs de l agence",
+        "rapport de l agence", "bilan de l agence",
+    ))
+    if overview_requested:
+        _require(org_id,actor_id,channel,"operations.overview")
+        data=reports_dashboard(org_id)
+        kpis=data.get("kpis") or {}; finance=data.get("finance") or []
+        lines=[
+            f"• {kpis.get('clients',0)} nouveaux clients",
+            f"• {kpis.get('dossiers',0)} dossiers créés",
+            f"• {kpis.get('packages',0)} colis reçus, pour {kpis.get('weight_kg',0):g} kg",
+            f"• {kpis.get('shipments',0)} expéditions créées",
+            f"• {kpis.get('pickups',0)} retraits enregistrés",
+        ]
+        if finance:
+            outstanding=" · ".join(f"{row.get('outstanding',0):g} {row.get('currency') or ''} à recevoir" for row in finance)
+            lines.append(f"• {outstanding}")
+        cards=[
+            {"kind":"REPORT","id":"operations","title":"Rapports & analytics","subtitle":f"Période du {data['period']['start']} au {data['period']['end']}","href":"/app/reports"},
+            {"kind":"PACKAGE","id":"packages","title":"Colis","subtitle":f"{kpis.get('packages',0)} sur la période","href":"/app/packages"},
+            {"kind":"SHIPMENT","id":"shipments","title":"Expéditions","subtitle":f"{kpis.get('shipments',0)} sur la période","href":"/app/shipments"},
+        ]
+        return {"content":"Voici le bilan opérationnel des 30 derniers jours :\n"+"\n".join(lines),"tool":"operations.overview","cards":cards}
+
+    priorities_requested = any(phrase in intent_text for phrase in (
+        "que dois je traiter", "a traiter aujourd hui", "priorites du jour", "priorite du jour",
+        "urgences du jour", "blocages de l agence", "problemes a traiter", "actions prioritaires",
+    ))
+    if priorities_requested:
+        _require(org_id,actor_id,channel,"operations.overview")
+        followups=followup_dashboard(org_id,date_scope="TODAY",page=1,page_size=10)
+        package_issues=package_alerts(org_id,status="OPEN")
+        dossier_issues=list_dossier_alerts(org_id)
+        tracking_issues=list_tracking_alerts(org_id,status="OPEN")
+        ready_pickups=pickup_queue(org_id,status="READY",page=1,page_size=10)
+        counts={
+            "relances": followups["pagination"]["total"], "colis": len(package_issues),
+            "dossiers": len(dossier_issues), "tracking": len(tracking_issues),
+            "retraits": ready_pickups["pagination"]["total"],
+        }
+        cards=[]
+        for item in followups.get("items",[])[:3]:
+            cards.append(_card("FOLLOWUP",item,item.get("reference") or "Relance",item.get("reason") or "À traiter",f"/app/followups?open={item['id']}"))
+        for item in package_issues[:3]:
+            cards.append({"kind":"PACKAGE","id":str(item.get("package_id") or item.get("id")),"title":item.get("package_reference") or "Alerte colis","subtitle":item.get("message") or item.get("alert_type") or "À vérifier","href":f"/app/packages?open={item.get('package_id')}"})
+        for item in dossier_issues[:2]:
+            cards.append({"kind":"DOSSIER","id":str(item.get("dossier_id")),"title":item.get("dossier_reference") or "Alerte dossier","subtitle":item.get("title") or item.get("message") or "À vérifier","href":f"/app/dossiers?open={item.get('dossier_id')}"})
+        lines=[
+            f"• {counts['relances']} relance(s) prévues aujourd’hui",
+            f"• {counts['colis']} alerte(s) colis ouverte(s)",
+            f"• {counts['dossiers']} alerte(s) dossier active(s)",
+            f"• {counts['tracking']} incident(s) de suivi ouvert(s)",
+            f"• {counts['retraits']} retrait(s) prêt(s)",
+        ]
+        total=sum(counts.values())
+        content="Aucune priorité opérationnelle n’est actuellement remontée." if not total else "Voici les priorités opérationnelles détectées :\n"+"\n".join(lines)
+        return {"content":content,"tool":"operations.overview","cards":cards[:10]}
 
     if any(word in normalized for word in ("prix","tarif","combien coute","combien pour","devis")) and not creation:
         _require(org_id,actor_id,channel,"pricing.quote")

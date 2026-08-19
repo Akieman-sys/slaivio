@@ -1,4 +1,5 @@
 from app.ai.services import capability_catalog
+from app.ai.services import platform_query_service
 
 
 def test_capability_catalog_only_exposes_authorized_features(monkeypatch):
@@ -26,3 +27,48 @@ def test_capability_catalog_hides_actions_without_execution_permission(monkeypat
 
     assert [item["id"] for item in result["consultations"]] == ["clients"]
     assert result["actions"] == []
+
+
+def test_operational_overview_uses_real_reporting_data(monkeypatch):
+    monkeypatch.setattr(platform_query_service, "_require", lambda *args: None)
+    monkeypatch.setattr(
+        platform_query_service,
+        "reports_dashboard",
+        lambda _org_id: {
+            "period": {"start": "2026-07-21", "end": "2026-08-19"},
+            "kpis": {"clients": 4, "dossiers": 7, "packages": 12, "weight_kg": 825.5, "shipments": 3, "pickups": 2},
+            "finance": [{"currency": "USD", "outstanding": 640}],
+        },
+    )
+
+    result = platform_query_service.answer_platform_query(
+        "agency-a", "Donne-moi une vue d’ensemble de l’agence", actor_id="owner-a"
+    )
+
+    assert result["tool"] == "operations.overview"
+    assert "12 colis" in result["content"]
+    assert "640 USD" in result["content"]
+    assert result["cards"][0]["href"] == "/app/reports"
+
+
+def test_daily_priorities_merge_operational_sources(monkeypatch):
+    monkeypatch.setattr(platform_query_service, "_require", lambda *args: None)
+    monkeypatch.setattr(platform_query_service, "followup_dashboard", lambda *args, **kwargs: {
+        "pagination": {"total": 2}, "items": [{"id": "f-1", "reference": "FUP-1", "reason": "Paiement"}]
+    })
+    monkeypatch.setattr(platform_query_service, "package_alerts", lambda *args, **kwargs: [
+        {"id": "a-1", "package_id": "p-1", "package_reference": "COL-1", "message": "Poids manquant"}
+    ])
+    monkeypatch.setattr(platform_query_service, "list_dossier_alerts", lambda *args, **kwargs: [])
+    monkeypatch.setattr(platform_query_service, "list_tracking_alerts", lambda *args, **kwargs: [])
+    monkeypatch.setattr(platform_query_service, "pickup_queue", lambda *args, **kwargs: {
+        "pagination": {"total": 1}, "items": []
+    })
+
+    result = platform_query_service.answer_platform_query(
+        "agency-a", "Que dois-je traiter aujourd’hui ?", actor_id="manager-a"
+    )
+
+    assert "2 relance(s)" in result["content"]
+    assert "1 alerte(s) colis" in result["content"]
+    assert [card["title"] for card in result["cards"]] == ["FUP-1", "COL-1"]

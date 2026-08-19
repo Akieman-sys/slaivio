@@ -92,7 +92,7 @@ def test_package_status_change_is_controlled_and_delivery_needs_proof():
 def test_transversal_read_tools_are_checked_before_action_workflows():
     service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
     tools=(ROOT/"apps/api/app/ai/services/platform_query_service.py").read_text(encoding="utf-8")
-    for capability in ("clients.search","packages.list","dossiers.list","tracking.read","routes.list","services.list","warehouses.list",
+    for capability in ("operations.overview","clients.search","packages.list","dossiers.list","tracking.read","routes.list","services.list","warehouses.list",
                        "pricing.quote","departures.list","batches.list","shipments.list","pickups.list","finance.list",
                        "followups.list","broadcasts.list","knowledge.search"):
         assert capability in tools

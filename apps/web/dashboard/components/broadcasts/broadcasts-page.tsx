@@ -1,12 +1,14 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Plus, Search } from "lucide-react";
+import { ChevronRight, Download, Plus } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationTable } from "@/components/ui/operation-primitives";
+import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { listClients } from "@/services/clients";
 import {
   campaignAction,
@@ -19,11 +21,11 @@ import {
   type Campaign,
 } from "@/services/broadcasts";
 const btn =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium hover:bg-[#f5f6f7]",
   primary =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] bg-[#12c76f] px-4 text-[13px] font-medium text-white hover:bg-[#0fb766]",
   field =
-    "h-9 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]";
+    "h-9 rounded-[6px] border border-[#d2d7dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f] focus:ring-1 focus:ring-[#b9e5d2]";
 const tabs = [
   ["", "Toutes"],
   ["DRAFT", "Brouillons"],
@@ -61,16 +63,21 @@ export function BroadcastsPage() {
     [selected, setSelected] = useState<Campaign | null>(null),
     [modal, setModal] = useState<"campaign" | "audience" | null>(null),
     [allMetrics, setAllMetrics] = useState(false),
+    [loading, setLoading] = useState(true),
     [resources, setResources] = useState<Record<string, unknown>>({}),
     [error, setError] = useState("");
   const load = useCallback(
-    () =>
-      listCampaigns({ q, status, channel })
+    () => {
+      setLoading(true);
+      setError("");
+      return listCampaigns({ q, status, channel })
         .then((r) => {
           setItems(r.items);
           setStats(r.stats);
         })
-        .catch(() => setError("Campaign Engine indisponible.")),
+        .catch(() => setError("Le centre de campagnes est indisponible."))
+        .finally(() => setLoading(false));
+    },
     [q, status, channel],
   );
   useEffect(() => {
@@ -109,9 +116,9 @@ export function BroadcastsPage() {
         description="Créez, programmez et analysez vos campagnes WhatsApp et email auprès de vos clients et prospects."
         actions={
           <>
-            <button className={btn} onClick={() => exportCampaigns(items)}>
+            <OperationButton onClick={() => exportCampaigns(items)}>
               <Download size={14} className="inline" /> Exporter
-            </button>
+            </OperationButton>
             <details className="relative">
               <summary className={`${btn} cursor-pointer list-none`}>
                 Plus
@@ -131,53 +138,41 @@ export function BroadcastsPage() {
                 </button>
               </div>
             </details>
-            <button className={primary} onClick={() => setModal("campaign")}>
+            <OperationButton variant="primary" onClick={() => setModal("campaign")}>
               <Plus size={14} className="inline" /> Nouvelle campagne
-            </button>
+            </OperationButton>
           </>
         }
       />
-      <section className="bg-white px-5 py-4">
-        <div
-          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
-        >
-          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
-            <button
-              type="button"
-              onClick={() => setAllMetrics((current) => !current)}
-              key={l}
-              className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
-            >
-              <span className="text-[12px] text-[#6b7580]">{l}</span>
-              <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-                {v || 0}
-              </b>
-            </button>
+      <OperationMetrics>
+        <OperationMetricGrid className={allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}>
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v]) => (
+            <OperationMetric key={String(l)} label={String(l)} value={v || 0} />
           ))}
-        </div>
+        </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
           className="mt-3 text-[11px] font-medium text-[#5b52c7]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
-      </section>
+      </OperationMetrics>
       <OperationTabs>
         <div className="flex items-end gap-1">
             {tabs.slice(0, 4).map(([v, l]) => (
-              <button
+              <OperationTab
                 key={v}
                 onClick={() => setStatus(v)}
-                className={`h-10 border-b-2 px-3 text-[12px] ${status === v ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
+                active={status === v}
               >
                 {l}
-              </button>
+              </OperationTab>
             ))}
             <select
               aria-label="Autres vues"
               value={tabs.slice(4).some(([v]) => v === status) ? status : ""}
               onChange={(e) => setStatus(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
             >
               <option value="">Plus</option>
               {tabs.slice(4).map(([v, l]) => (
@@ -188,17 +183,7 @@ export function BroadcastsPage() {
             </select>
         </div>
       </OperationTabs>
-      <div className="flex gap-2 border-b bg-white p-4">
-        <label className="flex h-9 flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-          <Search size={14} />
-          <input
-            className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Rechercher une campagne..."
-          />
-        </label>
-        <select
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une campagne…" />} filters={<select
           className={`${field} w-44`}
           value={channel}
           onChange={(event) => setChannel(event.target.value)}
@@ -211,10 +196,9 @@ export function BroadcastsPage() {
               {channelLabels[value] || value}
             </option>
           ))}
-        </select>
-      </div>
-      {error && <p className="m-4 bg-red-50 p-3 text-red-700">{error}</p>}
-      <OperationTable className="min-h-[460px]">
+        </select>} />
+      {error && <ErrorState title="Campagnes indisponibles" description={error} retry={load} />}
+      {loading ? <TableSkeleton rows={7} columns={7} label="Chargement des campagnes…" /> : items.length ? <OperationTable className="min-h-[460px]">
         <table className="w-full min-w-[980px] border-collapse bg-white text-left text-[13px]">
           <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
             <tr className="border-b border-[#e6e9ee]">
@@ -270,12 +254,7 @@ export function BroadcastsPage() {
             ))}
           </tbody>
         </table>
-        {!items.length && (
-          <div className="flex h-[360px] items-center justify-center text-[13px] text-[#64748b]">
-            Aucune campagne dans cette vue.
-          </div>
-        )}
-      </OperationTable>
+      </OperationTable> : <EmptyState title="Aucune campagne dans cette vue" description="Créez une campagne ou modifiez vos filtres pour afficher les communications de l’agence." />}
       {selected && (
         <OperationDrawer
           open
@@ -511,12 +490,7 @@ function AudienceModal({
   return (
     <Modal title="Créer un groupe de destinataires" close={close}>
       <form className="grid gap-3" onSubmit={submit}>
-        <input
-          required
-          name="name"
-          className={field}
-          placeholder="Nom interne, ex. Clients Air Cargo récents"
-        />
+        <label className="text-[12px] text-[#5f6873]">Nom du groupe de destinataires<input required name="name" className={`${field} mt-1 w-full`} placeholder="Ex. Clients Air Cargo récents" /></label>
         <label className="text-[12px] text-[#5f6873]">
           Pays des clients
           <select name="country" className={`${field} mt-1 w-full`}>
@@ -528,16 +502,8 @@ function AudienceModal({
             ))}
           </select>
         </label>
-        <select name="language" className={field}>
-          <option value="">Toutes les langues</option>
-          <option>FR</option>
-          <option>EN</option>
-        </select>
-        <select name="status" className={field}>
-          <option value="">Tous les clients autorisés</option>
-          <option value="ACTIVE">Clients avec activité</option>
-          <option value="LEAD">Nouveaux contacts</option>
-        </select>
+        <label className="text-[12px] text-[#5f6873]">Langue préférée des clients<select name="language" className={`${field} mt-1 w-full`}><option value="">Toutes les langues</option><option value="FR">Français</option><option value="EN">Anglais</option></select></label>
+        <label className="text-[12px] text-[#5f6873]">Relation actuelle avec l’agence<select name="status" className={`${field} mt-1 w-full`}><option value="">Tous les clients autorisés</option><option value="ACTIVE">Clients ayant une opération en cours</option><option value="LEAD">Nouveaux contacts à convertir</option></select></label>
         {error && (
           <p className="rounded-md bg-red-50 p-3 text-[12px] text-red-700">
             {error}

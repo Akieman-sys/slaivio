@@ -17,6 +17,8 @@ import Link from "next/link";
 import { listClients, type ClientRecord } from "@/services/clients";
 
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationTab } from "@/components/ui/operation-controls";
 import {
   approveCopilotWorkflow,
   getCopilotEscalations,
@@ -185,21 +187,16 @@ export function CopilotPage() {
 
   return (
     <div className="flex h-[calc(100dvh-56px)] min-h-[620px] flex-col overflow-hidden bg-[#f7f7f6] text-[#282c30]">
-      <header className="border-b border-[#dfe1e3] bg-white px-5 py-3.5 sm:px-6">
-        <div className="flex min-h-[44px] items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2"><Sparkles size={18} className="text-[#087a46]" /><h1 className="text-[20px] font-semibold">Assistant Slaivio</h1></div>
-            <p className="mt-1 text-[12px] text-[#69717a]">Préparez les opérations, contrôlez les actions et reprenez les conversations sensibles.</p>
-          </div>
-        </div>
-      </header>
-
-      <nav className="flex h-11 items-end gap-5 border-b border-[#dfe1e3] bg-white px-5 sm:px-6" aria-label="Vues de l’assistant">
-        <TabButton active={tab === "conversation"} onClick={() => setTab("conversation")}>Conversation</TabButton>
-        <TabButton active={tab === "capabilities"} onClick={() => setTab("capabilities")}>Ce que je peux faire</TabButton>
-        <TabButton active={tab === "actions"} onClick={() => setTab("actions")} count={workflows.length}>Actions à valider</TabButton>
-        <TabButton active={tab === "escalations"} onClick={() => setTab("escalations")} count={escalations.length}>Escalades</TabButton>
-      </nav>
+      <OperationPageHeader
+        title="Assistant Slaivio"
+        description="Interrogez les données de l’agence, préparez une opération et gardez le contrôle avant toute action sensible."
+        tabs={<>
+          <OperationTab active={tab === "conversation"} onClick={() => setTab("conversation")}>Conversation</OperationTab>
+          <OperationTab active={tab === "capabilities"} onClick={() => setTab("capabilities")}>Ce que je peux faire</OperationTab>
+          <OperationTab active={tab === "actions"} onClick={() => setTab("actions")} count={workflows.length}>Actions à valider</OperationTab>
+          <OperationTab active={tab === "escalations"} onClick={() => setTab("escalations")} count={escalations.length}>Escalades</OperationTab>
+        </>}
+      />
 
       {error && <div className="mx-5 mt-4 flex items-center border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700"><ShieldAlert size={15} className="mr-2" />{error}<button className="ml-auto" onClick={() => setError("")} aria-label="Fermer"><X size={14} /></button></div>}
 
@@ -214,12 +211,12 @@ export function CopilotPage() {
             </div>
             <div className="border-t border-[#dfe1e3] bg-[#fafafa] p-4 sm:px-8">
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <label htmlFor="client-phone" className="text-[11px] font-medium text-[#60676f]">Travailler pour</label>
-                <select id="client-phone" value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} className="h-8 min-w-64 rounded-[5px] border border-[#d3d6d9] bg-white px-2 text-[11px] outline-none focus:border-[#16855f]">
+                <label htmlFor="client-phone" className="text-[12px] font-medium text-[#60676f]">Contexte client</label>
+                <select id="client-phone" value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} className="h-9 min-w-64 rounded-[6px] border border-[#d3d6d9] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]">
                   <option value="">Aucun client — action générale</option>
                   {clients.map((client)=><option key={client.id} value={client.whatsapp_phone||client.phone||""}>{client.display_name||client.company_name||client.name||client.phone||"Client"}{client.phone?` · ${client.phone}`:""}</option>)}
                 </select>
-                <span className="text-[10px] text-[#858b92]">À choisir seulement si la demande concerne le dossier, les colis ou le suivi d’un client.</span>
+                <span className="text-[11px] text-[#858b92]">Choisissez une fiche existante seulement si votre demande concerne ce client.</span>
               </div>
               <div className="flex items-end gap-2 rounded-[7px] border border-[#cfd3d6] bg-white p-2 focus-within:border-[#16855f] focus-within:ring-1 focus-within:ring-[#16855f]/15">
                 <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} rows={2} placeholder="Décrivez l’action à effectuer…" className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13px] leading-5 outline-none" />
@@ -245,10 +242,6 @@ export function CopilotPage() {
       {tab === "escalations" && <ListPanel title="Escalades IA" description="Demandes sensibles ou ambiguës qui attendent une réponse de l’agence.">{escalations.length ? escalations.map((item) => <EscalationRow key={item.id} escalation={item} />) : <EmptyLine text="Aucune escalade à traiter." />}</ListPanel>}
     </div>
   );
-}
-
-function TabButton({ active, onClick, count, children }: { active: boolean; onClick: () => void; count?: number; children: ReactNode }) {
-  return <button type="button" onClick={onClick} className={`flex h-10 items-center border-b-2 px-1 text-[12px] font-medium ${active ? "border-[#087a46] text-[#075f39]" : "border-transparent text-[#687079] hover:text-[#282c30]"}`}>{children}{count ? <span className="ml-2 rounded-full bg-[#edf0ef] px-1.5 py-0.5 text-[9px]">{count}</span> : null}</button>;
 }
 
 function MessageBubble({ message }: { message: CopilotMessage }) {

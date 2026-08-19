@@ -24,11 +24,13 @@ import {
 } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
+  OperationMetrics,
   OperationSearch,
   OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   addKnowledgeRelation,
@@ -66,9 +68,9 @@ import {
   type KnowledgeStats,
 } from "@/services/knowledge";
 const btn =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#d2d7dc] bg-white px-3 text-[12px] font-medium hover:bg-[#f5f6f7]",
+    "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium text-[#30363d] hover:bg-[#f6f7f7]",
   primary =
-    "inline-flex h-9 items-center gap-2 rounded-md bg-[#12b866] px-4 text-[12px] font-semibold text-white hover:bg-[#0da65b]",
+    "inline-flex h-9 items-center gap-2 rounded-[6px] bg-[#12c76f] px-4 text-[13px] font-medium text-white hover:bg-[#0fb766]",
   input =
     "h-9 w-full rounded-md border border-[#d2d7dc] bg-white px-3 text-[13px] outline-none focus:border-[#1688e8]";
 const statusLabels: Record<string, string> = {
@@ -262,44 +264,38 @@ export function KnowledgePage() {
         description="Centralisez les informations utilisées par vos équipes et l’IA Slaivio, sans dupliquer les données métier."
         actions={
           <>
-            <button className={btn} onClick={load}>
+            <OperationButton onClick={load}>
               <RefreshCcw size={14} />
               Synchroniser
-            </button>
+            </OperationButton>
             <PermissionGuard permission="knowledge.create">
-              <button className={btn} onClick={() => setImportOpen(true)}>
+              <OperationButton onClick={() => setImportOpen(true)}>
                 <FileUp size={14} />
                 Importer
-              </button>
-              <button className={primary} onClick={() => setCreateOpen(true)}>
+              </OperationButton>
+              <OperationButton variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus size={15} />
                 Ajouter une connaissance
-              </button>
+              </OperationButton>
             </PermissionGuard>
           </>
         }
       />
-      <section className="bg-white px-5 py-4">
-        <div
-          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-7" : "lg:grid-cols-4"}`}
-        >
+      <OperationMetrics>
+        <OperationMetricGrid className={allMetrics ? "lg:grid-cols-7" : "lg:grid-cols-4"}>
           {cards.slice(0, allMetrics ? 7 : 4).map(([l, v]) => (
-            <Metric key={String(l)} label={String(l)} value={v} />
+            <OperationMetric key={String(l)} label={String(l)} value={v} />
           ))}
-        </div>
+        </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
           className="mt-3 text-[11px] font-medium text-[#5b52c7]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
-      </section>
+      </OperationMetrics>
       <KnowledgeTabs view={view} setView={setView} />
-      {error && (
-        <p className="m-4 border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState title="Base de connaissances indisponible" description={error} retry={load} />}
       {view === "playground" ? (
         <Playground />
       ) : view === "analytics" ? (
@@ -334,9 +330,11 @@ export function KnowledgePage() {
               }
             />
             {loading ? (
-              <LoadingState label="Chargement des connaissances" />
-            ) : (
+              <TableSkeleton rows={7} columns={9} label="Chargement des connaissances…" />
+            ) : filtered.length ? (
               <KnowledgeTable items={filtered} select={choose} />
+            ) : (
+              <EmptyState title="Aucune connaissance dans cette vue" description="Modifiez les filtres ou ajoutez une information validée pour votre agence." />
             )}
           </section>
         </main>
@@ -396,13 +394,13 @@ function KnowledgeTabs({
   return (
     <OperationTabs>
       {primaryViews.map(([key, label]) => (
-        <button
+        <OperationTab
           key={key}
           onClick={() => setView(key)}
-          className={`h-10 shrink-0 border-b-2 px-3 text-[13px] ${view === key ? "border-[#12c76f] font-semibold text-[#067a45]" : "border-transparent text-[#526071] hover:bg-[#f2f4f7]"}`}
+          active={view === key}
         >
           {label}
-        </button>
+        </OperationTab>
       ))}
       <select
         aria-label="Autres vues"
@@ -1869,16 +1867,6 @@ export function KnowledgeAdministration() {
         )}
       </div>
     </section>
-  );
-}
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border-l border-[#eceef1] px-4 py-1 first:border-l-0">
-      <small className="text-[11px] text-[#69727d]">{label}</small>
-      <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-        {value}
-      </b>
-    </div>
   );
 }
 function Badge({ value }: { value: string }) {

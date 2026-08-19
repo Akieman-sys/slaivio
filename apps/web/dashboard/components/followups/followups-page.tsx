@@ -1,11 +1,13 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, Plus, Search, Send } from "lucide-react";
+import { ChevronRight, Download, Plus, Send } from "lucide-react";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { LoadingState } from "@/components/ui/page-state";
+import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationTab } from "@/components/ui/operation-controls";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
 import {
   getReferenceCatalog,
@@ -24,11 +26,11 @@ import {
   type FollowupStats,
 } from "@/services/followups";
 const btn =
-    "inline-flex h-9 items-center gap-2 rounded-md border border-[#d5d9dc] bg-white px-3 text-[12px] font-medium",
+    "inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium",
   primary =
-    "inline-flex h-9 items-center gap-2 rounded-md bg-[#16855f] px-3 text-[12px] font-semibold text-white",
+    "inline-flex h-9 items-center gap-2 rounded-[6px] bg-[#12c76f] px-3 text-[13px] font-medium text-white",
   input =
-    "h-9 rounded-md border border-[#d7dbde] bg-white px-3 text-[12px] outline-none";
+    "h-9 rounded-[6px] border border-[#d7dbde] bg-white px-3 text-[13px] outline-none";
 const views = [
   ["all", "Vue d’ensemble", {}],
   ["today", "Aujourd’hui", { date_scope: "TODAY" }],
@@ -140,10 +142,10 @@ export function FollowupsPage() {
         description="Automatisez vos rappels, suivez les réponses et évitez les paiements, dossiers ou clients oubliés."
         actions={
           <>
-            <button className={btn} onClick={() => download(items)}>
+            <OperationButton onClick={() => download(items)}>
               <Download size={14} />
               Exporter
-            </button>
+            </OperationButton>
             <details className="relative">
               <summary className={`${btn} cursor-pointer list-none`}>
                 Plus
@@ -163,54 +165,42 @@ export function FollowupsPage() {
                 </button>
               </div>
             </details>
-            <button className={primary} onClick={() => setCreate(true)}>
+            <OperationButton variant="primary" onClick={() => setCreate(true)}>
               <Plus size={14} />
               Nouvelle relance
-            </button>
+            </OperationButton>
           </>
         }
       />
-      <section className="bg-white px-5 py-4">
-        <div
-          className={`grid grid-cols-2 ${allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}`}
-        >
-          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v], index) => (
-            <button
-              type="button"
-              onClick={() => setAllMetrics((current) => !current)}
-              className={`px-4 py-1 text-left ${index ? "border-l border-[#eceef1]" : ""}`}
-              key={l}
-            >
-              <span className="text-[12px] text-[#6b7580]">{l}</span>
-              <b className="mt-1 block text-[24px] font-medium tracking-[-.035em]">
-                {v}
-              </b>
-            </button>
+      <OperationMetrics>
+        <OperationMetricGrid className={allMetrics ? "lg:grid-cols-8" : "lg:grid-cols-4"}>
+          {cards.slice(0, allMetrics ? 8 : 4).map(([l, v]) => (
+            <OperationMetric key={String(l)} label={String(l)} value={v} />
           ))}
-        </div>
+        </OperationMetricGrid>
         <button
           onClick={() => setAllMetrics((current) => !current)}
           className="mt-3 text-[11px] font-medium text-[#5b52c7]"
         >
           {allMetrics ? "Réduire les indicateurs" : "Voir tous les indicateurs"}
         </button>
-      </section>
+      </OperationMetrics>
       <OperationTabs>
         <div className="flex items-end gap-1">
             {views.slice(0, 4).map(([k, l]) => (
-              <button
+              <OperationTab
                 key={k}
                 onClick={() => setView(k)}
-                className={`h-10 whitespace-nowrap border-b-2 px-3 text-[12px] ${view === k ? "border-[#16855f] font-semibold text-[#126744]" : "border-transparent text-[#68717d]"}`}
+                active={view === k}
               >
                 {l}
-              </button>
+              </OperationTab>
             ))}
             <select
               aria-label="Autres vues"
               value={views.slice(4).some(([k]) => k === view) ? view : ""}
               onChange={(e) => setView(e.target.value)}
-              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[12px] text-[#59636e] outline-none"
+              className="mb-1 ml-1 h-8 rounded-md bg-[#f3f4f5] px-2 text-[13px] text-[#59636e] outline-none"
             >
               <option value="">Plus</option>
               {views.slice(4).map(([k, l]) => (
@@ -221,17 +211,7 @@ export function FollowupsPage() {
             </select>
         </div>
       </OperationTabs>
-      <div className="flex gap-2 border-b bg-white p-4">
-        <label className="flex h-9 min-w-[280px] flex-1 items-center rounded-md bg-[#f4f5f6] px-3 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#a9a3f1]">
-          <Search size={14} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="ml-2 flex-1 bg-transparent text-[13px] outline-none"
-            placeholder="Client, téléphone, dossier, facture, colis..."
-          />
-        </label>
-        <select
+      <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Client, téléphone, dossier, facture, colis…" />} filters={<><select
           className={`${input} w-44`}
           value={channel}
           onChange={(event) => setChannel(event.target.value)}
@@ -240,8 +220,7 @@ export function FollowupsPage() {
           <option value="WHATSAPP">WhatsApp</option>
           <option value="IN_APP">Tâches internes</option>
           <option value="PHONE">Appels manuels</option>
-        </select>
-        <select
+        </select><select
           className={`${input} w-40`}
           value={priority}
           onChange={(event) => setPriority(event.target.value)}
@@ -252,17 +231,14 @@ export function FollowupsPage() {
               {label}
             </option>
           ))}
-        </select>
-      </div>
-      {error && (
-        <p className="m-4 border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
-          {error}
-        </p>
-      )}
+        </select></>} />
+      {error && <ErrorState title="Relances indisponibles" description={error} retry={load} />}
       {loading ? (
-        <LoadingState label="Chargement des relances…" />
-      ) : (
+        <TableSkeleton rows={7} columns={10} label="Chargement des relances…" />
+      ) : items.length ? (
         <Table items={items} open={open} />
+      ) : (
+        <EmptyState title="Aucune relance dans cette vue" description="Les relances correspondant à vos filtres apparaîtront ici." />
       )}{" "}
       {selected && (
         <Detail
@@ -524,14 +500,17 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
               ))}
           </select>
         </label>
-        <select name="type" className={input}>
-          <option value="PAYMENT_DUE">Paiement</option>
-          <option value="QUOTE_FOLLOWUP">Devis</option>
-          <option value="PACKAGE_DROP_REMINDER">Dépôt colis</option>
-          <option value="PICKUP_REMINDER">Retrait</option>
-          <option value="DOCUMENT_MISSING">Document</option>
-          <option value="CLIENT_INACTIVE">Inactivité</option>
-        </select>
+        <label className="text-[12px] text-[#5f6873]">
+          Situation à suivre
+          <select name="type" className={`${input} mt-1 w-full`}>
+            <option value="PAYMENT_DUE">Paiement attendu</option>
+            <option value="QUOTE_FOLLOWUP">Devis sans réponse</option>
+            <option value="PACKAGE_DROP_REMINDER">Colis pas encore déposé</option>
+            <option value="PICKUP_REMINDER">Colis prêt mais non retiré</option>
+            <option value="DOCUMENT_MISSING">Document manquant</option>
+            <option value="CLIENT_INACTIVE">Client sans activité récente</option>
+          </select>
+        </label>
         <label className="text-[12px] text-[#5f6873]">
           Pourquoi relancer ?
           <input
@@ -551,17 +530,17 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
           />
         </label>
         <div className="grid grid-cols-2 gap-2">
-          <select name="channel" className={input}>
-            <option value="WHATSAPP">WhatsApp connecté</option>
-            <option value="IN_APP">Tâche interne pour un agent</option>
-            <option value="PHONE">Appel manuel</option>
-          </select>
-          <select name="priority" className={input}>
-            <option value="NORMAL">Priorité normale</option>
-            <option value="HIGH">Priorité haute</option>
-            <option value="URGENT">Priorité urgente</option>
-            <option value="LOW">Priorité faible</option>
-          </select>
+          <label className="text-[12px] text-[#5f6873]">Comment relancer ?<select name="channel" className={`${input} mt-1 w-full`}>
+              <option value="WHATSAPP">Message WhatsApp</option>
+              <option value="IN_APP">Tâche interne pour un agent</option>
+              <option value="PHONE">Appel manuel à effectuer</option>
+            </select></label>
+          <label className="text-[12px] text-[#5f6873]">Niveau d’urgence<select name="priority" className={`${input} mt-1 w-full`}>
+              <option value="NORMAL">Normale</option>
+              <option value="HIGH">Haute</option>
+              <option value="URGENT">Urgente</option>
+              <option value="LOW">Faible</option>
+            </select></label>
         </div>
         <textarea
           required
@@ -641,19 +620,19 @@ function Rules({ close }: { close: () => void }) {
   }
   return (
     <Modal title="Règles & séquences" close={close}>
-      <div className="mb-4 flex gap-2">
-        <button
-          className={tab === "sequence" ? primary : btn}
+      <div className="operation-tabs mb-4 flex min-h-[42px] items-end gap-1 border-b border-[#d8dce2]">
+        <OperationTab
+          active={tab === "sequence"}
           onClick={() => setTab("sequence")}
         >
           Séquences
-        </button>
-        <button
-          className={tab === "rule" ? primary : btn}
+        </OperationTab>
+        <OperationTab
+          active={tab === "rule"}
           onClick={() => setTab("rule")}
         >
           Règles
-        </button>
+        </OperationTab>
       </div>
       {tab === "sequence" ? (
         <form onSubmit={submitSequence} className="grid gap-2">

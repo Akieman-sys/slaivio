@@ -51,11 +51,13 @@ def dashboard(o,q=None,status=None,page=1,page_size=30):
 def create(o,t,p):
  a,n=actor(t),name(t)
  with engine.begin() as c:
+  code=p.get("batch_code") or f"BAT-{datetime.now().year}-{uuid4().hex[:8].upper()}"
+  existing=c.execute(text("select * from shipment_batches where org_id=:o and batch_code=:code"),{"o":o,"code":code}).mappings().first()
+  if existing:return dict(existing)
   route=c.execute(text("select * from shipping_routes where org_id=:o and id=:r and status in('ACTIVE','LIMITED')"),{"o":o,"r":p["route_id"]}).mappings().first()
   service=c.execute(text("""select s.* from shipping_services s where s.org_id=:o and s.id=:s and s.active and (s.route_id=:r or exists(select 1 from service_route_offerings x where x.org_id=:o and x.service_id=s.id and x.route_id=:r and x.availability in('AVAILABLE','LIMITED')))"""),{"o":o,"s":p["shipping_service_id"],"r":p["route_id"]}).mappings().first()
   if not route:raise HTTPException(422,"route_not_available")
   if not service:raise HTTPException(422,"route_service_mismatch")
-  code=p.get("batch_code") or f"BAT-{datetime.now().year}-{uuid4().hex[:8].upper()}"
   values={**p,"o":o,"a":a,"n":n,"code":code,"oc":route["origin_country"],"oci":route["origin_city"],"dc":route["destination_country"],"dci":route["destination_city"]}
   row=dict(c.execute(text("""insert into shipment_batches(org_id,batch_code,batch_type,workspace_id,route_id,shipping_service_id,origin_warehouse_id,destination_office_id,departure_id,route_origin_country,route_origin_city,route_destination_country,route_destination_city,status,cutoff_at,planned_departure_at,capacity_weight_kg,capacity_cbm,capacity_packages,capacity_value,near_capacity_percent,responsible_id,responsible_name,notes,created_by_id,created_by_name)
   values(:o,:code,:batch_type,:workspace_id,:route_id,:shipping_service_id,:origin_warehouse_id,:destination_office_id,:departure_id,:oc,:oci,:dc,:dci,'DRAFT',:cutoff_at,:planned_departure_at,:capacity_weight_kg,:capacity_cbm,:capacity_packages,:capacity_value,:near_capacity_percent,:responsible_id,:responsible_name,:notes,:a,:n) returning *"""),values).mappings().one())
@@ -154,8 +156,14 @@ def scan(o,b,value,t):
 
 def convert(o,b,t):
  data=detail(o,b);batch=data["batch"]
+ if batch["status"]=="CONVERTED_TO_SHIPMENT" and batch.get("converted_expedition_id"):
+  with engine.connect() as c:
+   existing=c.execute(text("select * from cargo_expeditions where org_id=:o and id=:e"),{"o":o,"e":batch["converted_expedition_id"]}).mappings().first()
+  if existing:return dict(existing)
  if batch["status"]!="READY_FOR_SHIPMENT":raise HTTPException(409,"batch_not_ready")
- expedition=create_expedition(o,actor(t),{"title":batch["batch_code"],"status":"PREPARING","mode":batch.get("shipping_mode") or "AIR","service_type":batch.get("service_name"),"route_id":str(batch["route_id"]),"shipping_service_id":str(batch["shipping_service_id"]),"origin_warehouse_id":str(batch["origin_warehouse_id"]) if batch.get("origin_warehouse_id") else None,"destination_office_id":str(batch["destination_office_id"]) if batch.get("destination_office_id") else None,"departure_id":str(batch["departure_id"]) if batch.get("departure_id") else None,"batch_reference":batch["batch_code"],"planned_departure_at":batch.get("planned_departure_at"),"eta_at":batch.get("eta_at"),"owner_id":batch.get("responsible_id"),"owner_name":batch.get("responsible_name")})
+ with engine.connect() as c:
+  existing=c.execute(text("select * from cargo_expeditions where org_id=:o and batch_reference=:ref and deleted_at is null order by created_at limit 1"),{"o":o,"ref":batch["batch_code"]}).mappings().first()
+ expedition=dict(existing) if existing else create_expedition(o,actor(t),{"title":batch["batch_code"],"status":"PREPARING","mode":batch.get("shipping_mode") or "AIR","service_type":batch.get("service_name"),"route_id":str(batch["route_id"]),"shipping_service_id":str(batch["shipping_service_id"]),"origin_warehouse_id":str(batch["origin_warehouse_id"]) if batch.get("origin_warehouse_id") else None,"destination_office_id":str(batch["destination_office_id"]) if batch.get("destination_office_id") else None,"departure_id":str(batch["departure_id"]) if batch.get("departure_id") else None,"batch_reference":batch["batch_code"],"planned_departure_at":batch.get("planned_departure_at"),"eta_at":batch.get("eta_at"),"owner_id":batch.get("responsible_id"),"owner_name":batch.get("responsible_name")})
  for package in data["packages"]:
   add_package_to_expedition(o,expedition["id"],str(package["package_id"]),actor(t))
  with engine.begin() as c:

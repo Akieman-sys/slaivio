@@ -32,6 +32,8 @@ ACTION_CAPABILITIES = (
     ("create_followup", "Programmer une relance", "Prépare une relance opérationnelle WhatsApp avec date et motif.", "followups.create", "Relance ce client demain pour son colis."),
     ("manage_followup", "Gérer une relance", "Reporter, mettre en pause, reprendre, terminer ou escalader une relance existante.", "followups.update", "Reporte FUP-2026-001284 à demain 16 h."),
     ("create_departure", "Planifier un départ", "Sélectionne une route et un service existants, puis prépare un départ à confirmer.", "departures.manage", "Planifie un départ Air Guangzhou vers Kinshasa vendredi à 18 h."),
+    ("create_batch", "Créer un batch", "Utilise une route, un service et un entrepôt déjà configurés pour préparer un groupage contrôlé.", "batches.create", "Crée un batch Air Guangzhou vers Kinshasa."),
+    ("convert_batch", "Créer une expédition depuis un batch", "Convertit uniquement un batch validé et prêt à expédier, sans dupliquer l’expédition.", "batches.convert", "Crée l’expédition depuis BAT-2026-00184."),
 )
 
 

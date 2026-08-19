@@ -67,7 +67,7 @@ export async function getCopilotWorkflows() {
 }
 
 export async function approveCopilotWorkflow(workflowId: string) {
-  return (await api.post<{workflow:CopilotWorkflow;result?:{client?:Record<string,unknown>;dossier?:Record<string,unknown>;package?:Record<string,unknown>;followup?:Record<string,unknown>;departure?:Record<string,unknown>}}>(`/ai/copilot/workflows/${workflowId}/approve`)).data;
+  return (await api.post<{workflow:CopilotWorkflow;result?:{client?:Record<string,unknown>;dossier?:Record<string,unknown>;package?:Record<string,unknown>;followup?:Record<string,unknown>;departure?:Record<string,unknown>;batch?:Record<string,unknown>;expedition?:Record<string,unknown>}}>(`/ai/copilot/workflows/${workflowId}/approve`)).data;
 }
 
 export async function rejectCopilotWorkflow(workflowId: string) {

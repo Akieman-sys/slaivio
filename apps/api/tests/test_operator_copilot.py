@@ -177,6 +177,68 @@ def test_departure_creation_is_permissioned_and_idempotent(monkeypatch):
     assert result["result"]["departure"]["status"]=="PLANNED"
 
 
+def test_batch_creation_uses_configured_relations_and_idempotent_reference(monkeypatch):
+    workflow=_workflow(
+        workflow_type="CREATE_BATCH",intent="BATCH_CREATION",manager_name="Grace",
+        entities={"route_id":"route-1","route_name":"Guangzhou → Kinshasa",
+                  "shipping_service_id":"service-1","service_name":"Air Cargo",
+                  "origin_warehouse_id":"warehouse-1","origin_warehouse_name":"Guangzhou Warehouse",
+                  "destination_office_id":"office-1","batch_type":"AIR_GROUPAGE",
+                  "capacity_weight_kg":2200,"capacity_cbm":8},
+    )
+    calls={}
+    monkeypatch.setattr(service,"get_workflow_run",lambda *_:workflow)
+    monkeypatch.setattr(service,"assert_permission",lambda user,org,permission:calls.update(permission=permission))
+    monkeypatch.setattr(service,"claim_workflow_execution",lambda *_:workflow)
+    monkeypatch.setattr(service,"create_batch",lambda org,tenant,payload:calls.update(
+        org=org,tenant=tenant,payload=payload
+    ) or {"id":"batch-1","batch_code":payload["batch_code"],"status":"DRAFT"})
+    monkeypatch.setattr(service,"update_workflow_status",lambda *_args,**_kwargs:{**workflow,"workflow_status":"APPROVED"})
+
+    result=service.approve_operator_workflow("org-1","workflow-1","manager-1")
+
+    assert calls["permission"]=="batches.create"
+    assert calls["payload"]["batch_code"]=="BAT-AI-WORKFLOW"
+    assert calls["payload"]["origin_warehouse_id"]=="warehouse-1"
+    assert calls["payload"]["shipping_service_id"]=="service-1"
+    assert result["result"]["batch"]["status"]=="DRAFT"
+
+
+def test_batch_conversion_requires_dedicated_permission(monkeypatch):
+    workflow=_workflow(
+        workflow_type="CONVERT_BATCH_TO_SHIPMENT",intent="BATCH_CONVERSION",manager_name="Grace",
+        entities={"batch_id":"batch-1","batch_code":"BAT-2026-00184","batch_status":"READY_FOR_SHIPMENT"},
+    )
+    calls={}
+    monkeypatch.setattr(service,"get_workflow_run",lambda *_:workflow)
+    monkeypatch.setattr(service,"assert_permission",lambda user,org,permission:calls.update(permission=permission))
+    monkeypatch.setattr(service,"claim_workflow_execution",lambda *_:workflow)
+    monkeypatch.setattr(service,"convert_batch",lambda org,batch,tenant:calls.update(
+        org=org,batch=batch,tenant=tenant
+    ) or {"id":"shipment-1","expedition_reference":"EXP-2026-00458","status":"PREPARING"})
+    monkeypatch.setattr(service,"update_workflow_status",lambda *_args,**_kwargs:{**workflow,"workflow_status":"APPROVED"})
+
+    result=service.approve_operator_workflow("org-1","workflow-1","manager-1")
+
+    assert calls["permission"]=="batches.convert"
+    assert calls["batch"]=="batch-1"
+    assert result["result"]["expedition"]["expedition_reference"]=="EXP-2026-00458"
+
+
+def test_pending_review_action_does_not_consume_an_unrelated_question(monkeypatch):
+    workflow=_workflow(workflow_type="CREATE_BATCH",entities={"route_id":"r-1","shipping_service_id":"s-1","origin_warehouse_id":"w-1"})
+    monkeypatch.setattr(service,"answer_platform_query",lambda *_args,**_kwargs:{
+        "content":"Deux batchs sont prêts.","tool":"batches.list","cards":[]})
+    monkeypatch.setattr(service,"create_operator_message",lambda _org,_user,role,content,**kwargs:{
+        "id":"answer-1","role":role,"content":content,"metadata":kwargs.get("metadata")})
+
+    result=service._continue_review_workflow("org-1","user-1",workflow,"Quels batchs sont prêts ?",None,"INTERNAL")
+
+    assert result["dialogue_state"]=="ANSWERED"
+    assert result["workflow"] is workflow
+    assert result["tool"]=="batches.list"
+
+
 def test_copilot_schema_and_repositories_are_tenant_scoped():
     root = Path(__file__).parents[3]
     migration = (root / "infra/sql/059_ai_operator_copilot.sql").read_text(encoding="utf-8")

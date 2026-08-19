@@ -29,6 +29,20 @@ def build_proposed_actions(
             "shipping_service_id":entities.get("shipping_service_id"),"service_name":entities.get("service_name"),
             "scheduled_at":entities.get("scheduled_at"),"cutoff_at":entities.get("cutoff_at")}}]
 
+    if workflow_type == "CREATE_BATCH":
+        return [{"type":"CREATE_BATCH","label":"Créer le batch","payload":{
+            "route_id":entities.get("route_id"),"route_name":entities.get("route_name"),
+            "shipping_service_id":entities.get("shipping_service_id"),"service_name":entities.get("service_name"),
+            "origin_warehouse_id":entities.get("origin_warehouse_id"),
+            "origin_warehouse_name":entities.get("origin_warehouse_name"),
+            "planned_departure_at":entities.get("planned_departure_at")}}]
+
+    if workflow_type == "CONVERT_BATCH_TO_SHIPMENT":
+        return [{"type":"CONVERT_BATCH_TO_SHIPMENT","label":"Créer l’expédition","payload":{
+            "batch_id":entities.get("batch_id"),"batch_code":entities.get("batch_code"),
+            "route_name":entities.get("route_name"),"service_name":entities.get("service_name"),
+            "package_count":entities.get("package_count")}}]
+
     if workflow_type == "CREATE_SHIPMENT_DRAFT":
         package_request = entities.get("requested_operation") == "CREATE_PACKAGE"
         return [

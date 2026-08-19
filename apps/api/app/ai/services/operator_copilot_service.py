@@ -23,6 +23,7 @@ from app.ai.services.intent_detector import detect_intent
 from app.ai.services.workflow_actions import build_proposed_actions
 from app.ai.services.workflow_mapping import get_workflow_type
 from app.ai.services.platform_query_service import answer_platform_query
+from app.batch_center.repository import create as create_batch,dashboard as batch_dashboard,convert as convert_batch
 from app.clients.repository import create_client
 from app.db.dossier_repository import create_dossier
 from app.db.followup_repository import create_manual_followup,followup_dashboard,mutate_followup
@@ -52,6 +53,10 @@ PACKAGE_STATUS_LABELS={"recu":"RECEIVED","reçu":"RECEIVED","confirme":"CONFIRME
 def _fallback_intent(message: str):
     normalized = message.lower()
     create_words = ("crée", "creer", "créer", "ouvre", "prépare", "prepare")
+    if re.search(r"\bBAT-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("convertis","convertir","crée l’expédition","créer l’expédition","cree l'expedition","créer une expédition","cree une expedition")):
+        return "BATCH_CONVERSION",0.97
+    if any(word in normalized for word in create_words) and any(word in normalized for word in ("batch","groupage")):
+        return "BATCH_CREATION",0.93
     if any(word in normalized for word in create_words+("planifie","programme")) and any(word in normalized for word in ("départ","depart")):
         return "DEPARTURE_CREATION",0.93
     if re.search(r"\bFUP-[A-Z0-9-]+\b",message.upper()) and any(word in normalized for word in ("reporte","décale","decale","pause","reprend","termine","escalade","annule")):
@@ -81,6 +86,10 @@ def _phone_from_message(message: str):
 
 
 def _missing_fields(workflow_type: str, entities: dict, client_phone: str | None):
+    if workflow_type=="CONVERT_BATCH_TO_SHIPMENT":
+        return [field for field in ("batch_id","batch_code") if not entities.get(field)]
+    if workflow_type=="CREATE_BATCH":
+        return [field for field in ("route_id","shipping_service_id","origin_warehouse_id") if not entities.get(field)]
     if workflow_type=="CREATE_DEPARTURE":
         return [field for field in ("route_id","shipping_service_id","scheduled_at") if not entities.get(field)]
     if workflow_type=="UPDATE_FOLLOWUP":
@@ -364,6 +373,35 @@ def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str
     return {"message":assistant,"workflow":updated,"missing_fields":remaining}
 
 
+REVIEW_ONLY_WORKFLOWS={"UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT"}
+
+
+def _continue_review_workflow(org_id,user_id,workflow,message,workspace_id,channel):
+    act=dialogue_act(message,True);workflow_id=str(workflow["id"])
+    if act=="CANCEL":
+        updated=update_workflow_status(org_id,workflow_id,"REJECTED",{"reason":"cancelled"})
+        response="L’action en attente a été annulée. Aucune donnée métier supplémentaire n’a été créée."
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=workflow_id,metadata={"dialogue_state":"CANCELLED"})
+        return {"message":assistant,"workflow":updated,"missing_fields":[],"dialogue_state":"CANCELLED"}
+    if act=="PAUSE":
+        updated=update_workflow_status(org_id,workflow_id,"PAUSED",{"reason":"user_pause"})
+        response="L’action est en pause. Vous pourrez la reprendre depuis les actions à contrôler."
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=workflow_id,metadata={"dialogue_state":"PAUSED"})
+        return {"message":assistant,"workflow":updated,"missing_fields":[],"dialogue_state":"PAUSED"}
+    try:
+        answer=answer_platform_query(org_id,message,None,workspace_id,user_id,channel)
+    except Exception:
+        answer=None
+    if answer:
+        assistant=create_operator_message(org_id,user_id,"ASSISTANT",answer["content"],metadata={
+            "dialogue_state":"ANSWERED","tool":answer["tool"],"cards":answer.get("cards") or [],
+            "pending_workflow_id":workflow_id})
+        return {"message":assistant,"workflow":workflow,"missing_fields":[],"dialogue_state":"ANSWERED","tool":answer["tool"]}
+    response="Une action est déjà prête dans « Actions à valider ». Validez-la ou annulez-la avant de préparer une nouvelle opération."
+    assistant=create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=workflow_id,metadata={"dialogue_state":"READY_FOR_REVIEW"})
+    return {"message":assistant,"workflow":workflow,"missing_fields":_missing_fields(workflow["workflow_type"],workflow.get("entities") or {},None),"dialogue_state":"READY_FOR_REVIEW"}
+
+
 def prepare_operator_message(
     org_id: str,
     user_id: str,
@@ -389,6 +427,8 @@ def prepare_operator_message(
             return _continue_client_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
         if active_workflow.get("workflow_type")=="CREATE_FOLLOWUP":
             return _continue_followup_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
+        if active_workflow.get("workflow_type") in REVIEW_ONLY_WORKFLOWS:
+            return _continue_review_workflow(org_id,user_id,active_workflow,clean_message,workspace_id,channel)
         return _continue_dossier_workflow(
             org_id, user_id, active_workflow, clean_message, client_phone
         )
@@ -436,6 +476,63 @@ def prepare_operator_message(
     fallback_intent,fallback_confidence=_fallback_intent(clean_message)
     if fallback_intent in {"PACKAGE_STATUS_UPDATE","FOLLOWUP_STATUS_UPDATE"} or intent == "UNKNOWN":
         intent, confidence = fallback_intent,fallback_confidence
+
+    if fallback_intent=="BATCH_CONVERSION":
+        intent,confidence=fallback_intent,fallback_confidence
+        reference_match=re.search(r"\bBAT-[A-Z0-9-]+\b",clean_message.upper())
+        reference=reference_match.group(0) if reference_match else ""
+        matches=batch_dashboard(org_id,q=reference,page=1,page_size=5)["items"]
+        exact=next((x for x in matches if str(x.get("batch_code") or "").upper()==reference),None)
+        if not exact:
+            response="Je ne trouve pas ce batch dans l’agence. Vérifiez sa référence, par exemple BAT-2026-00184."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        if exact.get("status") not in {"READY_FOR_SHIPMENT","CONVERTED_TO_SHIPMENT"}:
+            response=f"Le batch {reference} n’est pas encore prêt à devenir une expédition (état actuel : {exact.get('status')}). Validez d’abord sa checklist et passez-le à Prêt à expédier."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"batch_not_ready"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        entities.update({"batch_id":exact["id"],"batch_code":exact.get("batch_code"),
+            "batch_status":exact.get("status"),"route_name":exact.get("route_name"),
+            "service_name":exact.get("service_name"),"package_count":exact.get("package_count")})
+
+    if fallback_intent=="BATCH_CREATION":
+        intent,confidence=fallback_intent,fallback_confidence
+        normalized=clean_message.lower();catalog=pricing_catalog(org_id)
+        routes=route_listing(org_id,workspace=workspace_id,limit=100,offset=0)["items"]
+        routes=[r for r in routes if r.get("status") in {"ACTIVE","LIMITED"}]
+        route=next((r for r in routes if str(r.get("route_code") or "").lower() in normalized and r.get("route_code")),None)
+        if not route:
+            route=next((r for r in routes if all(str(v).lower() in normalized for v in (r.get("origin_city") or r.get("origin_country"),r.get("destination_city") or r.get("destination_country")) if v)),None)
+        if not route:
+            options=", ".join(str(r.get("route_name") or r.get("route_code")) for r in routes[:6])
+            response="Quelle route configurée doit utiliser ce batch ?"+(f" Options : {options}." if options else " Aucune route active n’est disponible.")
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        if not route.get("origin_warehouse_id"):
+            response=f"La route {route.get('route_name')} n’a pas encore d’entrepôt d’origine configuré. Configurez-le dans Routes avant de créer ce batch."
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"BLOCKED","reason":"route_origin_warehouse_required"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"BLOCKED"}
+        services=[s for s in catalog.get("services",[]) if str(s.get("route_id"))==str(route.get("id"))]
+        service=next((s for s in services if str(s.get("service_code") or "").lower() in normalized and s.get("service_code")),None)
+        if not service:
+            service=next((s for s in services if str(s.get("service_name") or "").lower() in normalized),None)
+        if not service:
+            mode=next((x for x in ("air","sea","express","road") if x in normalized),None)
+            matches=[s for s in services if not mode or mode in str(s.get("shipping_mode") or "").lower()]
+            service=matches[0] if len(matches)==1 else None
+        if not service:
+            options=", ".join(str(s.get("service_name") or s.get("service_code")) for s in services[:6])
+            response=f"Quel service faut-il utiliser sur {route.get('route_name')} ?"+(f" Options : {options}." if options else " Aucun service actif n’est lié à cette route.")
+            assistant_message=create_operator_message(org_id,user_id,"ASSISTANT",response,metadata={"dialogue_state":"CLARIFICATION"})
+            return {"message":assistant_message,"workflow":None,"missing_fields":[],"dialogue_state":"CLARIFICATION"}
+        mode=str(service.get("shipping_mode") or route.get("transport_mode") or "CUSTOM").upper()
+        batch_type={"AIR":"AIR_GROUPAGE","SEA":"SEA_LCL","EXPRESS":"EXPRESS_CONSOLIDATION","ROAD":"ROAD_CONSOLIDATION"}.get(mode,"CUSTOM")
+        entities.update({"route_id":route["id"],"route_name":route.get("route_name"),
+            "shipping_service_id":service["id"],"service_name":service.get("service_name"),
+            "origin_warehouse_id":route.get("origin_warehouse_id"),"origin_warehouse_name":route.get("origin_warehouse_name"),
+            "destination_office_id":route.get("destination_office_id"),"batch_type":batch_type,
+            "planned_departure_at":_parse_due_at(clean_message),
+            "capacity_weight_kg":route.get("departure_capacity_kg"),"capacity_cbm":route.get("departure_capacity_cbm")})
 
     if fallback_intent=="DEPARTURE_CREATION":
         intent,confidence=fallback_intent,fallback_confidence
@@ -674,7 +771,7 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         raise HTTPException(status_code=404, detail="workflow_not_found")
     if workflow["workflow_status"] not in {"PREPARED","FAILED","EXECUTING"}:
         raise HTTPException(status_code=409, detail="workflow_already_decided")
-    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE"}:
+    if workflow["workflow_type"] not in {"CREATE_SHIPMENT_DRAFT","CREATE_CLIENT","CREATE_FOLLOWUP","UPDATE_PACKAGE_STATUS","UPDATE_FOLLOWUP","CREATE_DEPARTURE","CREATE_BATCH","CONVERT_BATCH_TO_SHIPMENT"}:
         raise HTTPException(status_code=422, detail="workflow_execution_not_supported")
     entities = workflow.get("entities") or {}
     missing = _missing_fields(workflow["workflow_type"], entities, workflow["client_phone"])
@@ -753,6 +850,35 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
                 "published":False,"notes":"Départ préparé depuis l’Assistant Slaivio"})
             updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"departure":departure})
             return {"workflow":updated,"result":{"departure":departure},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="CREATE_BATCH":
+        assert_permission(actor_id,org_id,"batches.create")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            batch=create_batch(org_id,{"user_id":actor_id,"actor_name":workflow.get("manager_name") or "Membre de l’agence"},{
+                "batch_code":f"BAT-AI-{workflow_id[:8].upper()}","batch_type":entities.get("batch_type") or "CUSTOM",
+                "workspace_id":workflow.get("workspace_id"),"route_id":entities["route_id"],
+                "shipping_service_id":entities["shipping_service_id"],"origin_warehouse_id":entities["origin_warehouse_id"],
+                "destination_office_id":entities.get("destination_office_id"),"departure_id":None,
+                "responsible_id":actor_id,"responsible_name":workflow.get("manager_name"),
+                "cutoff_at":entities.get("cutoff_at"),"planned_departure_at":entities.get("planned_departure_at"),
+                "capacity_weight_kg":entities.get("capacity_weight_kg"),"capacity_cbm":entities.get("capacity_cbm"),
+                "capacity_packages":None,"capacity_value":None,"near_capacity_percent":85,
+                "notes":"Batch préparé depuis l’Assistant Slaivio"})
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"batch":batch})
+            return {"workflow":updated,"result":{"batch":batch},"draft":None}
+        except Exception as exc:
+            update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
+    if workflow["workflow_type"]=="CONVERT_BATCH_TO_SHIPMENT":
+        assert_permission(actor_id,org_id,"batches.convert")
+        claimed=claim_workflow_execution(org_id,workflow_id)
+        if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+        try:
+            expedition=convert_batch(org_id,entities["batch_id"],{"user_id":actor_id,"actor_name":workflow.get("manager_name") or "Membre de l’agence"})
+            updated=update_workflow_status(org_id,workflow_id,"APPROVED",{"expedition":expedition,"batch_id":entities["batch_id"]})
+            return {"workflow":updated,"result":{"expedition":expedition},"draft":None}
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]});raise
     assert_permission(actor_id,org_id,"clients.create")

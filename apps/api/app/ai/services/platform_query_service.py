@@ -172,6 +172,8 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
         return None
     if any(word in normalized for word in ("cree","crée","creer","créer","planifie","programme")) and any(word in normalized for word in ("depart","départ")):
         return None
+    if any(word in normalized for word in ("cree","crée","creer","créer","prepare","prépare")) and any(word in normalized for word in ("batch","groupage")):
+        return None
 
     if "client" in normalized and any(word in normalized for word in lookup_words):
         _require(org_id,actor_id,channel,"clients.search")

@@ -196,7 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <section key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-2"}>
               <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#67717c] hover:text-[#25292e] ${sidebarCollapsed ? "h-9 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-8 gap-2 px-2"}`}>
                 <group.icon size={15} className="shrink-0" />
-                {!sidebarCollapsed && <><span className="truncate text-[11px] font-semibold">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+                {!sidebarCollapsed && <><span className="truncate text-[11px] font-[620]">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
               </button>
               <div className={`space-y-0.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
@@ -294,7 +294,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function SidebarLink({ href, icon, active, label, collapsed = false }: { href: string; icon: ReactNode; active: boolean; label: string; collapsed?: boolean }) {
   return (
-    <Link href={href} title={collapsed ? label : undefined} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center rounded-[5px] text-[13px] ${collapsed ? "justify-center px-1" : "gap-2.5 px-2.5"} ${active ? "bg-[#e4f4ee] font-medium text-[#145f49]" : "text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
+    <Link data-ui="sidebar-link" data-active={active ? "true" : "false"} href={href} title={collapsed ? label : undefined} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center rounded-[5px] text-[13px] ${collapsed ? "justify-center px-1" : "gap-2.5 px-2.5"} ${active ? "bg-[#e4f4ee] font-[620] text-[#145f49]" : "font-[450] text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
       <span className={active ? "text-[#16855f]" : "text-[#656c74]"}>{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}
     </Link>

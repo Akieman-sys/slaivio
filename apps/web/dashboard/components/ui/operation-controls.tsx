@@ -23,7 +23,7 @@ export function OperationButton({
     <button
       type={type}
       data-ui="operation-button"
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
       {...props}
     />
   );
@@ -146,7 +146,7 @@ export function OperationField({
 }) {
   return (
     <label className="grid min-w-0 gap-1.5">
-      <span>{label}{required && <span className="ml-1 text-[#b42318]">*</span>}</span>
+      <span data-ui="field-label">{label}{required && <span className="ml-1 text-[#b42318]">*</span>}</span>
       {children}
       {hint && <small className="text-[11px] font-normal leading-4 text-[#7a838d]">{hint}</small>}
     </label>

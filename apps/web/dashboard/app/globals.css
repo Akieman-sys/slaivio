@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 :root {
   --background: #f7f8f8;
   --foreground: #111827;
@@ -43,18 +48,9 @@ body {
   color: var(--foreground);
   min-width: 0;
   overflow-x: clip;
-  font-family:
-    "Neue Haas Grotesk Display Pro",
-    "Neue Haas Grotesk Text",
-    Inter,
-    "Helvetica Neue",
-    Arial,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.45;
   font-feature-settings:
     "ss01" 1,
     "cv02" 1,
@@ -64,6 +60,18 @@ body {
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+strong,
+b {
+  font-weight: 650;
 }
 
 ::selection {
@@ -519,6 +527,10 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   --operation-text-body: 13px;
   --operation-text-label: 12px;
   --operation-text-caption: 11px;
+  --operation-weight-regular: 400;
+  --operation-weight-medium: 520;
+  --operation-weight-semibold: 620;
+  --operation-weight-bold: 680;
   color: #25292e;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
@@ -527,29 +539,36 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .slaivio-operations .operation-page-header h1 {
   font-size: var(--operation-text-title) !important;
   line-height: 28px;
-  font-weight: 600;
+  font-weight: var(--operation-weight-bold);
   letter-spacing: -0.015em;
 }
 
 .slaivio-operations .operation-page-header p {
   font-size: var(--operation-text-label) !important;
   line-height: 20px;
+  font-weight: var(--operation-weight-regular);
 }
 
 .slaivio-operations [data-ui="metric-label"] {
   font-size: var(--operation-text-caption) !important;
   line-height: 16px;
+  font-weight: var(--operation-weight-medium);
 }
 
 .slaivio-operations [data-ui="metric-value"] {
   font-size: var(--operation-text-metric) !important;
   line-height: 28px;
+  font-weight: var(--operation-weight-bold);
 }
 
 .slaivio-operations [data-ui="metric-detail"],
 .slaivio-operations [data-ui="operation-status"] {
   font-size: var(--operation-text-caption) !important;
   line-height: 16px;
+}
+
+.slaivio-operations [data-ui="operation-status"] {
+  font-weight: var(--operation-weight-medium);
 }
 
 .slaivio-operations .operation-toolbar,
@@ -579,8 +598,12 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   border-radius: 0;
   background: transparent;
   font-size: var(--operation-text-body, 13px);
-  font-weight: 500;
+  font-weight: var(--operation-weight-medium, 520);
   transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.operation-tabs [aria-current="page"] {
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 .operation-tabs > div {
@@ -596,7 +619,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   min-height: 36px;
   border-radius: 6px !important;
   font-size: 13px !important;
-  font-weight: 500;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 /* Older operational pages used a darker green. Normalize their primary
@@ -634,6 +657,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   background: #f7f8fa;
   color: #5f6b76;
   font-size: var(--operation-text-label);
+  font-weight: var(--operation-weight-semibold);
 }
 
 .slaivio-operations table thead tr:first-child,
@@ -643,6 +667,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .slaivio-operations table tbody tr {
   border-color: #edf0f3 !important;
+  font-weight: var(--operation-weight-regular);
 }
 
 .slaivio-operations .operation-table table thead tr {
@@ -680,7 +705,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .operation-tabs select {
   min-height: 32px;
   font-size: var(--operation-text-body, 13px) !important;
-  font-weight: 500;
+  font-weight: var(--operation-weight-medium, 520);
 }
 
 .slaivio-operations table tbody {
@@ -688,7 +713,12 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .slaivio-operations table th {
-  font-weight: 500;
+  font-weight: var(--operation-weight-semibold);
+}
+
+.slaivio-operations .operation-table table tbody td:first-child {
+  color: #30363d;
+  font-weight: var(--operation-weight-medium);
 }
 
 /* Forms opened in the shared right drawer use one field language everywhere. */
@@ -696,7 +726,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .operation-form-surface form label {
   color: #3f4a56;
   font-size: var(--operation-text-label, 12px);
-  font-weight: 500;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 .slaivio-operations form input:not([type="checkbox"]):not([type="radio"]),
@@ -723,21 +753,21 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .operation-form-surface h2 {
   font-size: 17px !important;
   line-height: 24px;
-  font-weight: 600;
+  font-weight: var(--operation-weight-bold, 680);
 }
 
 .operation-form-surface h3,
 .operation-content h3 {
   font-size: var(--operation-text-body, 13px) !important;
   line-height: 20px;
-  font-weight: 600;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 .operation-drawer-footer button {
   min-height: 36px;
   border-radius: 6px !important;
   font-size: var(--operation-text-body, 13px) !important;
-  font-weight: 500;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 .operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),

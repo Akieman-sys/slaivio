@@ -525,6 +525,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   --operation-text-title: 21px;
   --operation-text-metric: 23px;
   --operation-text-body: 13px;
+  --operation-text-tab: 14px;
   --operation-text-label: 12px;
   --operation-text-caption: 11px;
   --operation-weight-regular: 400;
@@ -590,14 +591,14 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .operation-tabs > button,
 .operation-tabs > div > button {
   margin-bottom: -1px;
-  min-height: 41px;
+  min-height: 44px;
   border-bottom-width: 2px;
   border-top: 0 !important;
   border-left: 0;
   border-right: 0;
   border-radius: 0;
   background: transparent;
-  font-size: var(--operation-text-body, 13px);
+  font-size: var(--operation-text-tab, 14px);
   font-weight: var(--operation-weight-medium, 520);
   transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
 }
@@ -608,7 +609,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .operation-tabs > div {
   display: flex;
-  min-height: 41px;
+  min-height: 44px;
   align-items: flex-end;
   gap: 0.25rem;
 }
@@ -703,8 +704,8 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .operation-tabs select {
-  min-height: 32px;
-  font-size: var(--operation-text-body, 13px) !important;
+  min-height: 34px;
+  font-size: var(--operation-text-tab, 14px) !important;
   font-weight: var(--operation-weight-medium, 520);
 }
 

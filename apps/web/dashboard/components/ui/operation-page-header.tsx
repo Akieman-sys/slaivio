@@ -34,7 +34,7 @@ export function OperationPageHeader({
 export function OperationTabs({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <nav
-      className={`operation-tabs flex min-h-[42px] items-end gap-1 overflow-x-auto border-b border-[#d8dce2] bg-white px-5 sm:px-6 ${className}`}
+      className={`operation-tabs flex min-h-[45px] items-end gap-1 overflow-x-auto border-b border-[#d8dce2] bg-white px-5 sm:px-6 ${className}`}
       aria-label="Vues du module"
     >
       {children}

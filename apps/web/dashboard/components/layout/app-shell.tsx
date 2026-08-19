@@ -191,14 +191,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
-          <SidebarLink href="/app" icon={<Home size={17} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
+          <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
           {groupedRoutes.map((group) => (
-            <section key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-2"}>
-              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#67717c] hover:text-[#25292e] ${sidebarCollapsed ? "h-9 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-8 gap-2 px-2"}`}>
-                <group.icon size={15} className="shrink-0" />
-                {!sidebarCollapsed && <><span className="truncate text-[11px] font-[620]">{group.label}</span><ChevronDown size={13} className={`ml-auto transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+            <section key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-3"}>
+              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#53606c] hover:text-[#20252b] ${sidebarCollapsed ? "h-10 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-9 gap-2.5 px-2"}`}>
+                <group.icon size={16} strokeWidth={1.8} className="shrink-0 text-[#69747f]" />
+                {!sidebarCollapsed && <><span className="truncate text-[13px] font-[650] tracking-[-0.01em]">{group.label}</span><ChevronDown size={14} className={`ml-auto text-[#8a939c] transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
               </button>
-              <div className={`space-y-0.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
+              <div className={`ml-[17px] space-y-1 border-l border-[#e2e6e9] pl-2.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
                   <SidebarLink
                     key={route.href}
@@ -207,6 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
                     label={route.label}
                     collapsed={sidebarCollapsed}
+                    nested
                   />
                 ))}
               </div>
@@ -292,10 +293,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarLink({ href, icon, active, label, collapsed = false }: { href: string; icon: ReactNode; active: boolean; label: string; collapsed?: boolean }) {
+function SidebarLink({ href, icon, active, label, collapsed = false, nested = false }: { href: string; icon: ReactNode; active: boolean; label: string; collapsed?: boolean; nested?: boolean }) {
   return (
-    <Link data-ui="sidebar-link" data-active={active ? "true" : "false"} href={href} title={collapsed ? label : undefined} aria-current={active ? "page" : undefined} className={`flex min-h-[35px] items-center rounded-[5px] text-[13px] ${collapsed ? "justify-center px-1" : "gap-2.5 px-2.5"} ${active ? "bg-[#e4f4ee] font-[620] text-[#145f49]" : "font-[450] text-[#3f454c] hover:bg-[#f0f1f1]"}`}>
-      <span className={active ? "text-[#16855f]" : "text-[#656c74]"}>{icon}</span>
+    <Link data-ui="sidebar-link" data-active={active ? "true" : "false"} href={href} title={collapsed ? label : undefined} aria-current={active ? "page" : undefined} className={`flex min-h-[38px] items-center rounded-[6px] text-[14px] tracking-[-0.005em] ${collapsed ? "justify-center px-1" : nested ? "px-3" : "gap-2.5 px-2.5"} ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "font-[460] text-[#3f474f] hover:bg-[#f2f4f4] hover:text-[#20252b]"}`}>
+      {(!nested || collapsed) && <span className={active ? "text-[#16855f]" : "text-[#656c74]"}>{icon}</span>}
       {!collapsed && <span className="truncate">{label}</span>}
     </Link>
   );

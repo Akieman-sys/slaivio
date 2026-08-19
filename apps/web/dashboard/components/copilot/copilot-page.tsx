@@ -122,9 +122,19 @@ export function CopilotPage() {
   const decide = async (workflowId: string, decision: "approve" | "reject") => {
     setError("");
     try {
-      if (decision === "approve") await approveCopilotWorkflow(workflowId);
-      else await rejectCopilotWorkflow(workflowId);
+      const execution=decision === "approve" ? await approveCopilotWorkflow(workflowId) : null;
+      if (decision === "reject") await rejectCopilotWorkflow(workflowId);
       setWorkflows((current) => current.filter((item) => item.id !== workflowId));
+      if(execution?.result){
+        const result=execution.result;
+        const cards:NonNullable<CopilotMessage["metadata"]>["cards"]=[];
+        if(result.client?.id)cards.push({kind:"CLIENT",id:String(result.client.id),title:String(result.client.display_name||result.client.name||"Client créé"),subtitle:String(result.client.phone||""),href:`/app/clients?open=${result.client.id}`});
+        if(result.dossier?.id)cards.push({kind:"DOSSIER",id:String(result.dossier.id),title:String(result.dossier.dossier_reference||result.dossier.tracking_id||"Dossier créé"),subtitle:String(result.dossier.status_global||""),href:`/app/dossiers?open=${result.dossier.id}`});
+        if(result.package?.id)cards.push({kind:"PACKAGE",id:String(result.package.id),title:String(result.package.package_reference||result.package.tracking_id||"Colis créé"),subtitle:String(result.package.status||""),href:`/app/packages?open=${result.package.id}`});
+        const created=cards.map((card)=>card.title).join(" · ");
+        setMessages((current)=>[...current,{id:`execution-${workflowId}-${Date.now()}`,role:"ASSISTANT",content:`Opération terminée avec succès${created?` : ${created}`:""}.`,created_at:new Date().toISOString(),metadata:{dialogue_state:"EXECUTED",cards}}]);
+        const refreshed=await listClients({page:1,page_size:100,sort:"recent"});setClients(refreshed.items);
+      }
     } catch {
       setError(decision === "approve" ? "Cette action ne peut pas encore être validée." : "Le rejet n’a pas été enregistré.");
     }

@@ -121,7 +121,7 @@ def test_creation_status_explains_that_nothing_was_created(monkeypatch):
 def test_incomplete_dossier_cannot_be_approved(monkeypatch):
     monkeypatch.setattr(service, "get_workflow_run", lambda *_: _workflow())
     created = []
-    monkeypatch.setattr(service, "create_dossier_draft", lambda **kwargs: created.append(kwargs))
+    monkeypatch.setattr(service, "create_dossier", lambda *args, **kwargs: created.append((args,kwargs)))
 
     with pytest.raises(HTTPException) as error:
         service.approve_operator_workflow("org-1", "workflow-1")

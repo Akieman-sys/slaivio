@@ -11,7 +11,7 @@ def build_proposed_actions(
         return [
             {
                 "type": "CREATE_PACKAGE_DRAFT" if package_request else "CREATE_DOSSIER_DRAFT",
-                "label": "Préparer un colis" if package_request else "Préparer un dossier client",
+                "label": "Créer un colis" if package_request else "Créer un dossier client",
                 "payload": {
                     "client_id": entities.get("client_id"),
                     "client_name": entities.get("client_name"),

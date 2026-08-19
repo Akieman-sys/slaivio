@@ -2,7 +2,6 @@ import re
 
 from fastapi import HTTPException
 
-from app.ai.repositories.dossier_draft_repository import create_dossier_draft
 from app.ai.repositories.escalation_repository import log_escalation_event
 from app.ai.repositories.operator_message_repository import create_operator_message
 from app.ai.repositories.workflow_repository import (
@@ -454,6 +453,37 @@ def _execute_package_workflow(org_id: str, workflow_id: str, actor_id: str, work
     return {"workflow":updated,"result":result,"draft":None}
 
 
+def _execute_dossier_workflow(org_id:str,workflow_id:str,actor_id:str,workflow:dict,entities:dict):
+    previous=workflow.get("result_payload") or {}
+    client_id=workflow.get("client_id") or entities.get("client_id") or (previous.get("client") or {}).get("id")
+    client=None
+    if not client_id:
+        existing=find_client_by_phone(org_id,workflow["client_phone"])
+        if existing:
+            client=existing;client_id=existing["id"]
+        else:
+            if not entities.get("client_name"):
+                raise HTTPException(422,{"code":"client_identity_required","missing_fields":["client_name"]})
+            client=create_client(org_id,actor_id,{"name":entities["client_name"],"display_name":entities["client_name"],
+                "phone":workflow["client_phone"],"whatsapp_phone":workflow["client_phone"],"customer_type":"individual",
+                "lifecycle_status":"lead","source":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "manual"})
+            client_id=client["id"]
+        update_workflow_status(org_id,workflow_id,"EXECUTING",{"client":client or {"id":client_id}})
+    dossier=(previous.get("dossier") or None)
+    if not dossier:
+        dossier=create_dossier(org_id,actor_id,{"client_id":client_id,"workspace_id":workflow.get("workspace_id"),
+            "case_type":"SEND_CARGO","status_global":"WAITING_PACKAGES","intake_status":"PARTIAL",
+            "validation_status":"PENDING","primary_channel":"whatsapp" if workflow.get("channel")=="WHATSAPP" else "assistant",
+            "origin_country":entities.get("origin_country"),"origin_city":entities.get("origin_city"),
+            "destination_country":entities.get("destination_country"),"destination_city":entities.get("destination_city"),
+            "goods_type":entities.get("goods_type"),"estimated_weight_kg":entities.get("weight_kg"),
+            "estimated_volume_cbm":entities.get("volume_cbm"),"shipping_mode":entities.get("shipping_mode"),
+            "client_full_name":entities.get("client_name")})
+    result={"client":client or {"id":client_id,"display_name":entities.get("client_name")},"dossier":dossier}
+    updated=update_workflow_status(org_id,workflow_id,"APPROVED",result)
+    return {"workflow":updated,"result":result,"draft":None}
+
+
 def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai-copilot"):
     workflow = get_workflow_run(org_id, workflow_id)
     if not workflow:
@@ -499,31 +529,15 @@ def approve_operator_workflow(org_id: str, workflow_id: str, actor_id: str = "ai
         except Exception as exc:
             update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]})
             raise HTTPException(status_code=422,detail="package_creation_failed") from exc
-    draft = create_dossier_draft(
-        org_id=org_id,
-        client_phone=workflow["client_phone"],
-        source_message=workflow["source_message"],
-        workflow_id=str(workflow["id"]),
-        client_name=entities.get("client_name"),
-        origin_country=entities.get("origin_country"),
-        origin_city=entities.get("origin_city"),
-        destination_country=entities.get("destination_country"),
-        destination_city=entities.get("destination_city"),
-        goods_type=entities.get("goods_type"),
-        estimated_weight_kg=entities.get("weight_kg"),
-        estimated_volume_cbm=entities.get("volume_cbm"),
-        shipping_mode=entities.get("shipping_mode"),
-        missing_fields=missing,
-        manager_id=workflow.get("manager_id"),
-        manager_name=workflow.get("manager_name"),
-    )
-    updated = update_workflow_status(
-        org_id=org_id,
-        workflow_id=workflow_id,
-        status="APPROVED",
-        result_payload={"draft_id": str(draft["id"]), "missing_fields": missing},
-    )
-    return {"workflow": updated, "draft": draft}
+    claimed=claim_workflow_execution(org_id,workflow_id)
+    if not claimed:raise HTTPException(409,"workflow_execution_in_progress")
+    try:
+        return _execute_dossier_workflow(org_id,workflow_id,actor_id,claimed,entities)
+    except HTTPException as exc:
+        update_workflow_status(org_id,workflow_id,"FAILED",{"error":exc.detail});raise
+    except Exception as exc:
+        update_workflow_status(org_id,workflow_id,"FAILED",{"error":str(exc)[:500]})
+        raise HTTPException(422,"dossier_creation_failed") from exc
 
 
 def reject_operator_workflow(org_id: str, workflow_id: str, reason: str | None):

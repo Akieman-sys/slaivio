@@ -351,7 +351,9 @@ def detect_candidates(org_id):
             idem=f"auto:{x['followup_type']}:{x['subject_id']}"
             message=(f"Bonjour {x['client_name']}, {org} vous contacte concernant {x['reason'].lower()} ({x['subject_reference'] or ''}). Merci de nous répondre directement sur WhatsApp.")
             result=c.execute(text("""insert into followup_tasks(org_id,client_id,dossier_id,followup_type,reference,subject_type,subject_id,subject_reference,reason,channel,message,due_at,priority,amount_context,currency,consent_type,status,idempotency_key)
-              values(:o,:client,:dossier,:type,:ref,:subject_type,:subject,:subject_ref,:reason,'WHATSAPP',:message,now(),'NORMAL',:amount,:currency,'OPERATIONAL','DUE',:idem) on conflict(org_id,idempotency_key) do nothing returning id"""),{'o':org_id,'client':x['client_id'],'dossier':x.get('dossier_id'),'type':x['followup_type'],'ref':f"FUP-{uuid4().hex[:8].upper()}",'subject_type':x['subject_type'],'subject':x['subject_id'],'subject_ref':x.get('subject_reference'),'reason':x['reason'],'message':message,'amount':x.get('amount_context'),'currency':x.get('currency'),'idem':idem}).scalar();created+=bool(result)
+              values(:o,:client,:dossier,:type,:ref,:subject_type,:subject,:subject_ref,:reason,'WHATSAPP',:message,now(),'NORMAL',:amount,:currency,'OPERATIONAL','DUE',:idem)
+              on conflict(org_id,idempotency_key) where idempotency_key is not null
+              do nothing returning id"""),{'o':org_id,'client':x['client_id'],'dossier':x.get('dossier_id'),'type':x['followup_type'],'ref':f"FUP-{uuid4().hex[:8].upper()}",'subject_type':x['subject_type'],'subject':x['subject_id'],'subject_ref':x.get('subject_reference'),'reason':x['reason'],'message':message,'amount':x.get('amount_context'),'currency':x.get('currency'),'idem':idem}).scalar();created+=bool(result)
         c.execute(text("update followup_detection_runs set status='COMPLETED',candidates=:n,created=:created,completed_at=now() where id=:id"),{'n':len(candidates),'created':created,'id':run});return {'candidates':len(candidates),'created':created}
 
 def advance_sequences(org_id=None):

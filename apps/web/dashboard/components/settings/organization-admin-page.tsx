@@ -9,7 +9,6 @@ import {
   KeyRound,
   Languages,
   MapPin,
-  MessageCircle,
   Plug,
   RefreshCcw,
   ShieldCheck,
@@ -23,6 +22,7 @@ import {
   createApiKey,
   getAdmin,
   inviteMember,
+  listAgencyWhatsappNumbers,
   requestDataOperation,
   revokeApiKey,
   revokeInvitation,
@@ -36,8 +36,14 @@ import {
   updateSettings,
   type AdminData,
   type Member,
+  type AgencyWhatsappNumber,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import {
+  getNotificationPreferences,
+  saveNotificationPreference,
+  type NotificationPreference,
+} from "@/services/notification-center";
 const input =
   "h-9 w-full rounded-[5px] border border-[#d8d9dc] bg-white px-3 text-[13px] outline-none focus:border-[#16855f]";
 const button =
@@ -52,8 +58,7 @@ const tabs = [
   ["team", "Utilisateurs & équipe", Users],
   ["roles", "Rôles & permissions", KeyRound],
   ["notifications", "Notifications", Bell],
-  ["integrations", "Intégrations", Plug],
-  ["whatsapp", "Canaux de communication", MessageCircle],
+  ["integrations", "Canaux & intégrations", Plug],
   ["documents", "Documents & numérotation", FileText],
   ["billing", "Abonnement Slaivio", CreditCard],
   ["security", "Sécurité", ShieldCheck],
@@ -142,13 +147,6 @@ export function OrganizationAdminPage() {
               />
             ))}
           </SettingsGroup>
-          <SettingsGroup label="Plateforme">
-            <SettingsLink
-              href="/app/platform"
-              icon={<ShieldCheck size={15} />}
-              label="Console Super Admin"
-            />
-          </SettingsGroup>
         </aside>
         <main className="min-w-0 p-5 lg:p-7">
           <div className="mx-auto max-w-[1120px]">
@@ -177,20 +175,9 @@ export function OrganizationAdminPage() {
             {tab === "team" && <Team data={data} run={run} />}{" "}
             {tab === "roles" && <Roles data={data} run={run} />}{" "}
             {tab === "notifications" && (
-              <SettingsLinkCard
-                href="/app/notifications?preferences=1"
-                title="Matrice de notifications"
-                text="Configurez chaque événement et ses canaux In-app, Email et WhatsApp."
-              />
+              <NotificationsSettings />
             )}{" "}
             {tab === "integrations" && <Integrations data={data} run={run} />}{" "}
-            {tab === "whatsapp" && (
-              <SettingsLinkCard
-                href="/app/settings?section=integrations"
-                title="WhatsApp Business"
-                text="Compte Meta, routage des numéros et état de la connexion officielle."
-              />
-            )}{" "}
             {tab === "documents" && <DocumentsSettings data={data} run={run} />}{" "}
             {tab === "billing" && <BillingSettings data={data} />}{" "}
             {tab === "security" && <Security data={data} run={run} />}{" "}
@@ -270,13 +257,97 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden border border-[#dfe3e4] bg-white">
-      <div className="border-b border-[#e5e8e9] bg-[#fafbfb] px-5 py-4">
+    <section className="overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-[#e8eaed]">
+      <div className="border-b border-[#edf0f3] px-5 py-4">
         <h2 className="text-[15px] font-semibold text-[#293034]">{title}</h2>
         <p className="text-[12px] text-[#697178]">{description}</p>
       </div>
       <div className="p-5">{children}</div>
     </section>
+  );
+}
+
+const notificationCategories = [
+  ["OPERATIONS", "Activité de l’agence", "Dossiers, tâches et opérations importantes"],
+  ["SHIPMENT", "Expéditions", "Départs, arrivées, retards et incidents"],
+  ["PACKAGE", "Colis", "Réception, blocage, anomalie et disponibilité"],
+  ["PAYMENT", "Paiements", "Paiement reçu, échéance et facture impayée"],
+  ["COMPLIANCE", "Contrôles", "Documents, restrictions et validations requises"],
+  ["SYSTEM", "Compte et sécurité", "Invitations, accès et alertes de sécurité"],
+] as const;
+
+function NotificationsSettings() {
+  const [items, setItems] = useState<NotificationPreference[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    getNotificationPreferences()
+      .then(setItems)
+      .catch(() => setMessage("Les préférences ne peuvent pas être chargées."));
+  }, []);
+  const current = (category: string): NotificationPreference =>
+    items.find((item) => item.category === category) || {
+      category,
+      in_app: true,
+      email: false,
+      whatsapp: false,
+      digest_frequency: "IMMEDIATE",
+    };
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    setMessage("");
+    try {
+      const saved = await Promise.all(
+        notificationCategories.map(([category]) =>
+          saveNotificationPreference({
+            category,
+            in_app: form.get(`${category}.app`) === "on",
+            email: form.get(`${category}.email`) === "on",
+            whatsapp: form.get(`${category}.whatsapp`) === "on",
+            digest_frequency: String(form.get(`${category}.frequency`) || "IMMEDIATE"),
+          }),
+        ),
+      );
+      setItems(saved.map((result) => result.preference || result));
+      setMessage("Préférences enregistrées.");
+    } catch {
+      setMessage("L’enregistrement n’a pas abouti.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Card
+      title="Notifications de l’agence"
+      description="Choisissez où et à quel rythme votre équipe reçoit chaque type d’alerte."
+    >
+      <form onSubmit={submit}>
+        <div className="overflow-x-auto">
+          <div className="min-w-[680px]">
+            <div className="grid grid-cols-[minmax(240px,1fr)_74px_74px_92px_150px] border-b border-[#e6e9ee] bg-[#f7f8fa] px-3 py-2 text-[12px] font-medium text-[#5f6b76]">
+              <span>Événement</span><span>Dans Slaivio</span><span>Email</span><span>WhatsApp</span><span>Fréquence</span>
+            </div>
+            {notificationCategories.map(([category, label, description]) => {
+              const preference = current(category);
+              return (
+                <div key={category} className="grid grid-cols-[minmax(240px,1fr)_74px_74px_92px_150px] items-center border-b border-[#edf0f3] px-3 py-3 last:border-0">
+                  <div><b className="text-[13px]">{label}</b><p className="text-[11px] text-[#74808c]">{description}</p></div>
+                  <input aria-label={`${label} dans Slaivio`} name={`${category}.app`} type="checkbox" defaultChecked={preference.in_app} className="h-4 w-4 accent-[#12c76f]" />
+                  <input aria-label={`${label} par email`} name={`${category}.email`} type="checkbox" defaultChecked={preference.email} className="h-4 w-4 accent-[#12c76f]" />
+                  <input aria-label={`${label} par WhatsApp`} name={`${category}.whatsapp`} type="checkbox" defaultChecked={preference.whatsapp} className="h-4 w-4 accent-[#12c76f]" />
+                  <select name={`${category}.frequency`} defaultValue={preference.digest_frequency} className={input}>
+                    <option value="IMMEDIATE">Immédiatement</option><option value="DAILY">Résumé quotidien</option><option value="WEEKLY">Résumé hebdomadaire</option><option value="OFF">Désactivé</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between"><p className="text-[12px] text-[#537064]">{message}</p><button disabled={saving} className={primary}>{saving ? "Enregistrement…" : "Enregistrer"}</button></div>
+      </form>
+    </Card>
   );
 }
 function Organization({
@@ -506,6 +577,46 @@ function MemberRow({
     </div>
   );
 }
+const permissionGroups: Record<string, string> = {
+  clients: "Clients",
+  dossiers: "Dossiers",
+  packages: "Colis",
+  shipments: "Expéditions",
+  batches: "Batchs et groupages",
+  departures: "Calendrier des départs",
+  routes: "Routes",
+  services: "Services",
+  pricing: "Tarification",
+  finance: "Finance",
+  followups: "Relances",
+  broadcasts: "Campagnes",
+  knowledge: "Base de connaissances",
+  warehouses: "Entrepôts",
+  team: "Équipe",
+  settings: "Paramètres",
+  organization: "Agence",
+};
+function permissionGroupLabel(group: string) {
+  return permissionGroups[group] || "Autres fonctions";
+}
+function permissionActionLabel(code: string) {
+  const action = code.split(".").slice(1).join(".");
+  const labels: Record<string, string> = {
+    read: "Consulter",
+    create: "Créer",
+    update: "Modifier",
+    manage: "Gérer",
+    archive: "Archiver",
+    export: "Exporter",
+    analytics: "Voir les analyses",
+    publish: "Publier",
+    approve: "Valider",
+    review: "Vérifier",
+    scan: "Scanner",
+    assign: "Affecter",
+  };
+  return labels[action] || "Action avancée";
+}
 function Roles({
   data,
   run,
@@ -528,11 +639,19 @@ function Roles({
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const roleName = String(f.get("name") || "").trim();
+    const generatedCode = roleName
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 40);
     run(
       () =>
         saveRole({
-          code: String(f.get("code")).toUpperCase(),
-          name: f.get("name"),
+          code: generatedCode,
+          name: roleName,
           description: f.get("description"),
           permissions: f.getAll("permissions"),
         }),
@@ -561,30 +680,24 @@ function Roles({
       >
         <PermissionGuard permission="roles.manage" fallback={<ReadOnly />}>
           <form onSubmit={submit} className="grid gap-3">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                required
-                name="code"
-                className={input}
-                placeholder="SUPERVISEUR_PAYS"
-              />
+            <div className="grid gap-2">
+              <label>Nom du rôle
               <input
                 required
                 name="name"
-                className={input}
-                placeholder="Superviseur pays"
+                className={`${input} mt-1`}
+                placeholder="Ex. Responsable entrepôt Chine"
               />
+              </label>
             </div>
-            <input
-              name="description"
-              className={input}
-              placeholder="Description"
-            />
+            <label>À quoi sert ce rôle ?
+              <input name="description" className={`${input} mt-1`} placeholder="Décrivez simplement les responsabilités de cette équipe" />
+            </label>
             <div className="max-h-[400px] overflow-y-auto rounded-[5px] border p-3">
               {Object.entries(groups).map(([group, permissions]) => (
                 <div key={group} className="mb-4">
-                  <b className="text-[12px] uppercase text-[#69707d]">
-                    {group}
+                  <b className="text-[12px] font-semibold text-[#334155]">
+                    {permissionGroupLabel(group)}
                   </b>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {permissions.map((p) => (
@@ -595,10 +708,8 @@ function Roles({
                           value={p.permission_code}
                         />
                         <span>
-                          <b>{p.permission_code}</b>
-                          <small className="block text-[#69707d]">
-                            {p.description}
-                          </small>
+                          <b>{p.description || permissionActionLabel(p.permission_code)}</b>
+                          <small className="block text-[#69707d]">{permissionActionLabel(p.permission_code)}</small>
                         </span>
                       </label>
                     ))}
@@ -635,6 +746,9 @@ function Preferences({
           date_format: val(f, "date"),
           weight_unit: val(f, "weight"),
           volume_unit: val(f, "volume"),
+          time_format: val(f, "time"),
+          dimension_unit: val(f, "dimensions"),
+          distance_unit: val(f, "distance"),
           notification_email: val(f, "email"),
           settings: s.settings || {},
           security: s.security || {},
@@ -649,30 +763,25 @@ function Preferences({
     >
       <PermissionGuard permission="settings.write" fallback={<ReadOnly />}>
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-          {[
-            ["timezone", "Fuseau horaire", "timezone"],
-            ["currency", "Devise", "currency_code"],
-            ["country", "Code pays", "country_code"],
-            ["language", "Langue", "language_code"],
-            ["date", "Format de date", "date_format"],
-            ["weight", "Unité de poids", "weight_unit"],
-            ["volume", "Unité de volume", "volume_unit"],
-            ["email", "Email notifications", "notification_email"],
-          ].map(([n, l, k]) => (
-            <label className="text-[12px]" key={n}>
-              {l}
-              <input
-                name={n}
-                className={`${input} mt-1`}
-                defaultValue={String(s[k] || "")}
-              />
-            </label>
-          ))}
-          <button className={primary}>Enregistrer</button>
+          <SettingSelect label="Langue de l’interface" name="language" value={String(s.language_code || "fr")} options={[["fr","Français"],["en","English"]]} />
+          <SettingSelect label="Fuseau horaire" name="timezone" value={String(s.timezone || "UTC")} options={[["Africa/Kinshasa","Kinshasa"],["Africa/Douala","Douala"],["Africa/Abidjan","Abidjan"],["Asia/Shanghai","Chine"],["Asia/Dubai","Dubaï"],["UTC","Temps universel (UTC)"]]} />
+          <SettingSelect label="Devise comptable principale" name="currency" value={String(s.currency_code || "USD")} options={["USD","CDF","EUR","CNY","AED","XAF","GHS","KES"].map(x=>[x,x])} />
+          <label>Pays principal<input name="country" className={`${input} mt-1`} defaultValue={String(s.country_code || data.organization.country || "")} placeholder="Pays de l’espace actif" /></label>
+          <SettingSelect label="Format de date" name="date" value={String(s.date_format || "DD/MM/YYYY")} options={[["DD/MM/YYYY","31/12/2026"],["MM/DD/YYYY","12/31/2026"],["YYYY-MM-DD","2026-12-31"]]} />
+          <SettingSelect label="Format de l’heure" name="time" value={String(s.time_format || "24H")} options={[["24H","24 heures"],["12H","12 heures (AM/PM)"]]} />
+          <SettingSelect label="Poids" name="weight" value={String(s.weight_unit || "kg")} options={[["kg","Kilogrammes (kg)"],["lb","Livres (lb)"]]} />
+          <SettingSelect label="Volume" name="volume" value={String(s.volume_unit || "cbm")} options={[["cbm","Mètre cube (m³)"],["ft3","Pied cube (ft³)"]]} />
+          <SettingSelect label="Dimensions" name="dimensions" value={String(s.dimension_unit || "cm")} options={[["cm","Centimètres"],["in","Pouces"]]} />
+          <SettingSelect label="Distance" name="distance" value={String(s.distance_unit || "km")} options={[["km","Kilomètres"],["mi","Miles"]]} />
+          <label>Email pour les alertes importantes<input name="email" type="email" className={`${input} mt-1`} defaultValue={String(s.notification_email || "")} placeholder="operations@agence.com" /></label>
+          <div className="flex items-end"><button className={primary}>Enregistrer les préférences</button></div>
         </form>
       </PermissionGuard>
     </Card>
   );
+}
+function SettingSelect({label,name,value,options}:{label:string;name:string;value:string;options:string[][]}) {
+  return <label>{label}<select name={name} defaultValue={value} className={`${input} mt-1`}>{options.map(([option,labelText])=><option key={option} value={option}>{labelText}</option>)}</select></label>;
 }
 function Security({
   data,
@@ -694,6 +803,8 @@ function Security({
           security: {
             require_mfa: f.get("mfa") === "on",
             session_timeout_minutes: Number(f.get("timeout")),
+            inactivity_timeout_minutes: Number(f.get("inactivity")),
+            max_failed_attempts: Number(f.get("attempts")),
           },
         }),
       "Politique de sécurité mise à jour.",
@@ -701,34 +812,25 @@ function Security({
   }
   return (
     <Card
-      title="Politique de sécurité"
-      description="Ces règles complètent l’authentification Clerk et le contrôle RBAC des API."
+      title="Protection des comptes"
+      description="Définissez les règles de connexion appliquées aux membres de votre agence."
     >
       <PermissionGuard permission="security.manage" fallback={<ReadOnly />}>
-        <form onSubmit={submit} className="grid max-w-xl gap-4">
-          <label className="flex items-center gap-3 text-[13px]">
+        <form onSubmit={submit} className="grid max-w-2xl gap-5">
+          <label className="flex items-start gap-3 rounded-md bg-[#f8faf9] p-4 ring-1 ring-[#e6eae8]">
             <input
               name="mfa"
               type="checkbox"
               defaultChecked={Boolean(sec.require_mfa)}
             />
-            Exiger l’authentification multifacteur pour l’agence
+            <span><b className="block text-[13px]">Exiger la double authentification</b><small className="text-[11px] font-normal text-[#74808c]">Chaque membre devra confirmer sa connexion avec un second facteur.</small></span>
           </label>
-          <label className="text-[12px]">
-            Expiration de session (minutes)
-            <input
-              name="timeout"
-              type="number"
-              min="15"
-              max="10080"
-              className={`${input} mt-1`}
-              defaultValue={Number(sec.session_timeout_minutes || 480)}
-            />
-          </label>
-          <p className="rounded-[5px] bg-amber-50 p-3 text-[12px] text-amber-900">
-            L’application de la MFA au niveau de la connexion nécessite aussi
-            son activation dans Clerk Dashboard.
-          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label>Durée maximale d’une session<input name="timeout" type="number" min="15" max="10080" className={`${input} mt-1`} defaultValue={Number(sec.session_timeout_minutes || 480)} /><small className="text-[11px] font-normal text-[#74808c]">En minutes</small></label>
+            <label>Déconnexion après inactivité<input name="inactivity" type="number" min="5" max="1440" className={`${input} mt-1`} defaultValue={Number(sec.inactivity_timeout_minutes || 30)} /><small className="text-[11px] font-normal text-[#74808c]">En minutes</small></label>
+            <label>Tentatives avant verrouillage<input name="attempts" type="number" min="3" max="20" className={`${input} mt-1`} defaultValue={Number(sec.max_failed_attempts || 5)} /><small className="text-[11px] font-normal text-[#74808c]">Échecs de connexion</small></label>
+          </div>
+          <div className="rounded-md bg-[#f7f8fa] p-4 text-[12px] text-[#53606d]"><b className="block text-[#25292e]">Sessions et appareils</b>Chaque membre peut consulter ses appareils connectés et fermer ses autres sessions depuis son menu de compte.</div>
           <button className={primary}>Enregistrer la politique</button>
         </form>
       </PermissionGuard>
@@ -873,6 +975,19 @@ function Locations({
   data: AdminData;
   run: (a: () => Promise<unknown>, m: string) => void;
 }) {
+  const [whatsappNumbers, setWhatsappNumbers] = useState<AgencyWhatsappNumber[]>([]);
+  useEffect(() => {
+    listAgencyWhatsappNumbers().then(setWhatsappNumbers).catch(() => setWhatsappNumbers([]));
+  }, []);
+  const countries = Array.from(new Set([
+    String(data.organization.country || ""),
+    ...data.workspaces.map((item) => String(item.country_code || "")),
+    ...data.locations.map((item) => String(item.country || "")),
+  ].filter(Boolean)));
+  const cities = Array.from(new Set([
+    String(data.organization.city || ""),
+    ...data.locations.map((item) => String(item.city || "")),
+  ].filter(Boolean)));
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -928,26 +1043,16 @@ function Locations({
               </option>
             ))}
           </select>
-          {[
-            "country",
-            "city",
-            "address",
-            "phone",
-            "whatsapp",
-            "email",
-            "manager",
-            "timezone",
-            "hours",
-            "services",
-          ].map((n) => (
-            <input
-              required={n === "country" || n === "city"}
-              key={n}
-              name={n}
-              className={input}
-              placeholder={n}
-            />
-          ))}
+          <label>Pays<select required name="country" className={`${input} mt-1`}><option value="">Choisir un pays configuré</option>{countries.map((value)=><option key={value}>{value}</option>)}</select></label>
+          <label>Ville<select required name="city" className={`${input} mt-1`}><option value="">Choisir une ville configurée</option>{cities.map((value)=><option key={value}>{value}</option>)}</select></label>
+          <label>Adresse complète<input name="address" className={`${input} mt-1`} placeholder="Rue, numéro et repère utile" /></label>
+          <label>Téléphone de l’établissement<input name="phone" className={`${input} mt-1`} placeholder="Numéro d’appel" /></label>
+          <label>Numéro WhatsApp Business<select name="whatsapp" className={`${input} mt-1`}><option value="">Aucun numéro affecté</option>{whatsappNumbers.map((number)=><option key={number.id} value={number.display_phone_number || number.id}>{number.display_phone_number || "Numéro Meta"}{number.verified_name ? ` · ${number.verified_name}` : ""}</option>)}</select><small className="mt-1 block text-[11px] text-[#74808c]">Seuls les numéros connectés au portefeuille Business apparaissent ici.</small></label>
+          <label>Email professionnel<input name="email" type="email" className={`${input} mt-1`} placeholder="bureau@agence.com" /></label>
+          <label>Responsable<input name="manager" className={`${input} mt-1`} placeholder="Nom du responsable" /></label>
+          <label>Fuseau horaire<input name="timezone" className={`${input} mt-1`} placeholder="Africa/Kinshasa" /></label>
+          <label>Horaires d’ouverture<input name="hours" className={`${input} mt-1`} placeholder="Lun–Sam, 08:00–17:00" /></label>
+          <label>Services disponibles<input name="services" className={`${input} mt-1`} placeholder="Séparez les services par une virgule" /></label>
           <button className={primary}>Enregistrer</button>
         </form>
       </Card>
@@ -976,13 +1081,11 @@ function Integrations({
   run: (a: () => Promise<unknown>, m: string) => void;
 }) {
   async function connect(provider: "WHATSAPP" | "GMAIL") {
-    const label = prompt("Nom du compte connecté");
-    if (!label) return;
     run(
       () =>
         saveIntegration({
           provider,
-          account_label: label,
+          account_label: provider === "WHATSAPP" ? "WhatsApp Business de l’agence" : "Gmail de l’agence",
           status: "CONNECTING",
           granted_permissions: [],
           configuration: {},
@@ -991,29 +1094,31 @@ function Integrations({
     );
   }
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {(["WHATSAPP", "GMAIL"] as const).map((provider) => {
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {(["WHATSAPP", "GMAIL", "TIKTOK"] as const).map((provider) => {
         const current = data.integrations.find((x) => x.provider === provider);
+        const available = provider === "WHATSAPP";
         return (
           <Card
             key={provider}
-            title={provider === "WHATSAPP" ? "WhatsApp Business" : "Gmail"}
-            description="Connexion officielle, permissions et synchronisation auditées."
+            title={provider === "WHATSAPP" ? "WhatsApp Business" : provider === "GMAIL" ? "Gmail" : "TikTok Business"}
+            description={provider === "WHATSAPP" ? "Messages clients, Inbox, campagnes et réponses de l’agence." : "Ce canal pourra être ajouté à votre espace de communication."}
           >
-            <p className="mb-4 text-[13px]">
-              État : <b>{String(current?.status || "DISCONNECTED")}</b>
+            <p className="mb-4 text-[13px]">État : <b>{integrationStatusLabel(String(current?.status || "DISCONNECTED"), available)}</b>
               {current?.last_sync_at
                 ? ` · Sync ${new Date(String(current.last_sync_at)).toLocaleString("fr-FR")}`
                 : ""}
             </p>
-            <button className={primary} onClick={() => connect(provider)}>
-              {current ? "Reconnecter" : "Connecter"}
-            </button>
+            {available ? <button className={primary} onClick={() => connect("WHATSAPP")}>{current ? "Reconnecter WhatsApp" : "Connecter WhatsApp"}</button> : <span className="inline-flex h-9 items-center rounded-md bg-[#f1f3f4] px-3 text-[12px] font-medium text-[#707780]">Disponible prochainement</span>}
           </Card>
         );
       })}
     </div>
   );
+}
+function integrationStatusLabel(status: string, available: boolean) {
+  if (!available) return "Bientôt disponible";
+  return ({ CONNECTED: "Connecté", CONNECTING: "Connexion à finaliser", ERROR: "Attention requise", DISCONNECTED: "Non connecté" } as Record<string,string>)[status] || status;
 }
 function DocumentsSettings({
   data,
@@ -1027,11 +1132,11 @@ function DocumentsSettings({
       title="Documents & numérotation"
       description="Formats versionnés, jamais codés en dur."
     >
-      <div className="divide-y">
+      <div className="grid gap-3 md:grid-cols-2">
         {data.numbering.map((x) => (
           <form
             key={String(x.id)}
-            className="flex flex-wrap items-center gap-3 py-3"
+            className="rounded-md bg-[#f8faf9] p-4 ring-1 ring-[#e6eae8]"
             onSubmit={(e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
@@ -1046,18 +1151,34 @@ function DocumentsSettings({
               );
             }}
           >
-            <b className="w-28 text-[12px]">{String(x.document_type)}</b>
-            <input
-              name="format"
-              className={`${input} max-w-md`}
-              defaultValue={String(x.prefix_format)}
-            />
-            <button className={button}>Enregistrer</button>
+            <div className="mb-3"><b className="text-[13px]">{documentTypeLabel(String(x.document_type))}</b><p className="mt-0.5 text-[11px] text-[#74808c]">Exemple généré automatiquement : {numberingExample(String(x.prefix_format))}</p></div>
+            <label>Format du numéro
+              <input name="format" className={`${input} mt-1 font-mono`} defaultValue={String(x.prefix_format)} />
+            </label>
+            <button className={`${button} mt-3`}>Enregistrer ce format</button>
           </form>
         ))}
       </div>
     </Card>
   );
+}
+function documentTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    INVOICE: "Factures clients",
+    QUOTE: "Devis",
+    RECEIPT: "Reçus de paiement",
+    DOSSIER: "Dossiers",
+    PACKAGE: "Colis",
+    SHIPMENT: "Expéditions",
+    PAYMENT: "Paiements",
+    MANIFEST: "Manifestes",
+    DELIVERY_NOTE: "Bons de livraison",
+    SHIPPING_LABEL: "Étiquettes colis",
+  };
+  return labels[type] || type.toLowerCase().replaceAll("_", " ");
+}
+function numberingExample(format: string) {
+  return format.replaceAll("{YYYY}", "2026").replace(/\{0+\}/g, "000184");
 }
 function BillingSettings({ data }: { data: AdminData }) {
   const b = data.billing || {};

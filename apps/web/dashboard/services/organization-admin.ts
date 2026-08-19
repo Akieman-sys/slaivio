@@ -18,3 +18,5 @@ export async function saveNumbering(type:string,prefix_format:string,expected_ve
 export async function requestDataOperation(payload:Record<string,unknown>){return(await api.post('/organization/admin/data-requests',payload)).data}
 export async function createApiKey(payload:Record<string,unknown>){return(await api.post('/organization/admin/api-keys',payload)).data}
 export async function revokeApiKey(id:string){return(await api.delete(`/organization/admin/api-keys/${id}`)).data}
+export type AgencyWhatsappNumber={id:string;display_phone_number?:string;verified_name?:string;role?:string;status?:string};
+export async function listAgencyWhatsappNumbers(){return(await api.get<{numbers:AgencyWhatsappNumber[]}>('/whatsapp/numbers')).data.numbers}

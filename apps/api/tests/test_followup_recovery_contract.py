@@ -15,3 +15,12 @@ def test_followup_workspace_is_real():
  ui=text('apps/web/dashboard/components/followups/followups-page.tsx');service=text('apps/web/dashboard/services/followups.ts')
  for label in ('Aujourd’hui','En retard','Règles & séquences','Envoyer maintenant','Escalader'):assert label in ui
  for endpoint in ("'/followups'","`/followups/${id}/execute`",'/followups/rules'):assert endpoint in service
+
+def test_followup_cron_matches_the_partial_idempotency_index():
+ repo=text('apps/api/app/db/followup_repository.py').lower()
+ repair=text('infra/sql/088_followup_cron_idempotency_repair.sql').lower()
+ predicate='on conflict(org_id,idempotency_key) where idempotency_key is not null'
+ assert predicate in repo
+ assert 'create unique index idx_followup_idempotency' in repair
+ assert 'where idempotency_key is not null' in repair
+ assert 'row_number() over' in repair

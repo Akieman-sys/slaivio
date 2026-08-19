@@ -119,7 +119,7 @@ def get_active_operator_workflow(org_id: str, user_id: str):
                 from ai_workflow_runs
                 where org_id = :org_id
                   and manager_id = :user_id
-                  and workflow_status = 'PREPARED'
+                  and workflow_status in ('PREPARED','PAUSED')
                   and workflow_type = 'CREATE_SHIPMENT_DRAFT'
                 order by created_at desc
                 limit 1

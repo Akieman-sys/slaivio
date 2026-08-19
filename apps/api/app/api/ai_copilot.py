@@ -6,10 +6,10 @@ from app.ai.repositories.operator_message_repository import list_operator_messag
 from app.ai.repositories.workflow_repository import list_operator_workflows
 from app.ai.services.operator_copilot_service import (
     approve_operator_workflow,
-    prepare_operator_message,
     reject_operator_workflow,
     control_operator_workflow,
 )
+from app.ai.services.conversation_orchestrator import handle_conversation
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 
@@ -37,9 +37,9 @@ def get_messages(limit: int = 50, tenant=Depends(get_current_tenant)):
 
 @router.post("/messages")
 def post_message(body: CopilotMessageRequest, tenant=Depends(get_current_tenant)):
-    return prepare_operator_message(
+    return handle_conversation(
         org_id=tenant["org_id"],
-        user_id=tenant["user_id"],
+        actor_id=tenant["user_id"],
         actor_name=tenant.get("actor_name"),
         message=body.message,
         client_phone=body.client_phone,

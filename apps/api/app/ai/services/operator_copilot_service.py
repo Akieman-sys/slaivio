@@ -104,6 +104,22 @@ def _continue_dossier_workflow(
     missing = _missing_fields("CREATE_SHIPMENT_DRAFT", entities, resolved_phone)
     act = dialogue_act(message, True)
 
+    if workflow.get("workflow_status") == "PAUSED" and act != "RESUME":
+        response = "Cette préparation est en pause. Dites « continue » pour la reprendre, ou « annule » pour la fermer."
+        assistant_message = create_operator_message(
+            org_id, user_id, "ASSISTANT", response, workflow_id=str(workflow["id"])
+        )
+        return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
+
+    if act == "RESUME":
+        updated = update_workflow_status(org_id, str(workflow["id"]), "PREPARED", {"resumed_by": user_id})
+        response = _question(missing[0]) if missing else "La préparation est reprise et prête à être vérifiée."
+        assistant_message = create_operator_message(
+            org_id, user_id, "ASSISTANT", response, workflow_id=str(workflow["id"]),
+            metadata={"missing_fields": missing, "dialogue_state": "COLLECTING" if missing else "READY_FOR_REVIEW"},
+        )
+        return {"message": assistant_message, "workflow": updated, "missing_fields": missing}
+
     if act == "CANCEL":
         update_workflow_status(org_id, str(workflow["id"]), "REJECTED", {"reason": "cancelled"})
         response = "La préparation du colis a été annulée. Aucune donnée métier n’a été créée."

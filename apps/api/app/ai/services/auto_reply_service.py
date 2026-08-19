@@ -1,5 +1,5 @@
 from app.ai.repositories.ai_settings_repository import get_ai_settings
-from app.ai.services.response_orchestrator import orchestrate_ai_response
+from app.ai.services.conversation_orchestrator import handle_conversation
 from app.db.outbound_message_repository import (
     create_outbound_message,
     mark_outbound_message_failed,
@@ -38,10 +38,11 @@ def maybe_auto_reply_to_inbound_message(
             "reason": "auto_reply_disabled",
         }
 
-    orchestration = orchestrate_ai_response(
+    orchestration = handle_conversation(
         org_id=org_id,
         client_phone=client_phone,
-        user_message=inbound_text,
+        message=inbound_text,
+        channel="WHATSAPP",
     )
     decision = orchestration.get("decision")
     intent = orchestration.get("intent", {})

@@ -11,6 +11,7 @@ def test_dialogue_acts_do_not_confuse_greetings_and_workflow_answers():
     assert dialogue_act("je sais pas",True) == "UNKNOWN_ANSWER"
     assert dialogue_act("finalement annule",True) == "CANCEL"
     assert dialogue_act("le colis n'est pas créé",True) == "STATUS_QUESTION"
+    assert dialogue_act("continue",True) == "RESUME"
 
 
 def test_semantic_validation_rejects_unknown_and_off_topic_values():
@@ -47,3 +48,20 @@ def test_failed_and_stale_executions_are_recoverable():
     assert "updated_at<now()-interval '2 minutes'" in repository
     assert 'update_workflow_status(org_id,workflow_id,"FAILED"' in service
     assert "find_client_by_phone(org_id,workflow[\"client_phone\"])" in service
+
+
+def test_internal_and_whatsapp_share_the_conversation_boundary():
+    orchestrator=(ROOT/"apps/api/app/ai/services/conversation_orchestrator.py").read_text(encoding="utf-8")
+    api=(ROOT/"apps/api/app/api/ai_copilot.py").read_text(encoding="utf-8")
+    whatsapp=(ROOT/"apps/api/app/ai/services/auto_reply_service.py").read_text(encoding="utf-8")
+    assert "def handle_conversation(" in orchestrator
+    assert "prepare_operator_message(" in orchestrator
+    assert "handle_conversation(" in api
+    assert "handle_conversation(" in whatsapp
+
+
+def test_paused_workflow_can_be_resumed_from_the_conversation():
+    repository=(ROOT/"apps/api/app/ai/repositories/workflow_repository.py").read_text(encoding="utf-8")
+    service=(ROOT/"apps/api/app/ai/services/operator_copilot_service.py").read_text(encoding="utf-8")
+    assert "workflow_status in ('PREPARED','PAUSED')" in repository
+    assert 'if act == "RESUME"' in service

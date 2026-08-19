@@ -11,7 +11,9 @@ import {
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
 import {
+  FormSection,
   OperationButton,
+  OperationField,
   OperationMetric,
   OperationMetricGrid,
 } from "@/components/ui/operation-controls";
@@ -419,8 +421,13 @@ function CreatePanel({
         </>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Mode de groupage">
+      <div className="grid gap-6">
+        <FormSection
+          title="Trajet et groupage"
+          description="Choisissez uniquement parmi les routes, services et entrepôts déjà configurés par l’agence."
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+        <OperationField label="Mode de groupage" required>
           <select
             className={input}
             value={p.batch_type}
@@ -432,8 +439,8 @@ function CreatePanel({
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="Route">
+        </OperationField>
+        <OperationField label="Route" hint="La destination et les compatibilités seront reprises automatiquement." required>
           <select
             className={input}
             value={p.route_id}
@@ -446,8 +453,8 @@ function CreatePanel({
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="Service">
+        </OperationField>
+        <OperationField label="Service" hint="Seuls les services compatibles avec la route sont proposés." required>
           <select
             className={input}
             value={p.shipping_service_id}
@@ -464,8 +471,8 @@ function CreatePanel({
                 </option>
               ))}
           </select>
-        </Field>
-        <Field label="Entrepôt origine">
+        </OperationField>
+        <OperationField label="Entrepôt d’origine">
           <select
             className={input}
             value={p.origin_warehouse_id}
@@ -478,41 +485,50 @@ function CreatePanel({
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="Capacité kg">
+        </OperationField>
+          </div>
+        </FormSection>
+        <FormSection
+          title="Capacité et échéance"
+          description="Définissez les limites utiles au contrôle du chargement. Les valeurs non connues peuvent rester vides."
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+        <OperationField label="Poids maximum" hint="En kilogrammes.">
           <input
             className={input}
             type="number"
             value={p.capacity_weight_kg}
             onChange={(e) => set("capacity_weight_kg", e.target.value)}
           />
-        </Field>
-        <Field label="Capacité CBM">
+        </OperationField>
+        <OperationField label="Volume maximum" hint="En mètres cubes (CBM).">
           <input
             className={input}
             type="number"
             value={p.capacity_cbm}
             onChange={(e) => set("capacity_cbm", e.target.value)}
           />
-        </Field>
-        <Field label="Nombre max colis">
+        </OperationField>
+        <OperationField label="Nombre maximum de colis">
           <input
             className={input}
             type="number"
             value={p.capacity_packages}
             onChange={(e) => set("capacity_packages", e.target.value)}
           />
-        </Field>
-        <Field label="Cut-off">
+        </OperationField>
+        <OperationField label="Date limite d’ajout" hint="Après cette date, les nouveaux colis seront orientés vers le prochain batch.">
           <input
             className={input}
             type="datetime-local"
             value={p.cutoff_at}
             onChange={(e) => set("cutoff_at", e.target.value)}
           />
-        </Field>
+        </OperationField>
+          </div>
+        </FormSection>
       </div>
-      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-5 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</p>}
     </OperationDrawer>
   );
 }
@@ -770,19 +786,5 @@ function DetailPanel({
         </section>
       </div>
     </OperationDrawer>
-  );
-}
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="text-xs text-[#5f6862]">
-      {label}
-      <div className="mt-1">{children}</div>
-    </label>
   );
 }

@@ -722,33 +722,61 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   font-weight: var(--operation-weight-medium);
 }
 
-/* Forms opened in the shared right drawer use one field language everywhere. */
+/* One form language for drawers and forms embedded in operational pages. */
+.slaivio-operations form,
+.operation-form-surface {
+  --form-control-height: 42px;
+  --form-control-radius: 8px;
+  --form-control-border: #c6cdd5;
+  --form-control-border-hover: #9faab5;
+  --form-control-focus: #12a865;
+}
+
 .slaivio-operations form label,
-.operation-form-surface form label {
-  color: #3f4a56;
-  font-size: var(--operation-text-label, 12px);
+.operation-form-surface label,
+.operation-form-surface [data-ui="field-label"] {
+  color: #343d46;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: var(--operation-weight-semibold, 620);
 }
 
-.slaivio-operations form input:not([type="checkbox"]):not([type="radio"]),
-.slaivio-operations form select,
-.slaivio-operations form textarea,
-.operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),
-.operation-form-surface form select,
-.operation-form-surface form textarea {
-  min-height: 36px;
-  border: 1px solid #cfd5dd !important;
-  border-radius: 6px !important;
+.slaivio-operations form :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea),
+.operation-form-surface :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  width: 100%;
+  min-height: var(--form-control-height);
+  border: 1px solid var(--form-control-border) !important;
+  border-radius: var(--form-control-radius) !important;
   background-color: #fff;
-  color: #25292e;
-  font-size: var(--operation-text-body, 13px) !important;
+  color: #242a30;
+  font-size: 14px !important;
+  line-height: 20px;
   outline: none;
-  box-shadow: none;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.02);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.slaivio-operations form :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select):not([type="file"]),
+.operation-form-surface :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select):not([type="file"]) {
+  padding-inline: 12px;
+}
+
+.slaivio-operations form :is(input, select, textarea):hover:not(:disabled),
+.operation-form-surface :is(input, select, textarea):hover:not(:disabled) {
+  border-color: var(--form-control-border-hover) !important;
 }
 
 .operation-form-surface form {
   display: grid;
-  gap: 1.25rem;
+  gap: 1.5rem;
+}
+
+.operation-form-surface [data-ui="operation-field"] {
+  align-content: start;
+}
+
+.operation-form-surface [data-ui="form-section"] > div:first-child {
+  max-width: 580px;
 }
 
 .operation-form-surface h2 {
@@ -759,53 +787,84 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .operation-form-surface h3,
 .operation-content h3 {
-  font-size: var(--operation-text-body, 13px) !important;
+  font-size: 14px !important;
   line-height: 20px;
   font-weight: var(--operation-weight-semibold, 620);
 }
 
+.operation-form-surface [data-ui="form-section"] h3 {
+  font-size: 15px !important;
+  line-height: 21px;
+}
+
 .operation-drawer-footer button {
-  min-height: 36px;
-  border-radius: 6px !important;
-  font-size: var(--operation-text-body, 13px) !important;
+  min-height: 40px;
+  border-radius: 8px !important;
+  padding-inline: 16px;
+  font-size: 14px !important;
   font-weight: var(--operation-weight-semibold, 620);
 }
 
-.operation-form-surface form input:not([type="checkbox"]):not([type="radio"]),
-.operation-form-surface form select {
+.slaivio-operations form button,
+.operation-form-surface form button {
   min-height: 40px;
-  padding-inline: 0.75rem;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
-.operation-form-surface form textarea {
-  min-height: 96px;
-  padding: 0.625rem 0.75rem;
+.slaivio-operations form textarea,
+.operation-form-surface textarea {
+  min-height: 108px;
+  padding: 10px 12px;
   resize: vertical;
 }
 
-.operation-form-surface form input[type="checkbox"],
-.operation-form-surface form input[type="radio"] {
+.slaivio-operations form input[type="checkbox"],
+.slaivio-operations form input[type="radio"],
+.operation-form-surface input[type="checkbox"],
+.operation-form-surface input[type="radio"] {
+  width: 17px;
+  height: 17px;
   accent-color: #16855f;
+}
+
+.slaivio-operations form :is(input, select, textarea):disabled,
+.operation-form-surface :is(input, select, textarea):disabled {
+  cursor: not-allowed;
+  border-color: #dfe4e8 !important;
+  background: #f3f5f6;
+  color: #7a848e;
+}
+
+.slaivio-operations form input[type="file"],
+.operation-form-surface input[type="file"] {
+  padding: 8px 10px;
 }
 
 .operation-form-surface form > :is(.border-t, footer) {
   border-color: #e5e8eb !important;
 }
 
-.slaivio-operations form input:focus,
-.slaivio-operations form select:focus,
-.slaivio-operations form textarea:focus,
-.operation-form-surface form input:focus,
-.operation-form-surface form select:focus,
-.operation-form-surface form textarea:focus {
-  border-color: #12c76f !important;
-  box-shadow: 0 0 0 3px rgba(18, 199, 111, 0.1);
+.slaivio-operations form :is(input, select, textarea):focus,
+.operation-form-surface :is(input, select, textarea):focus {
+  border-color: var(--form-control-focus) !important;
+  box-shadow: 0 0 0 3px rgba(18, 168, 101, 0.12);
 }
 
-.slaivio-operations form input::placeholder,
-.slaivio-operations form textarea::placeholder,
-.operation-form-surface form input::placeholder,
-.operation-form-surface form textarea::placeholder {
-  color: #8a949f;
+.slaivio-operations form :is(input, textarea)::placeholder,
+.operation-form-surface :is(input, textarea)::placeholder {
+  color: #89939d;
   font-weight: 400;
+}
+
+.slaivio-operations form [aria-invalid="true"],
+.operation-form-surface [aria-invalid="true"] {
+  border-color: #d92d20 !important;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.08);
+}
+
+.operation-form-surface [role="alert"] {
+  font-size: 13px;
+  line-height: 20px;
 }

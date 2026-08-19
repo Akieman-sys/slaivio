@@ -123,10 +123,10 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-4 border-b border-[#e8ebee] pb-5 last:border-b-0 last:pb-0">
+    <section data-ui="form-section" className="grid gap-5 border-b border-[#e5e9ed] pb-6 last:border-b-0 last:pb-0">
       <div>
-        <h3 className="text-[13px] font-semibold text-[#2f363d]">{title}</h3>
-        {description && <p className="mt-1 text-[11px] leading-5 text-[#737d87]">{description}</p>}
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-[#242a30]">{title}</h3>
+        {description && <p className="mt-1 text-[12px] leading-5 text-[#69747f]">{description}</p>}
       </div>
       {children}
     </section>
@@ -145,10 +145,10 @@ export function OperationField({
   children: ReactNode;
 }) {
   return (
-    <label className="grid min-w-0 gap-1.5">
+    <label data-ui="operation-field" className="grid min-w-0 gap-2">
       <span data-ui="field-label">{label}{required && <span className="ml-1 text-[#b42318]">*</span>}</span>
       {children}
-      {hint && <small className="text-[11px] font-normal leading-4 text-[#7a838d]">{hint}</small>}
+      {hint && <small className="text-[12px] font-normal leading-[18px] text-[#74808b]">{hint}</small>}
     </label>
   );
 }

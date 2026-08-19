@@ -177,6 +177,17 @@ def answer_platform_query(org_id: str, message: str, client_phone: str | None = 
     if any(word in normalized for word in ("cree","crée","creer","créer","prepare","prépare")) and any(word in normalized for word in ("batch","groupage")):
         return None
 
+    client_count_requested = "client" in intent_text and any(phrase in intent_text for phrase in (
+        "combien de client", "combien des client", "nombre de client", "total client",
+        "clients avons nous", "clients enregistres", "clients dans l agence",
+    ))
+    if client_count_requested:
+        _require(org_id,actor_id,channel,"clients.search")
+        result=list_clients(org_id,page=1,page_size=1,sort="name_asc")
+        total=int((result.get("pagination") or {}).get("total") or 0)
+        return {"content":f"L’agence compte actuellement {total} client{'s' if total != 1 else ''} enregistré{'s' if total != 1 else ''}.",
+            "tool":"clients.search","cards":[{"kind":"CLIENT","id":"all","title":"Tous les clients","subtitle":f"{total} client{'s' if total != 1 else ''}","href":"/app/clients"}]}
+
     if "client" in normalized and any(word in normalized for word in lookup_words):
         _require(org_id,actor_id,channel,"clients.search")
         query = _client_search_term(message)

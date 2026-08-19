@@ -263,6 +263,23 @@ def test_shipment_transition_uses_permission_and_optimistic_version(monkeypatch)
     assert result["result"]["expedition"]["status"]=="DISPATCHED"
 
 
+def test_dossier_collection_can_answer_an_unrelated_platform_question(monkeypatch):
+    workflow=_workflow(entities={"client_id":"client-1","client_name":"Jeremy"})
+    monkeypatch.setattr(service,"answer_platform_query",lambda *_args,**_kwargs:{
+        "content":"L’agence compte actuellement 42 clients enregistrés.","tool":"clients.search","cards":[]})
+    monkeypatch.setattr(service,"create_operator_message",lambda _org,_user,role,content,**kwargs:{
+        "id":"answer-1","role":role,"content":content,"metadata":kwargs.get("metadata")})
+    monkeypatch.setattr(service,"validate_field",lambda *_:pytest.fail("the question must not fill the pending origin field"))
+
+    result=service._continue_dossier_workflow(
+        "org-1","user-1",workflow,"Il y a combien de clients ?",None,"workspace-1","INTERNAL"
+    )
+
+    assert result["dialogue_state"]=="ANSWERED_WITH_WORKFLOW_PENDING"
+    assert result["workflow"] is workflow
+    assert "préparation en cours est conservée" in result["message"]["content"]
+
+
 def test_copilot_schema_and_repositories_are_tenant_scoped():
     root = Path(__file__).parents[3]
     migration = (root / "infra/sql/059_ai_operator_copilot.sql").read_text(encoding="utf-8")

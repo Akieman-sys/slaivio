@@ -74,6 +74,20 @@ def test_daily_priorities_merge_operational_sources(monkeypatch):
     assert [card["title"] for card in result["cards"]] == ["FUP-1", "COL-1"]
 
 
+def test_client_count_uses_real_tenant_pagination(monkeypatch):
+    monkeypatch.setattr(platform_query_service,"_require",lambda *args:None)
+    monkeypatch.setattr(platform_query_service,"list_clients",lambda *args,**kwargs:{
+        "items":[],"pagination":{"page":1,"page_size":1,"total":42,"total_pages":42}})
+
+    result=platform_query_service.answer_platform_query(
+        "agency-a","Il y a combien de clients ?",actor_id="manager-a"
+    )
+
+    assert result["tool"]=="clients.search"
+    assert "42 clients" in result["content"]
+    assert result["cards"][0]["href"]=="/app/clients"
+
+
 def test_route_service_recommendation_uses_configured_engine(monkeypatch):
     monkeypatch.setattr(platform_query_service,"route_listing",lambda *args,**kwargs:{"items":[{
         "id":"route-1","status":"ACTIVE","route_name":"Guangzhou → Kinshasa",

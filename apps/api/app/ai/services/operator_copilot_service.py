@@ -155,12 +155,29 @@ def _save_validation(org_id: str, workflow: dict, field: str, raw: str, result: 
         return None
 
 
+def _active_workflow_query(org_id,user_id,workflow,message,client_phone,workspace_id,channel):
+    try:
+        answer=answer_platform_query(org_id,message,client_phone,workspace_id,user_id,channel)
+    except Exception:
+        answer=None
+    if not answer:return None
+    content=answer["content"]+"\n\nLa préparation en cours est conservée ; vous pouvez ensuite répondre à la question affichée."
+    assistant=create_operator_message(org_id,user_id,"ASSISTANT",content,workflow_id=str(workflow["id"]),metadata={
+        "dialogue_state":"ANSWERED_WITH_WORKFLOW_PENDING","tool":answer["tool"],"cards":answer.get("cards") or [],
+        "pending_workflow_id":str(workflow["id"])})
+    return {"message":assistant,"workflow":workflow,
+        "missing_fields":_missing_fields(workflow["workflow_type"],workflow.get("entities") or {},client_phone),
+        "dialogue_state":"ANSWERED_WITH_WORKFLOW_PENDING","tool":answer["tool"]}
+
+
 def _continue_dossier_workflow(
     org_id: str,
     user_id: str,
     workflow: dict,
     message: str,
     explicit_phone: str | None,
+    workspace_id: str | None = None,
+    channel: str = "INTERNAL",
 ):
     entities = dict(workflow.get("entities") or {})
     current_phone = explicit_phone or workflow["client_phone"]
@@ -210,6 +227,9 @@ def _continue_dossier_workflow(
         )
         assistant_message = create_operator_message(org_id,user_id,"ASSISTANT",response,workflow_id=str(workflow["id"]))
         return {"message": assistant_message, "workflow": workflow, "missing_fields": missing}
+
+    interruption=_active_workflow_query(org_id,user_id,workflow,message,resolved_phone,workspace_id,channel)
+    if interruption:return interruption
 
     if act == "CORRECTION":
         field, corrected = correction_from_message(message)
@@ -288,7 +308,7 @@ def _continue_dossier_workflow(
     return {"message": assistant_message, "workflow": updated, "missing_fields": remaining, "summary":entities, "dialogue_state":"COLLECTING" if remaining else "READY_FOR_REVIEW"}
 
 
-def _continue_client_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None):
+def _continue_client_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None,workspace_id:str|None=None,channel:str="INTERNAL"):
     entities=dict(workflow.get("entities") or {}); phone=explicit_phone or workflow.get("client_phone")
     if str(phone).startswith("internal:"):phone=None
     act=dialogue_act(message,True);missing=_missing_fields("CREATE_CLIENT",entities,phone)
@@ -303,6 +323,9 @@ def _continue_client_workflow(org_id:str,user_id:str,workflow:dict,message:str,e
     if workflow.get("workflow_status")=="PAUSED" and act!="RESUME":
         assistant=create_operator_message(org_id,user_id,"ASSISTANT","Cette création est en pause. Dites « continue » ou « annule ».",workflow_id=str(workflow["id"]))
         return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+    if act!="RESUME":
+        interruption=_active_workflow_query(org_id,user_id,workflow,message,phone,workspace_id,channel)
+        if interruption:return interruption
     if act=="RESUME":
         workflow=update_workflow_status(org_id,str(workflow["id"]),"PREPARED",{"resumed_by":user_id})
     elif missing:
@@ -349,7 +372,7 @@ def _parse_due_at(value:str):
     return target.isoformat()
 
 
-def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None):
+def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str,explicit_phone:str|None,workspace_id:str|None=None,channel:str="INTERNAL"):
     entities=dict(workflow.get("entities") or {});phone=explicit_phone or workflow.get("client_phone")
     if str(phone).startswith("internal:"):phone=None
     missing=_missing_fields("CREATE_FOLLOWUP",entities,phone);act=dialogue_act(message,True)
@@ -364,6 +387,9 @@ def _continue_followup_workflow(org_id:str,user_id:str,workflow:dict,message:str
     if workflow.get("workflow_status")=="PAUSED" and act!="RESUME":
         assistant=create_operator_message(org_id,user_id,"ASSISTANT","Cette relance est en pause. Dites « continue » ou « annule ».",workflow_id=str(workflow["id"]))
         return {"message":assistant,"workflow":workflow,"missing_fields":missing}
+    if act!="RESUME":
+        interruption=_active_workflow_query(org_id,user_id,workflow,message,phone,workspace_id,channel)
+        if interruption:return interruption
     if act=="RESUME":workflow=update_workflow_status(org_id,str(workflow["id"]),"PREPARED",{"resumed_by":user_id})
     elif missing:
         field=missing[0]
@@ -443,13 +469,13 @@ def prepare_operator_message(
     active_workflow = get_active_operator_workflow(org_id, user_id)
     if active_workflow:
         if active_workflow.get("workflow_type")=="CREATE_CLIENT":
-            return _continue_client_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
+            return _continue_client_workflow(org_id,user_id,active_workflow,clean_message,client_phone,workspace_id,channel)
         if active_workflow.get("workflow_type")=="CREATE_FOLLOWUP":
-            return _continue_followup_workflow(org_id,user_id,active_workflow,clean_message,client_phone)
+            return _continue_followup_workflow(org_id,user_id,active_workflow,clean_message,client_phone,workspace_id,channel)
         if active_workflow.get("workflow_type") in REVIEW_ONLY_WORKFLOWS:
             return _continue_review_workflow(org_id,user_id,active_workflow,clean_message,workspace_id,channel)
         return _continue_dossier_workflow(
-            org_id, user_id, active_workflow, clean_message, client_phone
+            org_id, user_id, active_workflow, clean_message, client_phone, workspace_id, channel
         )
 
     try:

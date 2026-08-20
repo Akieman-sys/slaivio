@@ -16,21 +16,24 @@ def dashboard(org_id,start=None,end=None):
           (select count(*) from clients where org_id=:o and created_at>=:start and created_at<:end)::int clients,
           (select count(*) from cargo_packages where org_id=:o and deleted_at is null and created_at>=:start and created_at<:end)::int packages,
           (select coalesce(sum(weight_kg),0) from cargo_packages where org_id=:o and deleted_at is null and created_at>=:start and created_at<:end)::float weight_kg,
-          (select count(*) from shipments where org_id=:o and created_at>=:start and created_at<:end)::int shipments,
+          (select count(*) from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null and created_at>=:start and created_at<:end)::int shipments,
           (select count(*) from dossiers where org_id=:o and created_at>=:start and created_at<:end)::int dossiers,
           (select count(*) from pickup_orders where org_id=:o and created_at>=:start and created_at<:end)::int pickups,
           (select count(*) from clients where org_id=:o and created_at>=:ps and created_at<:pe)::int previous_clients,
           (select count(*) from cargo_packages where org_id=:o and deleted_at is null and created_at>=:ps and created_at<:pe)::int previous_packages,
-          (select count(*) from shipments where org_id=:o and created_at>=:ps and created_at<:pe)::int previous_shipments"""),p).mappings().one())
+          (select count(*) from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null and created_at>=:ps and created_at<:pe)::int previous_shipments"""),p).mappings().one())
         trend=_rows(c.execute(text("""with days as(select generate_series(cast(:start as date),cast(:end as date)-1,interval '1 day')::date day)
           select d.day,coalesce(c.clients,0)::int clients,coalesce(p.packages,0)::int packages,coalesce(s.shipments,0)::int shipments
           from days d left join(select created_at::date day,count(*) clients from clients where org_id=:o and created_at>=:start and created_at<:end group by 1)c using(day)
           left join(select created_at::date day,count(*) packages from cargo_packages where org_id=:o and deleted_at is null and created_at>=:start and created_at<:end group by 1)p using(day)
-          left join(select created_at::date day,count(*) shipments from shipments where org_id=:o and created_at>=:start and created_at<:end group by 1)s using(day) order by d.day"""),p))
-        statuses={'packages':_rows(c.execute(text("select status label,count(*)::int value from cargo_packages where org_id=:o and deleted_at is null group by status order by value desc"),p)),'shipments':_rows(c.execute(text("select status label,count(*)::int value from shipments where org_id=:o group by status order by value desc"),p)),'dossiers':_rows(c.execute(text("select status_global label,count(*)::int value from dossiers where org_id=:o group by status_global order by value desc"),p))}
-        routes=_rows(c.execute(text("""select concat_ws(' → ',origin_city,destination_city) route,shipping_mode,count(*)::int shipments,
-          coalesce(sum(weight_kg),0)::float weight_kg,round(avg(extract(epoch from(updated_at-created_at))/86400)::numeric,1)::float average_days
-          from shipments where org_id=:o and created_at>=:start and created_at<:end group by origin_city,destination_city,shipping_mode order by shipments desc limit 20"""),p))
+          left join(select created_at::date day,count(*) shipments from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null and created_at>=:start and created_at<:end group by 1)s using(day) order by d.day"""),p))
+        statuses={'packages':_rows(c.execute(text("select status label,count(*)::int value from cargo_packages where org_id=:o and deleted_at is null group by status order by value desc"),p)),'shipments':_rows(c.execute(text("select status label,count(*)::int value from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null group by status order by value desc"),p)),'dossiers':_rows(c.execute(text("select status_global label,count(*)::int value from dossiers where org_id=:o and archived_at is null group by status_global order by value desc"),p))}
+        routes=_rows(c.execute(text("""select
+          coalesce(nullif(route_label,''),nullif(concat_ws(' → ',nullif(origin_city,''),nullif(destination_city,'')),''),'Route non renseignée') route,
+          mode shipping_mode,count(*)::int shipments,coalesce(sum(total_weight_kg),0)::float weight_kg,
+          round(avg(extract(epoch from(updated_at-created_at))/86400)::numeric,1)::float average_days
+          from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null and created_at>=:start and created_at<:end
+          group by route_label,origin_city,destination_city,mode order by shipments desc limit 20"""),p))
         finance=_rows(c.execute(text("""select currency,count(*) filter(where document_type='INVOICE')::int invoices,
           coalesce(sum(total) filter(where document_type='INVOICE'),0)::float invoiced,
           coalesce(sum(amount_paid) filter(where document_type='INVOICE'),0)::float collected,
@@ -43,7 +46,7 @@ def dashboard(org_id,start=None,end=None):
 REPORT_SQL={
  'clients':"select id,name,phone,email,country,created_at from clients where org_id=:o and created_at>=:start and created_at<:end order by created_at desc",
  'packages':"select package_reference,tracking_id,status,client_id,warehouse_name,weight_kg,volume_cbm,destination_country,created_at from cargo_packages where org_id=:o and deleted_at is null and created_at>=:start and created_at<:end order by created_at desc",
- 'shipments':"select tracking_id,status,origin_city,destination_city,shipping_mode,weight_kg,volume_cbm,fees_total,fees_paid,currency,created_at,updated_at from shipments where org_id=:o and created_at>=:start and created_at<:end order by created_at desc",
+ 'shipments':"select expedition_reference,status,route_label,origin_city,destination_city,mode shipping_mode,total_weight_kg weight_kg,total_volume_cbm volume_cbm,billed_total,cost_total,profit_total,currency,created_at,updated_at from cargo_expeditions where org_id=:o and archived_at is null and deleted_at is null and created_at>=:start and created_at<:end order by created_at desc",
  'finance':"select document_number,document_type,status,currency,total,amount_paid,balance_due,issue_date,due_date,created_at from finance_documents where org_id=:o and created_at>=:start and created_at<:end order by created_at desc",
  'pickups':"select pickup_reference,status,client_id,recipient_name,recipient_phone,payment_status,required_amount,paid_amount,storage_fee,currency,ready_at,checked_in_at,released_at,created_at from pickup_orders where org_id=:o and created_at>=:start and created_at<:end order by created_at desc"
 }

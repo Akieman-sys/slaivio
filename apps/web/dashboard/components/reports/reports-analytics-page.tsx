@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { Download, RefreshCcw, Save } from "lucide-react";
 import {
   exportReport,
@@ -46,8 +47,8 @@ export function ReportsAnalyticsPage() {
     setError("");
     try {
       setData(await getAnalytics(start, end));
-    } catch {
-      setError("Les données analytiques sont indisponibles.");
+    } catch (requestError) {
+      setError(analyticsErrorMessage(requestError));
     } finally {
       setLoading(false);
     }
@@ -165,20 +166,14 @@ export function ReportsAnalyticsPage() {
         />
       </OperationTabs>
       <main className="p-5 sm:p-6">
-        {error && <ErrorState title="Analytics indisponibles" description={error} retry={load} />}
-        {loading ? (
+        {error && data ? (
+          <div className="mb-4 border border-[#e7c98d] bg-[#fffaf0] px-4 py-3 text-[12px] text-[#75530b]" role="alert">
+            {error} Les derniers indicateurs disponibles restent affichés.
+          </div>
+        ) : null}
+        {loading && !data ? (
           <LoadingState label="Calcul des indicateurs…" />
-        ) : !data ? (
-          <section className="border border-[#dfe3e4] bg-white p-10 text-center">
-            <h2 className="text-[15px] font-semibold text-[#293034]">
-              Analytics temporairement indisponibles
-            </h2>
-            <p className="mt-1 text-[12px] text-[#697178]">
-              Réessayez avec le bouton Actualiser. Aucun chargement infini n’est
-              conservé.
-            </p>
-          </section>
-        ) : (
+        ) : data ? (
           <>
             {tab === "overview" && <Overview data={data} />}{" "}
             {tab === "operations" && <Operations data={data} />}{" "}
@@ -196,10 +191,34 @@ export function ReportsAnalyticsPage() {
               />
             )}
           </>
+        ) : (
+          <ErrorState
+            title="Analytics indisponibles"
+            description={error || "Aucune donnée analytique n’a pu être chargée."}
+            retry={load}
+          />
         )}
       </main>
     </div>
   );
+}
+function analyticsErrorMessage(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return "Le calcul des indicateurs n’a pas pu être terminé.";
+  }
+  if (!error.response) {
+    return "Le serveur Analytics ne répond pas. Vérifiez le déploiement de l’API puis réessayez.";
+  }
+  if (error.response.status === 401) {
+    return "Votre session a expiré. Reconnectez-vous pour consulter les indicateurs.";
+  }
+  if (error.response.status === 403) {
+    return "Votre rôle ne possède pas l’autorisation de consulter les Analytics de cette agence.";
+  }
+  if (error.response.status === 422) {
+    return "La période choisie n’est pas valide. Vérifiez les dates de début et de fin.";
+  }
+  return "Le serveur n’a pas pu calculer les indicateurs. Réessayez après le redéploiement de l’API.";
 }
 function Overview({ data }: { data: Analytics }) {
   return (

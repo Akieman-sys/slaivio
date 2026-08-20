@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
@@ -355,7 +355,8 @@ function RouteDetail({
       close={close}
       width="max-w-[920px]"
       headerMeta={<><Badge value={item.status} /><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">{item.transport_mode}</span></>}
-      tabs={<>{detailTabs.slice(0, 4).map(([key, label]) => <OperationTab key={key} active={tab === key} onClick={() => setTab(key)}>{label}</OperationTab>)}<OperationTabMenu items={detailTabs.slice(4)} value={detailTabs.slice(4).some(([key]) => key === tab) ? tab : ""} onChange={setTab} /></>}
+      tabsVariant="segmented"
+      tabs={<OperationDrawerTabs items={detailTabs.map(([key, label]) => ({ key, label }))} value={tab} primaryKeys={["overview", "services", "departures", "shipments", "performance"]} onChange={setTab} />}
     >
       <main>
         {tab === "overview" ? (

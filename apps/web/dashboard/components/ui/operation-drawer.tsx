@@ -2,6 +2,66 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { OperationTabMenu } from "@/components/ui/operation-controls";
+
+export type OperationDrawerTabItem = {
+  key: string;
+  label: string;
+  count?: number;
+};
+
+export function OperationDrawerTabs({
+  items,
+  value,
+  onChange,
+  primaryKeys,
+  primaryCount = 5,
+}: {
+  items: OperationDrawerTabItem[];
+  value: string;
+  onChange: (value: string) => void;
+  primaryKeys?: string[];
+  primaryCount?: number;
+}) {
+  const visible = primaryKeys?.length
+    ? items.filter((item) => primaryKeys.includes(item.key))
+    : items.slice(0, primaryCount);
+  const overflow = items.filter((item) => !visible.some((entry) => entry.key === item.key));
+  const overflowActive = overflow.some((item) => item.key === value);
+
+  return (
+    <>
+      {visible.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          aria-current={value === item.key ? "page" : undefined}
+          onClick={() => onChange(item.key)}
+          className={`inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-3.5 text-[13px] font-[580] transition-colors ${
+            value === item.key
+              ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm"
+              : "border-transparent text-[#5d6873] hover:bg-[#eceff1] hover:text-[#20262c]"
+          }`}
+        >
+          {item.label}
+          {Boolean(item.count) && (
+            <span className="min-w-5 rounded-full bg-[#e7ebed] px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#59636c]">
+              {item.count}
+            </span>
+          )}
+        </button>
+      ))}
+      {overflow.length > 0 && (
+        <OperationTabMenu
+          items={overflow.map((item) => [item.key, item.label] as const)}
+          value={overflowActive ? value : ""}
+          onChange={onChange}
+          className="self-center"
+        />
+      )}
+    </>
+  );
+}
 
 export function OperationDrawer({
   open,
@@ -10,7 +70,7 @@ export function OperationDrawer({
   close,
   children,
   tabs,
-  tabsVariant = "underline",
+  tabsVariant = "segmented",
   headerActions,
   headerLeading,
   headerMeta,

@@ -28,7 +28,7 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationActionMenu,
   OperationButton,
@@ -1381,9 +1381,6 @@ function PackageDetails({
     { key: "settings", label: "Paramètres" },
   ];
   const primaryTabKeys: DetailTab[] = ["summary", "dossier", "warehouse", "shipment", "history"];
-  const primaryTabs = tabs.filter((tab) => primaryTabKeys.includes(tab.key));
-  const secondaryTabs = tabs.filter((tab) => !primaryTabKeys.includes(tab.key));
-  const secondaryActive = secondaryTabs.some((tab) => tab.key === activeTab);
 
   async function refreshPackage(next: PackageRecord) {
     onUpdated(next);
@@ -1414,25 +1411,12 @@ function PackageDetails({
         </div>
       }
       tabs={
-        <>
-          {primaryTabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              aria-current={activeTab === tab.key ? "page" : undefined}
-              onClick={() => onTabChange(tab.key)}
-              className={`h-9 whitespace-nowrap rounded-[7px] border px-3.5 text-[13px] font-[580] transition-colors ${activeTab === tab.key ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm" : "border-transparent text-[#5d6873] hover:bg-[#eceff1] hover:text-[#20262c]"}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <OperationTabMenu
-            items={secondaryTabs.map((tab) => [tab.key, tab.label] as const)}
-            value={secondaryActive ? activeTab : ""}
-            onChange={onTabChange}
-            className="self-center"
-          />
-        </>
+        <OperationDrawerTabs
+          items={tabs}
+          value={activeTab}
+          primaryKeys={primaryTabKeys}
+          onChange={(value) => onTabChange(value as DetailTab)}
+        />
       }
       bodyClassName={loading ? "opacity-60" : undefined}
     >

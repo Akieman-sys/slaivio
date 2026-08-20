@@ -24,7 +24,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationActionMenu,
   OperationButton,
@@ -997,18 +997,14 @@ function DossierDetails({
         </>
       }
       headerMeta={<><StatusBadge status={dossier.status_global} /><PaymentBadge status={dossier.payment_status} />{loading && <span className="text-[12px] text-[#687584]">Actualisation…</span>}</>}
+      tabsVariant="segmented"
       tabs={
-        <>
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${activeTab === tab.key ? "bg-[#e9ecef] text-[#111827]" : "text-[#4f5b67] hover:bg-[#f1f3f5]"}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </>
+        <OperationDrawerTabs
+          items={tabs}
+          value={activeTab}
+          primaryKeys={["summary", "collaboration", "client", "shipments", "history"]}
+          onChange={(value) => onTabChange(value as DetailTab)}
+        />
       }
     >
           {activeTab === "summary" && <SummaryTab dossier={dossier} />}

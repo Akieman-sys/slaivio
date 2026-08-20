@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
@@ -574,7 +574,8 @@ function DetailDrawer({
         <PermissionGuard permission="services.suspend"><button className={btn} onClick={async () => { await transitionService(item.id, item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED", "Décision opérationnelle"); await changed(); }}>{item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}</button></PermissionGuard>
         <PermissionGuard permission="services.create"><button className={btn} onClick={async () => { await duplicateService(item.id); await changed(); }}><Copy size={13} />Dupliquer</button></PermissionGuard>
       </>}
-      tabs={<>{detailTabs.slice(0, 4).map(([key, label]) => <OperationTab key={key} active={tab === key} onClick={() => setTab(key)}>{label}</OperationTab>)}<OperationTabMenu items={detailTabs.slice(4)} value={detailTabs.slice(4).some(([key]) => key === tab) ? tab : ""} onChange={setTab} /></>}
+      tabsVariant="segmented"
+      tabs={<OperationDrawerTabs items={detailTabs.map(([key, label]) => ({ key, label }))} value={tab} primaryKeys={["overview", "routes", "pricing", "conditions", "performance"]} onChange={setTab} />}
     >
       <main>
         {tab === "overview" ? (

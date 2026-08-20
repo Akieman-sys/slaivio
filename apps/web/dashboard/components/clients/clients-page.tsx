@@ -32,7 +32,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
   OperationField,
@@ -948,27 +948,17 @@ function ClientDetails({
         </>
       }
       headerMeta={<><Initials name={client.display_name || client.name || "Client"} /><StatusBadge status={client.lifecycle_status} /></>}
+      tabsVariant="segmented"
       tabs={
-        <>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => onTabChange(tab.key)}
-                className={`h-8 whitespace-nowrap rounded-md px-3 text-[13px] font-medium ${
-                  activeTab === tab.key
-                    ? "bg-[#e9ecef] text-[#111827]"
-                    : "text-[#5f6b76] hover:bg-[#f4f6f8]"
-                }`}
-              >
-                {tab.label}
-                {tab.key === "duplicates" && duplicates.length > 0 ? (
-                  <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
-                    {duplicates.length}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-        </>
+        <OperationDrawerTabs
+          items={tabs.map((tab) => ({
+            ...tab,
+            count: tab.key === "duplicates" ? duplicates.length : undefined,
+          }))}
+          value={activeTab}
+          primaryKeys={["summary", "operations", "messages", "payments", "history"]}
+          onChange={(value) => onTabChange(value as DetailTab)}
+        />
       }
       bodyClassName={loading ? "opacity-60" : ""}
     >

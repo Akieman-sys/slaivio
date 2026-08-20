@@ -48,9 +48,10 @@ body {
   color: var(--foreground);
   min-width: 0;
   overflow-x: clip;
-  font-family: GeistSans, var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-weight: 400;
   line-height: 1.45;
+  font-optical-sizing: auto;
   font-feature-settings:
     "ss01" 1,
     "cv02" 1,
@@ -522,18 +523,68 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 /* Operational design system — Expéditions is the visual reference. */
 .slaivio-operations {
-  --operation-text-title: 21px;
-  --operation-text-metric: 23px;
+  --operation-text-title: 22px;
+  --operation-text-metric: 24px;
   --operation-text-body: 13px;
   --operation-text-tab: 14px;
-  --operation-text-label: 12px;
-  --operation-text-caption: 11px;
+  --operation-text-label: 13px;
+  --operation-text-caption: 12px;
   --operation-weight-regular: 400;
   --operation-weight-medium: 520;
   --operation-weight-semibold: 620;
   --operation-weight-bold: 680;
   color: #25292e;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Application chrome uses the same Geist family and a restrained Jira-like
+   hierarchy: compact group labels, readable navigation items and no 10px UI. */
+.slaivio-app-shell {
+  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.slaivio-app-shell .text-\[9px\],
+.slaivio-app-shell .text-\[10px\],
+.slaivio-app-shell .text-\[11px\] {
+  font-size: 12px !important;
+  line-height: 16px;
+}
+
+.slaivio-sidebar [data-ui="sidebar-group-label"] {
+  font-size: 12px !important;
+  line-height: 16px;
+  font-weight: 650;
+}
+
+.slaivio-sidebar [data-ui="sidebar-link"] {
+  font-size: 14px !important;
+  line-height: 20px;
+}
+
+.slaivio-sidebar [data-ui="sidebar-link"][data-active="true"] {
+  font-weight: 630;
+}
+
+.slaivio-topbar button,
+.slaivio-topbar a {
+  font-size: 13px;
+  font-weight: 520;
+}
+
+/* No operational text should become unreadable merely because a legacy
+   component used a 10/11px utility. Compact metadata has a 12px floor. */
+.slaivio-operations .text-\[10px\],
+.slaivio-operations .text-\[11px\] {
+  font-size: var(--operation-text-caption) !important;
+  line-height: 16px;
+}
+
+.slaivio-operations small {
+  font-size: var(--operation-text-caption);
+  line-height: 16px;
 }
 
 /* Semantic type scale: the same visual role always has the same size. */
@@ -545,7 +596,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .slaivio-operations .operation-page-header p {
-  font-size: var(--operation-text-label) !important;
+  font-size: var(--operation-text-body) !important;
   line-height: 20px;
   font-weight: var(--operation-weight-regular);
 }
@@ -601,6 +652,48 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   font-size: var(--operation-text-tab, 14px);
   font-weight: var(--operation-weight-medium, 520);
   transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+/* Drawer navigation follows the same type role as page navigation while
+   retaining its compact segmented shape. */
+.operation-drawer-segmented-tabs > button {
+  font-size: var(--operation-text-tab, 14px) !important;
+  line-height: 20px;
+  font-weight: var(--operation-weight-medium, 520) !important;
+}
+
+.operation-drawer-segmented-tabs > button span {
+  font-size: var(--operation-text-caption, 12px) !important;
+}
+
+[data-ui="operation-drawer"] {
+  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  color: #25292e;
+  font-size: 13px;
+  line-height: 18px;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+[data-ui="operation-drawer-title"] {
+  font-size: 20px !important;
+  line-height: 26px;
+  font-weight: var(--operation-weight-bold, 680) !important;
+}
+
+[data-ui="operation-drawer-description"] {
+  font-size: 13px !important;
+  line-height: 20px;
+}
+
+[data-ui="operation-drawer-meta"] {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.operation-content h2 {
+  font-size: 16px !important;
+  line-height: 22px;
+  font-weight: var(--operation-weight-semibold, 620);
 }
 
 .operation-tabs [aria-current="page"] {

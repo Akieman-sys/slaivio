@@ -7,7 +7,7 @@ function PageState({ icon, title, description, action }: StateProps & { icon: Re
   return <div className="flex min-h-[280px] items-center justify-center bg-white p-6">
     <section className="w-full max-w-md text-center" role="status">
       <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#f0f2f2] text-[#65707b]">{icon}</div>
-      <h2 className="mt-4 text-[15px] font-semibold text-[#25292e]">{title}</h2>
+      <h2 className="mt-4 text-[16px] font-semibold text-[#25292e]">{title}</h2>
       <p className="mt-1.5 text-[13px] leading-5 text-[#6d7680]">{description}</p>
       {action && <div className="mt-5 flex justify-center">{action}</div>}
     </section>
@@ -18,7 +18,7 @@ export function LoadingState({ label = "Chargement des données…" }: { label?:
   return <div className="grid min-h-[280px] place-items-center bg-white p-6" role="status" aria-live="polite">
     <div className="flex flex-col items-center text-center">
       <span className="flex h-8 items-center gap-1" aria-hidden>{[0, 1, 2].map((item) => <span key={item} className="h-2 w-2 animate-bounce rounded-full bg-[#12c76f]" style={{ animationDelay: `${item * 120}ms` }} />)}</span>
-      <p className="mt-3 text-[12px] font-medium text-[#65707b]">{label}</p>
+      <p className="mt-3 text-[13px] font-medium text-[#65707b]">{label}</p>
     </div>
   </div>;
 }

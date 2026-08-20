@@ -37,7 +37,7 @@ export function OperationDrawerTabs({
           type="button"
           aria-current={value === item.key ? "page" : undefined}
           onClick={() => onChange(item.key)}
-          className={`inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-3.5 text-[13px] font-[580] transition-colors ${
+          className={`inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-3.5 text-[14px] font-[580] transition-colors ${
             value === item.key
               ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm"
               : "border-transparent text-[#5d6873] hover:bg-[#eceff1] hover:text-[#20262c]"
@@ -45,7 +45,7 @@ export function OperationDrawerTabs({
         >
           {item.label}
           {Boolean(item.count) && (
-            <span className="min-w-5 rounded-full bg-[#e7ebed] px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#59636c]">
+            <span className="min-w-5 rounded-full bg-[#e7ebed] px-1.5 py-0.5 text-center text-[12px] font-semibold text-[#59636c]">
               {item.count}
             </span>
           )}
@@ -124,17 +124,18 @@ export function OperationDrawer({
       aria-label={title}
     >
       <aside
+        data-ui="operation-drawer"
         className={`ml-auto flex h-full w-full ${width} flex-col border-l border-[#d8dce0] bg-white shadow-[-24px_0_56px_rgba(15,23,42,.18)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}
       >
-        <header className="shrink-0 border-b border-[#dfe3e7] bg-white px-6 py-5">
+        <header data-ui="operation-drawer-header" className="shrink-0 border-b border-[#dfe3e7] bg-white px-6 py-5">
           <div className="flex min-h-10 items-center gap-4">
             {headerLeading && <div className="shrink-0">{headerLeading}</div>}
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[20px] font-[680] tracking-[-0.02em] text-[#20252b]">
+              <h2 data-ui="operation-drawer-title" className="truncate text-[20px] font-[680] tracking-[-0.02em] text-[#20252b]">
                 {title}
               </h2>
               {description && (
-                <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-[#66717c]">
+                <p data-ui="operation-drawer-description" className="mt-1.5 max-w-2xl text-[13px] leading-5 text-[#66717c]">
                   {description}
                 </p>
               )}
@@ -153,7 +154,7 @@ export function OperationDrawer({
               <X size={18} />
             </button>
           </div>
-          {headerMeta && <div className="mt-2.5 flex flex-wrap items-center gap-2">{headerMeta}</div>}
+          {headerMeta && <div data-ui="operation-drawer-meta" className="mt-2.5 flex flex-wrap items-center gap-2">{headerMeta}</div>}
         </header>
         {tabs && (
           <div className={tabsVariant === "segmented"

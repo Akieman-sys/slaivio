@@ -269,7 +269,7 @@ export function LandingPageClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[#020807] font-['Neue_Haas_Grotesk_Display_Pro','Neue_Haas_Grotesk_Text',Inter,'Helvetica_Neue',Arial,system-ui,sans-serif] text-white">
+    <main className="min-h-screen bg-[#020807] font-sans text-white">
       <LandingHeader menuOpen={menuOpen} setMenuOpen={setMenuOpen} isFixed={headerFixed} />
       <HeroSection phrase={heroPhrases[heroPhraseIndex]} />
       <ProblemSection />

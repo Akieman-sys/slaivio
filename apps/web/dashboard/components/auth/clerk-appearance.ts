@@ -9,7 +9,7 @@ export const clerkAppearance = {
     colorNeutral: "#333333",
     borderRadius: "0.375rem",
     fontFamily:
-      "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+      "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
   elements: {
     rootBox: "w-full",

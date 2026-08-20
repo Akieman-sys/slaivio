@@ -52,12 +52,12 @@ export function OperationTab({
       type="button"
       aria-current={active ? "page" : undefined}
       data-ui="operation-tab"
-      className={`shrink-0 border-b-2 px-3 text-[13px] font-medium ${active ? "border-[#12c76f] text-[#087a46]" : "border-transparent text-[#68717b] hover:text-[#25292e]"} ${className}`}
+      className={`shrink-0 border-b-2 px-3 text-[14px] font-medium ${active ? "border-[#12c76f] text-[#087a46]" : "border-transparent text-[#68717b] hover:text-[#25292e]"} ${className}`}
       {...props}
     >
       {children}
       {typeof count === "number" && (
-        <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-[#e8f8ef] text-[#087a46]" : "bg-[#f0f2f3] text-[#6d7680]"}`}>
+        <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[12px] ${active ? "bg-[#e8f8ef] text-[#087a46]" : "bg-[#f0f2f3] text-[#6d7680]"}`}>
           {count}
         </span>
       )}
@@ -123,7 +123,7 @@ export function OperationTabMenu<T extends string>({
           className="fixed z-[90] min-w-[220px] overflow-hidden rounded-[8px] border border-[#d9dde1] bg-white p-1.5 shadow-[0_14px_36px_rgba(15,23,42,.16)]"
           style={{ top: anchor.bottom + 6, right: Math.max(8, window.innerWidth - anchor.right) }}
         >
-          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a939c]">
+          <p className="px-2.5 pb-1.5 pt-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8a939c]">
             Autres vues
           </p>
           {items.map(([key, itemLabel]) => {
@@ -248,7 +248,7 @@ export function OperationFilterPopover({
         <SlidersHorizontal size={15} />
         Filtres
         {activeCount > 0 && (
-          <span className="rounded-full bg-[#d9f3e5] px-1.5 py-0.5 text-[10px] font-bold text-[#087a46]">
+          <span className="rounded-full bg-[#d9f3e5] px-1.5 py-0.5 text-[12px] font-bold text-[#087a46]">
             {activeCount}
           </span>
         )}
@@ -319,9 +319,9 @@ export function OperationMetric({
   };
   return (
     <div className={`min-w-0 px-4 py-3.5 ${className}`} {...props}>
-      <p data-ui="metric-label" className="truncate text-[11px] font-medium text-[#6a737d]">{label}</p>
-      <p data-ui="metric-value" className={`mt-1 truncate text-[23px] font-semibold tracking-[-0.035em] ${colors[tone]}`}>{value}</p>
-      {detail && <p data-ui="metric-detail" className="mt-1 truncate text-[11px] text-[#7a838d]">{detail}</p>}
+      <p data-ui="metric-label" className="truncate text-[12px] font-medium text-[#6a737d]">{label}</p>
+      <p data-ui="metric-value" className={`mt-1 truncate text-[24px] font-semibold tracking-[-0.035em] ${colors[tone]}`}>{value}</p>
+      {detail && <p data-ui="metric-detail" className="mt-1 truncate text-[12px] text-[#7a838d]">{detail}</p>}
     </div>
   );
 }
@@ -340,7 +340,7 @@ export function OperationStatus({
     danger: "bg-[#fff0f0] text-[#b42318]",
     info: "bg-[#edf4ff] text-[#285ea8]",
   };
-  return <span data-ui="operation-status" className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[tone]}`}>{label}</span>;
+  return <span data-ui="operation-status" className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[12px] font-medium ${colors[tone]}`}>{label}</span>;
 }
 
 export function FormSection({
@@ -356,7 +356,7 @@ export function FormSection({
     <section data-ui="form-section" className="grid gap-5 border-b border-[#e5e9ed] pb-6 last:border-b-0 last:pb-0">
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-[#242a30]">{title}</h3>
-        {description && <p className="mt-1 text-[12px] leading-5 text-[#69747f]">{description}</p>}
+        {description && <p className="mt-1 text-[13px] leading-5 text-[#69747f]">{description}</p>}
       </div>
       {children}
     </section>

@@ -15,8 +15,8 @@ export function OperationPageHeader({
     <header className="operation-page-header border-b border-[#dfe1e3] bg-white">
       <div className="flex min-h-[72px] flex-col gap-3 px-5 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[21px] font-semibold text-[#25292e]">{title}</h1>
-          <p className="mt-1 max-w-4xl text-[12px] leading-5 text-[#69717a]">
+          <h1 className="text-[22px] font-semibold text-[#25292e]">{title}</h1>
+          <p className="mt-1 max-w-4xl text-[13px] leading-5 text-[#69717a]">
             {description}
           </p>
         </div>

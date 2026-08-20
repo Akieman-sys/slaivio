@@ -172,14 +172,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e]">
+    <div className="slaivio-app-shell flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e]">
       <button
         aria-label="Fermer la navigation"
         onClick={() => setMobileOpen(false)}
         className={`fixed inset-0 z-40 bg-black/25 lg:hidden ${mobileOpen ? "block" : "hidden"}`}
       />
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
           <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
             <SlaivioBrand compact iconOnly={sidebarCollapsed} />
@@ -195,10 +195,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
           <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
           {groupedRoutes.map((group) => (
-            <section key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-3"}>
+            <section data-ui="sidebar-group" key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-3"}>
               <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#53606c] hover:text-[#20252b] ${sidebarCollapsed ? "h-10 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-9 gap-2.5 px-2"}`}>
                 <group.icon size={16} strokeWidth={1.8} className="shrink-0 text-[#69747f]" />
-                {!sidebarCollapsed && <><span className="truncate text-[13px] font-[650] tracking-[-0.01em]">{group.label}</span><ChevronDown size={14} className={`ml-auto text-[#8a939c] transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+                {!sidebarCollapsed && <><span data-ui="sidebar-group-label" className="truncate text-[12px] font-[650] uppercase tracking-[0.045em]">{group.label}</span><ChevronDown size={14} className={`ml-auto text-[#8a939c] transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
               </button>
               <div className={`ml-[17px] space-y-1 border-l border-[#e2e6e9] pl-2.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
@@ -228,7 +228,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4">
+        <header data-ui="topbar" className="slaivio-topbar relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4">
           <button onClick={() => setMobileOpen(true)} aria-label="Ouvrir la navigation" className="mr-2 rounded-[5px] p-2 text-[#5f666e] hover:bg-[#f0f1f1] lg:hidden">
             <Menu size={19} />
           </button>

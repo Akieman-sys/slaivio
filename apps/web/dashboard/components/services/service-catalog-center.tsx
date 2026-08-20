@@ -10,10 +10,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
-import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
+import { businessLabel } from "@/components/ui/business-labels";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import {
   addServiceCondition,
@@ -566,13 +567,13 @@ function DetailDrawer({
     <OperationDrawer
       open
       title={item.service_name}
-      description={`${item.service_code} · ${item.category} · ${item.shipping_mode} · ${item.eta_min_days}–${item.eta_max_days} jours`}
+      description={`${item.service_code} · ${serviceTypeLabels[item.category] || businessLabel(item.category)} · ${modeLabels[item.shipping_mode] || businessLabel(item.shipping_mode)} · ${item.eta_min_days}–${item.eta_max_days} jours`}
       close={close}
       width="max-w-[920px]"
       headerMeta={<Badge value={item.status} />}
       headerActions={<>
-        <PermissionGuard permission="services.suspend"><button className={btn} onClick={async () => { await transitionService(item.id, item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED", "Décision opérationnelle"); await changed(); }}>{item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}</button></PermissionGuard>
-        <PermissionGuard permission="services.create"><button className={btn} onClick={async () => { await duplicateService(item.id); await changed(); }}><Copy size={13} />Dupliquer</button></PermissionGuard>
+        <PermissionGuard permission="services.suspend"><OperationDrawerAction intent={item.status === "SUSPENDED" ? "default" : "danger"} onClick={async () => { await transitionService(item.id, item.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED", "Décision opérationnelle"); await changed(); }}>{item.status === "SUSPENDED" ? "Réactiver" : "Suspendre"}</OperationDrawerAction></PermissionGuard>
+        <PermissionGuard permission="services.create"><OperationDrawerAction icon={<Copy size={15} />} onClick={async () => { await duplicateService(item.id); await changed(); }}>Dupliquer</OperationDrawerAction></PermissionGuard>
       </>}
       tabsVariant="segmented"
       tabs={<OperationDrawerTabs items={detailTabs.map(([key, label]) => ({ key, label }))} value={tab} primaryKeys={["overview", "routes", "pricing", "conditions", "performance"]} onChange={setTab} />}
@@ -652,7 +653,7 @@ function Overview({ item }: { item: Detail }) {
     <div className="grid gap-4 md:grid-cols-2">
       <Card title="Identité">
         <Info l="Type" v={item.service_type} />
-        <Info l="Catégorie" v={item.category} />
+        <Info l="Catégorie" v={serviceTypeLabels[item.category] || businessLabel(item.category)} />
         <Info l="Responsable" v={item.owner_name} />
         <Info
           l="Visibilité client"
@@ -1039,7 +1040,7 @@ function Badge({ value }: { value: string }) {
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : value === "SUSPENDED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
     >
-      {labels[value] || value}
+      {labels[value] || businessLabel(value)}
     </span>
   );
 }

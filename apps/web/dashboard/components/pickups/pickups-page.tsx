@@ -12,6 +12,7 @@ import {
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { businessLabel } from "@/components/ui/business-labels";
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState, TableSkeleton } from "@/components/ui/page-state";
@@ -432,7 +433,7 @@ function PickupPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Badge ok={item.status === "RELEASED"}>{labels[item.status]}</Badge>
         <Badge ok={["PAID", "CLEARED"].includes(item.payment_status)}>
-          {item.payment_status}
+          {businessLabel(item.payment_status)}
         </Badge>
         {item.release_blocked_reason && (
           <Badge>{item.release_blocked_reason}</Badge>
@@ -493,7 +494,7 @@ function PickupPanel({
                 key={v.id}
                 className="rounded-[6px] bg-[#f5f6f6] p-3 text-[12px]"
               >
-                <b>{v.verification_type}</b>
+                <b>{businessLabel(v.verification_type)}</b>
                 <p
                   className={
                     v.verification_status === "PASSED"
@@ -501,7 +502,7 @@ function PickupPanel({
                       : "text-amber-700"
                   }
                 >
-                  {v.verification_status}
+                  {businessLabel(v.verification_status)}
                 </p>
               </div>
             ))}
@@ -514,7 +515,7 @@ function PickupPanel({
                 key={e.id}
                 className="border-l border-[#cbd2d9] py-2 pl-4 text-[12px]"
               >
-                <b>{e.event_type}</b>
+                <b>{businessLabel(e.event_type)}</b>
                 <p className="text-[#68717d]">
                   {e.actor_name} · {date(e.created_at)}
                 </p>

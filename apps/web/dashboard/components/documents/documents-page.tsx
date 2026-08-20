@@ -20,6 +20,7 @@ import {
 } from "@/services/documents";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   FormSection,
   OperationButton,
@@ -255,7 +256,7 @@ function DocumentStatus({ value }: { value: string }) {
     PENDING_REVIEW: { label: "À contrôler", tone: "warning" },
     EXPIRED: { label: "Expiré", tone: "danger" },
   };
-  const state = states[value] || { label: value, tone: "neutral" as const };
+  const state = states[value] || { label: businessLabel(value), tone: "neutral" as const };
   return <OperationStatus label={state.label} tone={state.tone} />;
 }
 function entityLabel(value: string) {
@@ -269,6 +270,6 @@ function entityLabel(value: string) {
         DEPARTURE: "Départ",
         ORGANIZATION: "Agence",
       } as Record<string, string>
-    )[value] || value
+    )[value] || businessLabel(value)
   );
 }

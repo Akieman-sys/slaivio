@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Download, Plus, RefreshCcw, ScanLine, Trash2 } from "lucide-react";
 import { getReferenceCatalog, ReferenceCatalog } from "@/services/references";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   OperationMetrics,
   OperationSearch,
@@ -522,7 +523,8 @@ function DetailPanel({
 }) {
   const [scan, setScan] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [tab, setTab] = useState("overview");
   const b = data.batch;
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -544,6 +546,19 @@ function DetailPanel({
       close={close}
       width="max-w-3xl"
       bodyClassName="bg-[#f7f8f7]"
+      tabs={
+        <OperationDrawerTabs
+          items={[
+            { key: "overview", label: "Vue d’ensemble" },
+            { key: "loading", label: "Chargement" },
+            { key: "packages", label: "Colis", count: data.packages.length },
+            { key: "controls", label: "Contrôles" },
+            { key: "history", label: "Historique", count: data.events.length },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      }
     >
       <div className="mb-4 border-b border-[#e1e5e2] bg-white pb-4">
         <div className="mt-4 flex flex-wrap gap-2">
@@ -603,7 +618,7 @@ function DetailPanel({
         )}
       </div>
       <div className="space-y-4">
-        <section className="grid gap-3 sm:grid-cols-4">
+        {tab === "overview" && <section className="grid gap-3 sm:grid-cols-4">
           {[
             ["Colis", b.package_count],
             ["Clients", b.client_count],
@@ -615,8 +630,8 @@ function DetailPanel({
               <b>{v}</b>
             </div>
           ))}
-        </section>
-        <section className="rounded bg-white p-4">
+        </section>}
+        {tab === "loading" && <><section className="rounded bg-white p-4">
           <h3 className="font-semibold">Scan de chargement</h3>
           <div className="mt-3 flex gap-2">
             <input
@@ -685,8 +700,8 @@ function DetailPanel({
               </div>
             ))}
           </div>
-        </section>
-        <section className="rounded bg-white p-4">
+        </section></>}
+        {tab === "controls" && <section className="rounded bg-white p-4">
           <h3 className="font-semibold">Checklist avant départ</h3>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {Object.entries(checks).map(([k, l]) => (
@@ -705,8 +720,8 @@ function DetailPanel({
               </label>
             ))}
           </div>
-        </section>
-        <section className="rounded bg-white p-4">
+        </section>}
+        {tab === "packages" && <section className="rounded bg-white p-4">
           <h3 className="font-semibold">Colis affectés</h3>
           <div className="mt-2 divide-y">
             {data.packages.map((x) => (
@@ -719,7 +734,7 @@ function DetailPanel({
                   {String(x.client_name || "Client")}
                 </span>
                 <span>{n(x.weight_kg)} kg</span>
-                <span>{String(x.scan_status)}</span>
+                <span>{businessLabel(x.scan_status)}</span>
                 <button
                   title="Retirer du batch"
                   className="rounded p-1.5 text-[#68716c] hover:bg-red-50 hover:text-red-700"
@@ -744,22 +759,22 @@ function DetailPanel({
               </p>
             )}
           </div>
-        </section>
-        <section className="rounded bg-white p-4">
+        </section>}
+        {tab === "history" && <section className="rounded bg-white p-4">
           <h3 className="font-semibold">Timeline & audit</h3>
           {data.events.slice(0, 20).map((x) => (
             <div
               className="border-l border-[#b8d5c8] py-2 pl-3 text-xs"
               key={String(x.id)}
             >
-              <b>{String(x.event_type)}</b>
+              <b>{businessLabel(x.event_type)}</b>
               <p className="text-[#707872]">
                 {new Date(String(x.created_at)).toLocaleString("fr-FR")} ·{" "}
                 {String(x.actor_name || "Système")}
               </p>
             </div>
           ))}
-        </section>
+        </section>}
       </div>
     </OperationDrawer>
   );

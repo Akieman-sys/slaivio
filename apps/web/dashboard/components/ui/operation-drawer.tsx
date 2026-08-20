@@ -1,7 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Archive, Edit3, RotateCcw, X } from "lucide-react";
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { OperationTabMenu } from "@/components/ui/operation-controls";
 
 export type OperationDrawerTabItem = {
@@ -15,7 +15,7 @@ export function OperationDrawerTabs({
   value,
   onChange,
   primaryKeys,
-  primaryCount = 5,
+  primaryCount = 4,
 }: {
   items: OperationDrawerTabItem[];
   value: string;
@@ -24,7 +24,7 @@ export function OperationDrawerTabs({
   primaryCount?: number;
 }) {
   const visible = primaryKeys?.length
-    ? items.filter((item) => primaryKeys.includes(item.key))
+    ? items.filter((item) => primaryKeys.includes(item.key)).slice(0, primaryCount)
     : items.slice(0, primaryCount);
   const overflow = items.filter((item) => !visible.some((entry) => entry.key === item.key));
   const overflowActive = overflow.some((item) => item.key === value);
@@ -60,6 +60,35 @@ export function OperationDrawerTabs({
         />
       )}
     </>
+  );
+}
+
+export function OperationDrawerAction({
+  intent = "default",
+  icon,
+  className = "",
+  children,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  intent?: "default" | "primary" | "danger";
+  icon?: "edit" | "archive" | "restore" | ReactNode;
+}) {
+  const Icon = icon === "edit" ? Edit3 : icon === "archive" ? Archive : icon === "restore" ? RotateCcw : null;
+  const colors = intent === "primary"
+    ? "border-[#0faf63] bg-[#12c76f] text-white hover:bg-[#0faf63]"
+    : intent === "danger"
+      ? "border-[#e6c7c7] bg-white text-[#a62b25] hover:bg-[#fff5f5]"
+      : "border-[#d4d9df] bg-white text-[#30363d] hover:bg-[#f5f7f7]";
+  return (
+    <button
+      type="button"
+      data-ui="operation-drawer-action"
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold shadow-[0_1px_1px_rgba(15,23,42,.03)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${colors} ${className}`}
+      {...props}
+    >
+      {Icon ? <Icon size={15} aria-hidden="true" /> : typeof icon === "string" ? null : icon}
+      {children}
+    </button>
   );
 }
 
@@ -158,8 +187,8 @@ export function OperationDrawer({
         </header>
         {tabs && (
           <div className={tabsVariant === "segmented"
-            ? "operation-drawer-segmented-tabs flex min-h-[58px] shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#dfe3e7] bg-[#f7f8f9] px-6 py-2.5"
-            : "operation-tabs flex min-h-[42px] shrink-0 items-end gap-1 overflow-x-auto border-b border-[#dfe1e3] px-5"}
+            ? "operation-drawer-segmented-tabs flex min-h-[58px] shrink-0 items-center gap-1.5 overflow-visible border-b border-[#dfe3e7] bg-[#f7f8f9] px-6 py-2.5"
+            : "operation-tabs flex min-h-[42px] shrink-0 items-end gap-1 overflow-visible border-b border-[#dfe1e3] px-5"}
           >
             {tabs}
           </div>

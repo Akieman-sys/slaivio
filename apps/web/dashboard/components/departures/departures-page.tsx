@@ -12,6 +12,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   OperationMetrics,
   OperationSearch,
@@ -587,7 +588,7 @@ function Detail({
           <h3 className="font-semibold">Audit</h3>
           {current.events?.map((e, i) => (
             <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-              {String(e.event_type)} · {date(String(e.created_at))}
+              {businessLabel(e.event_type)} · {date(String(e.created_at))}
             </p>
           ))}
         </section>
@@ -964,7 +965,7 @@ function Badge({ value }: { value: string }) {
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "DELAYED" || value === "CANCELLED" ? "bg-red-50 text-red-700" : value === "CONFIRMED" || value === "DEPARTED" || value === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}
     >
-      {labels[value] || value}
+      {labels[value] || businessLabel(value)}
     </span>
   );
 }

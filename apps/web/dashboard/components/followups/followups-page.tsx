@@ -8,7 +8,8 @@ import {
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   getReferenceCatalog,
   type ReferenceCatalog,
@@ -25,9 +26,7 @@ import {
   type Followup,
   type FollowupStats,
 } from "@/services/followups";
-const btn =
-    "inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#d4d9df] bg-white px-3 text-[13px] font-medium",
-  primary =
+const primary =
     "inline-flex h-9 items-center gap-2 rounded-[6px] bg-[#12c76f] px-3 text-[13px] font-medium text-white",
   input =
     "h-9 rounded-[6px] border border-[#d7dbde] bg-white px-3 text-[13px] outline-none";
@@ -297,18 +296,38 @@ function Detail({
   close: () => void;
   action: (x: Followup, a: string) => void;
 }) {
+  const [tab, setTab] = useState("summary");
   return (
     <OperationDrawer
       open
       title={item.reference}
-      description={`${item.client_name} · ${item.followup_type}`}
+      description={`${item.client_name} · ${followupTypeLabels[item.followup_type] || businessLabel(item.followup_type)}`}
       close={close}
+      tabs={
+        <OperationDrawerTabs
+          items={[
+            { key: "summary", label: "Résumé" },
+            { key: "message", label: "Message" },
+            { key: "responses", label: "Tentatives et réponses", count: (item.attempts?.length || 0) + (item.responses?.length || 0) },
+            { key: "history", label: "Historique", count: item.events?.length || 0 },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      }
+      footer={
+        <>
+          <OperationDrawerAction onClick={() => action(item, "PAUSE")}>Mettre en pause</OperationDrawerAction>
+          <OperationDrawerAction onClick={() => action(item, "ESCALATE")}>Transmettre</OperationDrawerAction>
+          <OperationDrawerAction intent="primary" icon={<Send size={15} />} onClick={() => action(item, "SEND")}>Envoyer maintenant</OperationDrawerAction>
+        </>
+      }
     >
       <div className="mb-4">
         <Badge value={item.status} />
       </div>
       <div className="grid gap-4">
-        <section className="grid grid-cols-2 gap-3">
+        {tab === "summary" && <section className="grid grid-cols-2 gap-3">
           {[
             ["Motif", item.reason],
             ["Objet", item.subject_reference],
@@ -330,49 +349,33 @@ function Detail({
               <b className="mt-1 block">{v || "—"}</b>
             </div>
           ))}
-        </section>
-        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
+        </section>}
+        {tab === "message" && <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Message</h3>
           <p className="mt-2 whitespace-pre-wrap text-[13px]">{item.message}</p>
-        </section>
-        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
+        </section>}
+        {tab === "responses" && <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Tentatives & réponses</h3>
           {[...(item.attempts || []), ...(item.responses || [])].map((x, i) => (
             <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-              {String(x.status || x.classification || "Réponse")} ·{" "}
+              {businessLabel(x.status || x.classification || "Réponse")} ·{" "}
               {String(x.message || x.body || "")}
             </p>
           ))}
-        </section>
-        <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
+        </section>}
+        {tab === "history" && <section className="rounded-md border border-[#e4e7ea] bg-white p-4">
           <h3 className="font-semibold">Timeline & audit</h3>
           {item.events?.map((x, i) => (
             <p key={i} className="mt-2 border-t pt-2 text-[12px]">
-              {String(x.event_type)} · {date(String(x.created_at))}
+              {businessLabel(x.event_type)} · {date(String(x.created_at))}
             </p>
           ))}
-        </section>
-        <div className="flex flex-wrap gap-2">
-          <button className={primary} onClick={() => action(item, "SEND")}>
-            <Send size={14} />
-            Envoyer maintenant
-          </button>
-          <button className={btn} onClick={() => action(item, "PAUSE")}>
-            Pause
-          </button>
-          <button className={btn} onClick={() => action(item, "RESUME")}>
-            Reprendre
-          </button>
-          <button className={btn} onClick={() => action(item, "ESCALATE")}>
-            Escalader
-          </button>
-          <button className={btn} onClick={() => action(item, "COMPLETE")}>
-            Terminer
-          </button>
-          <button className={btn} onClick={() => action(item, "CANCEL")}>
-            Annuler
-          </button>
-        </div>
+        </section>}
+        {tab === "summary" && <div className="flex flex-wrap gap-2 pt-1">
+          <OperationDrawerAction onClick={() => action(item, "RESUME")}>Reprendre</OperationDrawerAction>
+          <OperationDrawerAction onClick={() => action(item, "COMPLETE")}>Marquer terminée</OperationDrawerAction>
+          <OperationDrawerAction intent="danger" onClick={() => action(item, "CANCEL")}>Annuler la relance</OperationDrawerAction>
+        </div>}
       </div>
     </OperationDrawer>
   );
@@ -724,7 +727,7 @@ function Modal({
 function Badge({ value }: { value: string }) {
   return (
     <span className="rounded bg-[#eef2f1] px-2 py-1 text-[11px] font-medium">
-      {value.replaceAll("_", " ")}
+      {businessLabel(value)}
     </span>
   );
 }

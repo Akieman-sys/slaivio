@@ -25,6 +25,7 @@ import { listPackages, type PackageRecord } from "@/services/packages";
 import {PermissionGuard} from "@/components/permissions/permission-guard";
 import {LoadingState} from "@/components/ui/page-state";
 import {OperationTabMenu} from "@/components/ui/operation-controls";
+import {businessLabel} from "@/components/ui/business-labels";
 import {
   archiveShipment,
   addShipmentFinancialLine,
@@ -310,10 +311,10 @@ function PackagesTab({ shipment, availablePackages, saving, onAdd, onRemove }: {
             <td className="px-4 py-3 font-semibold">{item.package_reference || item.tracking_id}</td>
             <td className="px-4 py-3">{item.client_name || "-"}</td>
             <td className="px-4 py-3">{item.dossier_reference || "-"}</td>
-            <td className="px-4 py-3">{item.status}</td>
+            <td className="px-4 py-3">{businessLabel(item.status)}</td>
             <td className="px-4 py-3">{formatNumber(item.weight_kg)} kg</td>
             <td className="px-4 py-3">{formatNumber(item.volume_cbm)} CBM</td>
-            <td className="px-4 py-3">{item.payment_status}</td>
+            <td className="px-4 py-3">{businessLabel(item.payment_status)}</td>
             <td className="px-4 py-3 text-right"><button className={buttonClass} onClick={() => onRemove(item.id)}><X size={15} /> Retirer</button></td>
           </tr>
         ))}
@@ -382,7 +383,7 @@ function TimelineTab({ shipment }: { shipment: ExpeditionDetail }) {
             <div className="font-semibold">{event.title}</div>
             <div className="text-[12px] text-[#64748b]">{formatDateTime(event.occurred_at)}</div>
           </div>
-          <div className="mt-1 text-[13px] text-[#64748b]">{event.description || event.event_type}</div>
+          <div className="mt-1 text-[13px] text-[#64748b]">{event.description || businessLabel(event.event_type)}</div>
         </div>
       ))}
     </div>

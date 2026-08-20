@@ -15,6 +15,7 @@ import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-pa
 import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   createRoute,
   routeAnalytics,
@@ -354,7 +355,7 @@ function RouteDetail({
       description={item.route_code}
       close={close}
       width="max-w-[920px]"
-      headerMeta={<><Badge value={item.status} /><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">{item.transport_mode}</span></>}
+      headerMeta={<><Badge value={item.status} /><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">{businessLabel(item.transport_mode)}</span></>}
       tabsVariant="segmented"
       tabs={<OperationDrawerTabs items={detailTabs.map(([key, label]) => ({ key, label }))} value={tab} primaryKeys={["overview", "services", "departures", "shipments", "performance"]} onChange={setTab} />}
     >
@@ -926,7 +927,7 @@ function Badge({ value }: { value: string }) {
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${value === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : value === "SUSPENDED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
     >
-      {labels[value] || value}
+      {labels[value] || businessLabel(value)}
     </span>
   );
 }

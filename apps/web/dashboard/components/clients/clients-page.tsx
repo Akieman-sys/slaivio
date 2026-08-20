@@ -3,12 +3,10 @@
 import axios from "axios";
 import {
   AlertCircle,
-  Archive,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Download,
-  Edit3,
   FileText,
   History,
   Import,
@@ -17,7 +15,6 @@ import {
   Package,
   Phone,
   Search,
-  RotateCcw,
   ShieldAlert,
   Truck,
   Upload,
@@ -32,7 +29,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationButton,
   OperationField,
@@ -138,8 +135,6 @@ const buttonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#cfd5dd] bg-white px-3 text-[13px] font-medium text-[#1f2328] shadow-sm transition hover:bg-[#f7f8fa]";
 const primaryButtonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#12c76f] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#0fb966]";
-const iconButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[#4f5b67] transition hover:border-[#d8dce2] hover:bg-[#f4f6f8]";
 const pagerButtonClass =
   "flex h-8 w-8 items-center justify-center rounded-md border border-[#cfd5dd] bg-white text-[#334155] shadow-sm disabled:opacity-40";
 const inputClass =
@@ -901,13 +896,13 @@ function ClientDetails({
         <>
                 {!archived && (
                   <PermissionGuard permission="clients.update">
-                    <button
+                    <OperationDrawerAction
                       onClick={onEdit}
-                      className={iconButtonClass}
+                      icon="edit"
                       aria-label="Modifier le client"
                     >
-                      <Edit3 size={16} />
-                    </button>
+                      Modifier
+                    </OperationDrawerAction>
                   </PermissionGuard>
                 )}
                 <PermissionGuard
@@ -922,27 +917,26 @@ function ClientDetails({
                   }
                 >
                   {archived ? (
-                    <button
+                    <OperationDrawerAction
                       onClick={onRestore}
                       disabled={clientAction !== null}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
+                      icon="restore"
                       aria-label="Restaurer le client"
                     >
-                      <RotateCcw size={15} />{" "}
                       {clientAction === "restore"
                         ? "Restauration..."
                         : "Restaurer"}
-                    </button>
+                    </OperationDrawerAction>
                   ) : (
-                    <button
+                    <OperationDrawerAction
                       onClick={onArchive}
                       disabled={clientAction !== null}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-[12px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+                      icon="archive"
+                      intent="danger"
                       aria-label="Archiver le client"
                     >
-                      <Archive size={15} />{" "}
                       {clientAction === "archive" ? "Archivage..." : "Archiver"}
-                    </button>
+                    </OperationDrawerAction>
                   )}
                 </PermissionGuard>
         </>

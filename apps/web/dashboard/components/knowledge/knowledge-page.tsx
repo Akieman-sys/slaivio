@@ -2,7 +2,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Archive,
   BookOpen,
   CheckCircle2,
   ChevronRight,
@@ -18,11 +17,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { businessLabel } from "@/components/ui/business-labels";
 import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction } from "@/components/ui/operation-drawer";
 import {
   OperationMetrics,
   OperationSearch,
@@ -565,41 +565,39 @@ function Detail({
         <div className="flex flex-wrap gap-2">
           <PermissionGuard permission="knowledge.update">
             {["DRAFT", "NEEDS_REVIEW"].includes(item.status) && (
-              <button className={primary} onClick={() => action("submit")}>
+              <OperationDrawerAction intent="primary" onClick={() => action("submit")}>
                 Soumettre
-              </button>
+              </OperationDrawerAction>
             )}
           </PermissionGuard>
           <PermissionGuard permission="knowledge.review">
             {["PENDING_REVIEW", "NEEDS_REVIEW"].includes(item.status) && (
-              <button className={primary} onClick={() => action("approve")}>
-                <CheckCircle2 size={14} />
+              <OperationDrawerAction intent="primary" icon={<CheckCircle2 size={15} />} onClick={() => action("approve")}>
                 Valider
-              </button>
+              </OperationDrawerAction>
             )}
           </PermissionGuard>
           <PermissionGuard permission="knowledge.publish">
             {item.status === "APPROVED" && (
-              <button className={primary} onClick={() => action("publish")}>
+              <OperationDrawerAction intent="primary" onClick={() => action("publish")}>
                 Publier
-              </button>
+              </OperationDrawerAction>
             )}
             {item.status === "PUBLISHED" && (
-              <button className={btn} onClick={() => action("unpublish")}>
+              <OperationDrawerAction onClick={() => action("unpublish")}>
                 Dépublier
-              </button>
+              </OperationDrawerAction>
             )}
           </PermissionGuard>
           <PermissionGuard permission="knowledge.archive">
             {item.status !== "ARCHIVED" ? (
-              <button className={btn} onClick={() => action("archive")}>
-                <Archive size={14} />
+              <OperationDrawerAction intent="danger" icon="archive" onClick={() => action("archive")}>
                 Archiver
-              </button>
+              </OperationDrawerAction>
             ) : (
-              <button className={btn} onClick={() => action("restore")}>
+              <OperationDrawerAction icon="restore" onClick={() => action("restore")}>
                 Restaurer
-              </button>
+              </OperationDrawerAction>
             )}
           </PermissionGuard>
         </div>
@@ -1852,7 +1850,7 @@ function Badge({ value }: { value: string }) {
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-medium ${["PUBLISHED", "APPROVED", "ANSWERED"].includes(value) ? "bg-emerald-50 text-emerald-700" : ["EXPIRED", "ARCHIVED", "NO_RESULT"].includes(value) ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
     >
-      {statusLabels[value] || value}
+      {statusLabels[value] || businessLabel(value)}
     </span>
   );
 }

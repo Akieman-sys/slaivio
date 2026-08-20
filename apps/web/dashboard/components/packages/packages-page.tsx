@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Edit3,
   FileText,
   History,
   Image as ImageIcon,
@@ -28,7 +27,7 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "@/services/api";
-import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationActionMenu,
   OperationButton,
@@ -1396,10 +1395,9 @@ function PackageDetails({
       tabsVariant="segmented"
       headerLeading={<PackageThumbnail item={item} />}
       headerActions={
-        <button onClick={onEdit} className={buttonClass} aria-label="Modifier le colis">
-          <Edit3 size={16} />
+        <OperationDrawerAction onClick={onEdit} icon="edit" aria-label="Modifier le colis">
           Modifier
-        </button>
+        </OperationDrawerAction>
       }
       headerMeta={
         <div className="flex flex-wrap items-center gap-2.5">
@@ -2633,13 +2631,14 @@ function SettingsTab({
           L’archivage retire le colis des opérations courantes sans effacer son
           historique.
         </p>
-        <button
+        <OperationDrawerAction
           disabled={busy}
           onClick={archive}
-          className="rounded bg-red-700 px-3 py-2 text-[13px] font-semibold text-white"
+          intent="danger"
+          icon="archive"
         >
           Archiver le colis
-        </button>
+        </OperationDrawerAction>
         {error && <p className="mt-2 text-red-700">{error}</p>}
       </section>
     </div>

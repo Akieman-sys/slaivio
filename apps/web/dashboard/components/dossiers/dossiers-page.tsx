@@ -3,7 +3,6 @@
 import axios from "axios";
 import {
   AlertCircle,
-  Archive,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -12,7 +11,6 @@ import {
   MessageCircle,
   Bell,
   Package,
-  RotateCcw,
   Upload,
   Trash2,
   Truck,
@@ -24,7 +22,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationDrawer, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import {
   OperationActionMenu,
   OperationButton,
@@ -967,31 +965,29 @@ function DossierDetails({
         <>
               {!archived && (
                 <PermissionGuard permission="dossiers.update">
-                  <button onClick={onEdit} className={buttonClass}>
-                    <Edit3 size={15} />
+                  <OperationDrawerAction onClick={onEdit} icon="edit">
                     Modifier
-                  </button>
+                  </OperationDrawerAction>
                 </PermissionGuard>
               )}
               <PermissionGuard permission="dossiers.archive">
                 {archived ? (
-                  <button
+                  <OperationDrawerAction
                     onClick={onRestore}
                     disabled={action !== null}
-                    className={buttonClass}
+                    icon="restore"
                   >
-                    <RotateCcw size={15} />
                     {action === "restore" ? "Restauration…" : "Restaurer"}
-                  </button>
+                  </OperationDrawerAction>
                 ) : (
-                  <button
+                  <OperationDrawerAction
                     onClick={onArchive}
                     disabled={action !== null}
-                    className={buttonClass}
+                    icon="archive"
+                    intent="danger"
                   >
-                    <Archive size={15} />
                     {action === "archive" ? "Archivage…" : "Archiver"}
-                  </button>
+                  </OperationDrawerAction>
                 )}
               </PermissionGuard>
         </>

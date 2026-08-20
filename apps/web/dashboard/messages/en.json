@@ -1,15 +1,9 @@
 {
   "metadata": {
-<<<<<<< ours
-    "title": "Slaivio — Cargo Digitization Platform",
-    "description": "The digitization platform for Cargo agencies. Centralize customer relationships, operations, finance, documents and management in one system.",
-    "ogTitle": "Slaivio — Digitize Your Cargo Agency",
-    "ogDescription": "Digitize and run your entire Cargo agency through one connected operational system."
-=======
     "title": "Slaivio - Cargo OS",
-    "description": "The digitization platform for Cargo agencies. Centralize customer relationships, operations, finance, documents and management in one system.",
+    "description": "The Operating System for Cargo Agencies. Centralize WhatsApp, customers, cases, parcels, shipments, payments and multi-country operations in one platform.",
     "ogTitle": "Slaivio - Cargo OS",
-    "ogDescription": "Digitize and run your entire Cargo agency through one connected operational system."
+    "ogDescription": "The platform that centralizes and automates modern cargo agency operations."
   },
   "navigation": {
     "features": "Features",
@@ -532,6 +526,5 @@
         "text": "Reply to TikTok messages and comments directly from your dashboard."
       }
     ]
->>>>>>> theirs
   }
 }

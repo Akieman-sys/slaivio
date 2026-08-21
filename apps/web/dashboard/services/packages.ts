@@ -56,6 +56,8 @@ export type PackageRecord = {
   receiving_mode?:string|null; received_by?:string|null; route_id?:string|null; shipping_service_id?:string|null; pricing_snapshot?:Record<string,unknown>;
   expected_at?:string|null; expectation_status?:string|null; return_status?:string|null; return_reason?:string|null;
   delivered_to_name?:string|null; delivery_otp_verified?:boolean;
+  label_ocr_snapshot?:Record<string,unknown>; label_source_language?:string|null;
+  label_translation_language?:string|null; label_scanned_at?:string|null;
   origin_country: string | null;
   origin_city: string | null;
   destination_country: string | null;
@@ -217,6 +219,7 @@ export type PackagePayload = {
   package_condition?: PackageCondition;
   inventory_status?: InventoryStatus;
   warehouse_name?: string | null;
+  warehouse_id?: string | null;
   warehouse_zone?: string | null;
   warehouse_rack?: string | null;
   warehouse_location?: string | null;
@@ -253,6 +256,30 @@ export type PackagePayload = {
   supplier_tracking?:string|null;shipping_mark?:string|null;order_number?:string|null;external_reference?:string|null;
   subcategory?:string|null;goods_classification?:string|null;declared_weight_kg?:number|null;receiving_mode?:string|null;
   route_id?:string|null;shipping_service_id?:string|null;expected_at?:string|null;
+  label_ocr_snapshot?:Record<string,unknown>;label_source_language?:string|null;label_translation_language?:string|null;
+};
+
+export type PackageLabelDossierMatch={id:string;reference:string|null;status:string|null;origin_country:string|null;origin_city:string|null;destination_country:string|null;destination_city:string|null;service:string|null;package_count:number};
+export type PackageLabelMatch={
+  score:number;reasons:string[];
+  client:{id:string;name:string|null;phone:string|null;email:string|null;country:string|null};
+  expectation:{id:string;dossier_id:string|null;supplier_tracking:string|null;shipping_mark:string|null;order_number:string|null;description:string|null;expected_at:string|null}|null;
+  dossiers:PackageLabelDossierMatch[];
+};
+export type PackageLabelFields={
+  carrier:string|null;supplier_tracking:string|null;tracking_id:string|null;order_number:string|null;shipping_mark:string|null;
+  recipient_name:string|null;recipient_phone:string|null;phone:string|null;destination_country:string|null;destination_city:string|null;
+  service_type:string|null;warehouse_reference:string|null;supplier_name:string|null;supplier_phone:string|null;shipped_at:string|null;
+  description:string|null;category:string|null;subcategory:string|null;goods_classification:string|null;pieces_count:number|null;
+  weight_kg:number|null;length_cm:number|null;width_cm:number|null;height_cm:number|null;
+  product_lines:Array<{reference?:string|null;description?:string|null;color?:string|null;size?:string|null;quantity?:number|null}>;
+  handwritten_annotations:Array<{value?:string|null;meaning?:string|null}>;
+};
+export type PackageLabelAnalysis={
+  raw_text:string;translated_text:string;detected_language:string;target_language:string;confidence:number|null;
+  fields:PackageLabelFields;field_confidences:Record<string,number>;evidence:Record<string,string>;
+  ambiguities:string[];ignored_text:string[];barcode_value:string|null;
+  matching:{duplicate_package:{id:string;package_reference:string|null;tracking_id:string|null;supplier_tracking:string|null;status:string|null}|null;matches:PackageLabelMatch[];automatic_match:PackageLabelMatch|null;requires_client_selection:boolean};
 };
 
 export type PackagesResponse = {
@@ -371,7 +398,24 @@ export async function getPackageDocumentDownload(id:string,documentId:string) {
 export async function archivePackage(id:string) { await api.delete(`/packages/${id}`); }
 export async function restorePackage(id:string){await api.post(`/packages/${id}/restore`)}
 export async function listArchivedPackages(params:{q?:string;page?:number;page_size?:number}={}){return (await api.get<PackagesResponse>("/packages/archived",{params})).data}
-export async function scanPackageLabel(file:File){const form=new FormData();form.append("file",file);return (await api.post<{result:{raw_text:string;confidence:number|null;fields:{phone:string|null;tracking_id:string|null;weight_kg:number|null;length_cm:number|null;width_cm:number|null;height_cm:number|null}};requires_human_review:boolean}>("/packages/scan/ocr",form)).data.result}
+export async function detectPackageBarcode(file:File):Promise<string|null>{
+  type Detection={rawValue?:string};
+  type DetectorInstance={detect:(source:ImageBitmap)=>Promise<Detection[]>};
+  type DetectorConstructor=new(options?:{formats?:string[]})=>DetectorInstance;
+  const Detector=(window as unknown as {BarcodeDetector?:DetectorConstructor}).BarcodeDetector;
+  if(!Detector || typeof createImageBitmap!=="function") return null;
+  let bitmap:ImageBitmap|undefined;
+  try{
+    bitmap=await createImageBitmap(file);
+    const detector=new Detector({formats:["code_128","code_39","qr_code","itf","ean_13","ean_8"]});
+    const codes=await detector.detect(bitmap);
+    return codes.map((item)=>item.rawValue?.trim()).find(Boolean) || null;
+  }catch{return null;}finally{bitmap?.close();}
+}
+export async function scanPackageLabel(file:File,language:"fr"|"en"="fr",barcodeValue?:string|null){
+  const form=new FormData();form.append("file",file);form.append("language",language);if(barcodeValue)form.append("barcode_value",barcodeValue);
+  return (await api.post<{result:PackageLabelAnalysis;requires_human_review:boolean}>("/packages/scan/ocr",form)).data.result;
+}
 export async function uploadPackageMedia(id:string,file:File,category:string,caption?:string){const form=new FormData();form.append("file",file);form.append("category",category);if(caption)form.append("caption",caption);return (await api.post<{package:PackageRecord}>(`/packages/${id}/media/upload`,form)).data.package}
 export async function getPackageMediaUrl(id:string,mediaId:string){return (await api.get<{url:string}>(`/packages/${id}/media/${mediaId}/view`)).data.url}
 export async function getPackageLabel(id:string,kind:"barcode"|"qr"){return (await api.get<Blob>(`/packages/${id}/label/${kind}`,{responseType:"blob"})).data}

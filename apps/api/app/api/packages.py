@@ -13,6 +13,7 @@ from app.core.permissions import require_permission
 from app.core.config import settings
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
 from app.services.package_label_ocr import read_package_label
+from app.services.package_label_matching import match_package_label
 from app.packages.repository import (
     ANOMALY_SEVERITIES,
     INVENTORY_STATUSES,
@@ -62,6 +63,7 @@ class PackagePayload(BaseModel):
     package_condition: str = "UNKNOWN"
     inventory_status: str = "NOT_STORED"
     warehouse_name: str | None = Field(default=None, max_length=160)
+    warehouse_id: str | None = None
     warehouse_zone: str | None = Field(default=None, max_length=80)
     warehouse_rack: str | None = Field(default=None, max_length=80)
     warehouse_location: str | None = Field(default=None, max_length=160)
@@ -108,6 +110,9 @@ class PackagePayload(BaseModel):
     route_id: str|None=None
     shipping_service_id: str|None=None
     expected_at: str|None=None
+    label_ocr_snapshot: dict = Field(default_factory=dict)
+    label_source_language: str|None=Field(default=None,max_length=20)
+    label_translation_language: str|None=Field(default=None,max_length=20)
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -468,6 +473,8 @@ def packages_create(body: PackagePayload, tenant=Depends(get_current_tenant)):
             raise HTTPException(status_code=422, detail="dossier_required") from exc
         if str(exc) == "dossier_not_found":
             raise HTTPException(status_code=404, detail="dossier_not_found") from exc
+        if str(exc) == "supplier_tracking_already_exists":
+            raise HTTPException(status_code=409, detail="supplier_tracking_already_exists") from exc
         raise
     return {"status": "ok", "package": package}
 
@@ -599,11 +606,14 @@ def packages_restore(package_id: str,tenant=Depends(get_current_tenant)):
     return {"status":"ok"}
 
 @router.post("/packages/scan/ocr", dependencies=[Depends(require_permission("packages.create"))])
-async def packages_scan_ocr(file:UploadFile=File(...),tenant=Depends(get_current_tenant)):
+async def packages_scan_ocr(file:UploadFile=File(...),language:str=Form("fr"),barcode_value:str|None=Form(None),tenant=Depends(get_current_tenant)):
     if file.content_type not in {"image/jpeg","image/png","image/webp"}: raise HTTPException(status_code=415,detail="unsupported_ocr_image")
+    if language.lower() not in {"fr","en"}: raise HTTPException(status_code=422,detail="unsupported_ocr_language")
     content=await file.read(8_388_609)
     if not content or len(content)>8_388_608: raise HTTPException(status_code=413,detail="ocr_image_too_large")
-    try: result=read_package_label(content,file.content_type)
+    try:
+        result=read_package_label(content,file.content_type,target_language=language,barcode_value=barcode_value)
+        result["matching"]=match_package_label(tenant["org_id"],result["fields"])
     except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
     except Exception as exc: raise HTTPException(status_code=502,detail="ocr_provider_failed") from exc
     return {"status":"ok","result":result,"requires_human_review":True}

@@ -837,8 +837,25 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
         dossier = _dossier_for_create(conn, org_id, dossier_id)
         if not dossier:
             raise ValueError("dossier_not_found")
+        supplier_tracking = str(payload.get("supplier_tracking") or "").strip()
+        if supplier_tracking:
+            conn.execute(text("select pg_advisory_xact_lock(hashtext(:lock_key))"), {
+                "lock_key": f"package-label:{org_id}:{supplier_tracking.lower()}"
+            })
+            duplicate = conn.execute(text("""
+                select 1 from cargo_packages
+                where org_id=:org_id and deleted_at is null
+                  and (lower(coalesce(supplier_tracking,''))=lower(:tracking)
+                    or lower(coalesce(tracking_id,''))=lower(:tracking))
+                limit 1
+            """), {"org_id": org_id, "tracking": supplier_tracking}).first()
+            if duplicate:
+                raise ValueError("supplier_tracking_already_exists")
         reference = payload.get("package_reference") or payload.get("tracking_id") or generate_package_reference()
-        volume_cbm = _calculate_volume_cbm(payload) or dossier.get("estimated_volume_cbm")
+        # A dossier estimate is commercial context, not a warehouse measurement.
+        # Physical package values remain empty until OCR explicitly reads them or
+        # an agent/device measures them.
+        volume_cbm = _calculate_volume_cbm(payload)
         volumetric_weight = _calculate_volumetric_weight(payload)
         shipment_id = payload.get("shipment_id") or _create_shadow_shipment(conn, org_id, dossier, payload, reference)
         row = conn.execute(
@@ -846,7 +863,7 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 insert into cargo_packages (
                     org_id, client_id, dossier_id, shipment_id, package_reference, tracking_id, source,
                     package_type, description, category, status, validation_status, payment_status,
-                    package_condition, inventory_status, warehouse_name, warehouse_zone, warehouse_rack,
+                    package_condition, inventory_status, warehouse_id, warehouse_name, warehouse_zone, warehouse_rack,
                     warehouse_location, origin_country, origin_city, destination_country, destination_city,
                     service_type, shipment_reference, public_tracking_enabled, eta_at, received_at,
                     dispatched_at, delivered_at, weight_kg, volumetric_weight_kg, length_cm, width_cm,
@@ -855,12 +872,13 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     last_scan_at, created_by, updated_by, priority, assigned_to, supplier_name,
                     supplier_tracking, shipping_mark, order_number, external_reference, subcategory,
                     goods_classification, declared_weight_kg, receiving_mode, received_by, route_id,
-                    shipping_service_id, expected_at, expectation_status
+                    shipping_service_id, expected_at, expectation_status, label_ocr_snapshot,
+                    label_source_language, label_translation_language, label_scanned_at
                 )
                 values (
                     :org_id, :client_id, :dossier_id, :shipment_id, :package_reference, :tracking_id, :source,
                     :package_type, :description, :category, :status, :validation_status, :payment_status,
-                    :package_condition, :inventory_status, :warehouse_name, :warehouse_zone, :warehouse_rack,
+                    :package_condition, :inventory_status, :warehouse_id, :warehouse_name, :warehouse_zone, :warehouse_rack,
                     :warehouse_location, :origin_country, :origin_city, :destination_country, :destination_city,
                     :service_type, :shipment_reference, :public_tracking_enabled, :eta_at, :received_at,
                     :dispatched_at, :delivered_at, :weight_kg, :volumetric_weight_kg, :length_cm, :width_cm,
@@ -870,7 +888,9 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                     :priority, :assigned_to, :supplier_name, :supplier_tracking, :shipping_mark,
                     :order_number, :external_reference, :subcategory, :goods_classification,
                     :declared_weight_kg, :receiving_mode, :received_by, :route_id,
-                    :shipping_service_id, :expected_at, :expectation_status
+                    :shipping_service_id, :expected_at, :expectation_status, cast(:label_ocr_snapshot as jsonb),
+                    :label_source_language, :label_translation_language,
+                    case when cast(:label_ocr_snapshot as jsonb) <> '{}'::jsonb then now() else null end
                 )
                 returning id::text
             """),
@@ -890,6 +910,7 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 "payment_status": payload.get("payment_status") or payload.get("payment_clearance_status") or "UNKNOWN",
                 "package_condition": payload.get("package_condition") or "UNKNOWN",
                 "inventory_status": payload.get("inventory_status") or "NOT_STORED",
+                "warehouse_id": payload.get("warehouse_id") or dossier.get("origin_warehouse_id"),
                 "warehouse_name": payload.get("warehouse_name"),
                 "warehouse_zone": payload.get("warehouse_zone"),
                 "warehouse_rack": payload.get("warehouse_rack"),
@@ -905,7 +926,7 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 "received_at": payload.get("received_at"),
                 "dispatched_at": payload.get("dispatched_at"),
                 "delivered_at": payload.get("delivered_at"),
-                "weight_kg": payload.get("weight_kg") or dossier.get("estimated_weight_kg"),
+                "weight_kg": payload.get("weight_kg"),
                 "volumetric_weight_kg": volumetric_weight,
                 "length_cm": payload.get("length_cm"),
                 "width_cm": payload.get("width_cm"),
@@ -929,9 +950,13 @@ def create_package(org_id: str, user_id: str, payload: dict) -> dict:
                 "order_number": payload.get("order_number"), "external_reference": payload.get("external_reference"),
                 "subcategory": payload.get("subcategory"), "goods_classification": payload.get("goods_classification") or "ORDINARY_GOODS",
                 "declared_weight_kg": payload.get("declared_weight_kg"), "receiving_mode": payload.get("receiving_mode"),
-                "received_by": user_id if payload.get("received_at") else None, "route_id": payload.get("route_id"),
-                "shipping_service_id": payload.get("shipping_service_id"), "expected_at": payload.get("expected_at"),
+                "received_by": user_id if payload.get("received_at") else None,
+                "route_id": payload.get("route_id") or dossier.get("route_id"),
+                "shipping_service_id": payload.get("shipping_service_id") or dossier.get("shipping_service_id"), "expected_at": payload.get("expected_at"),
                 "expectation_status": "MATCHED" if payload.get("expected_at") else None,
+                "label_ocr_snapshot": json.dumps(payload.get("label_ocr_snapshot") or {}, ensure_ascii=False),
+                "label_source_language": payload.get("label_source_language"),
+                "label_translation_language": payload.get("label_translation_language"),
             },
         ).fetchone()
         package_id = row[0]

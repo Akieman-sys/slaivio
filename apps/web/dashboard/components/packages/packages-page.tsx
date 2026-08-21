@@ -78,6 +78,7 @@ import {
   restorePackage,
   listArchivedPackages,
   scanPackageLabel,
+  detectPackageBarcode,
   uploadPackageMedia,
   getPackageMediaUrl,
   getPackageAnalytics,
@@ -3534,8 +3535,12 @@ function PackageScannerModal({
   const [result, setResult] = useState<Awaited<
     ReturnType<typeof scanPackageLabel>
   > | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedDossierId, setSelectedDossierId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
   useEffect(() => {
     listDossiers({ page_size: 100, sort: "updated_desc" })
       .then((r) => setDossiers(r.items))
@@ -3549,7 +3554,15 @@ function PackageScannerModal({
     setBusy(true);
     setError("");
     try {
-      setResult(await scanPackageLabel(file));
+      const barcode = await detectPackageBarcode(file);
+      const language = document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "fr";
+      const analysis = await scanPackageLabel(file, language, barcode);
+      setResult(analysis);
+      const automatic = analysis.matching.automatic_match;
+      if (automatic) {
+        setSelectedClientId(automatic.client.id);
+        setSelectedDossierId(automatic.expectation?.dossier_id || (automatic.dossiers.length === 1 ? automatic.dossiers[0].id : ""));
+      }
     } catch (e) {
       setError(apiErrorMessage(e));
     } finally {
@@ -3565,15 +3578,39 @@ function PackageScannerModal({
       const item = await createPackage({
         dossier_id: String(f.get("dossier_id")),
         source: "warehouse",
-        tracking_id: clean(f.get("tracking_id")),
+        tracking_id: clean(f.get("supplier_tracking")),
+        supplier_tracking: clean(f.get("supplier_tracking")),
+        supplier_name: clean(f.get("supplier_name")),
+        shipping_mark: clean(f.get("shipping_mark")),
+        order_number: clean(f.get("order_number")),
+        external_reference: clean(f.get("warehouse_reference")),
         description: clean(f.get("description")),
+        category: clean(f.get("category")),
+        subcategory: clean(f.get("subcategory")),
+        goods_classification: clean(f.get("goods_classification")) || "ORDINARY_GOODS",
+        pieces_count: numberOrNull(f.get("pieces_count")) || 1,
+        declared_weight_kg: numberOrNull(f.get("declared_weight_kg")),
         weight_kg: numberOrNull(f.get("weight_kg")),
         length_cm: numberOrNull(f.get("length_cm")),
         width_cm: numberOrNull(f.get("width_cm")),
         height_cm: numberOrNull(f.get("height_cm")),
+        receiving_mode: "OCR",
         status: "RECEIVED_AT_ORIGIN",
         inventory_status: "IN_STOCK",
+        validation_status: "PENDING",
+        label_ocr_snapshot: {
+          fields: result?.fields || {}, field_confidences: result?.field_confidences || {},
+          evidence: result?.evidence || {}, translated_text: result?.translated_text || "",
+          ambiguities: result?.ambiguities || [], barcode_value: result?.barcode_value || null,
+        },
+        label_source_language: result?.detected_language || null,
+        label_translation_language: result?.target_language || null,
+        expected_at: result?.matching.matches.find((match)=>match.client.id===selectedClientId)?.expectation?.expected_at || null,
       });
+      if (file) {
+        try { await uploadPackageMedia(item.id, file, "LABEL", "Étiquette fournisseur originale"); }
+        catch { /* The parcel exists and its OCR audit is preserved; media can be retried from its detail. */ }
+      }
       onCreated(item);
     } catch (x) {
       setError(apiErrorMessage(x));
@@ -3584,106 +3621,54 @@ function PackageScannerModal({
   return (
     <OperationDrawer
       open
-      title="Scanner une étiquette"
-      description="La photo est analysée puis validée par un opérateur avant création."
+      title="Lire une étiquette fournisseur"
+      description="Slaivio traduit l’étiquette, retrouve le client et prépare le colis pour validation."
       close={onClose}
       width="max-w-2xl"
     >
         {!result ? (
-          <div className="space-y-3">
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className={inputClass}
-            />
-            {file && (
-              <p className="text-[13px]">
-                {file.name} · {Math.ceil(file.size / 1024)} Ko
-              </p>
-            )}
-            <button
-              onClick={analyse}
-              disabled={busy}
-              className={primaryButtonClass}
-            >
-              {busy ? "Analyse OCR…" : "Analyser l’étiquette"}
-            </button>
+          <div className="space-y-5">
+            <label className="block cursor-pointer rounded-xl border border-dashed border-[#c8d0d8] bg-[#fbfcfd] p-6 text-center hover:border-[#0b875b] hover:bg-[#f7fbf9]">
+              <ImageIcon className="mx-auto mb-3 text-[#66717c]" size={24}/>
+              <span className="block text-[14px] font-semibold text-[#25313b]">Prendre une photo ou choisir une image</span>
+              <span className="mt-1 block text-[12px] text-[#6b7680]">JPG, PNG ou WebP · 8 Mo maximum</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setFile(event.target.files?.[0] || null)} className="sr-only" />
+            </label>
+            {file && <div className="flex items-center gap-3 rounded-lg border border-[#e1e5e9] p-3">
+              <div className="relative h-16 w-16 overflow-hidden rounded-md bg-[#f1f3f5]">{previewUrl && <Image src={previewUrl} alt="Étiquette à analyser" fill unoptimized className="object-cover" />}</div>
+              <div className="min-w-0"><p className="truncate text-[13px] font-semibold text-[#2d3740]">{file.name}</p><p className="text-[12px] text-[#75808a]">{Math.ceil(file.size / 1024)} Ko</p></div>
+            </div>}
+            <button onClick={analyse} disabled={busy || !file} className={primaryButtonClass}>{busy ? "Lecture et traduction…" : "Analyser l’étiquette"}</button>
           </div>
         ) : (
-          <form onSubmit={create} className="grid gap-3 md:grid-cols-2">
-            <label className="md:col-span-2">
-              <FormLabel>Dossier</FormLabel>
-              <select required name="dossier_id" className={inputClass}>
-                <option value="">Sélectionner le dossier</option>
-                {dossiers.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.dossier_reference} ·{" "}
-                    {d.client_name || d.client_full_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <TextInput
-              name="tracking_id"
-              label="Tracking fournisseur"
-              defaultValue={result.fields.tracking_id || ""}
-            />
-            <TextInput
-              name="weight_kg"
-              label="Poids kg"
-              type="number"
-              step="0.001"
-              defaultValue={valueOrEmpty(result.fields.weight_kg)}
-            />
-            <TextInput
-              name="length_cm"
-              label="Longueur cm"
-              type="number"
-              step="0.1"
-              defaultValue={valueOrEmpty(result.fields.length_cm)}
-            />
-            <TextInput
-              name="width_cm"
-              label="Largeur cm"
-              type="number"
-              step="0.1"
-              defaultValue={valueOrEmpty(result.fields.width_cm)}
-            />
-            <TextInput
-              name="height_cm"
-              label="Hauteur cm"
-              type="number"
-              step="0.1"
-              defaultValue={valueOrEmpty(result.fields.height_cm)}
-            />
-            <TextInput name="description" label="Description" />
-            <div className="md:col-span-2 rounded bg-amber-50 p-3 text-[12px] text-amber-800">
-              Confiance OCR :{" "}
-              {result.confidence == null
-                ? "non fournie"
-                : `${Math.round(result.confidence * 100)} %`}
-              . Vérifiez chaque valeur avant de créer.
+          <form onSubmit={create} className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-[150px_1fr]">
+              <div className="relative min-h-36 overflow-hidden rounded-lg border border-[#dfe4e8] bg-[#f4f6f7]">{previewUrl && <Image src={previewUrl} alt="Étiquette fournisseur" fill unoptimized className="object-cover" />}</div>
+              <div className="rounded-lg border border-[#dfe4e8] bg-white p-4"><p className="text-[13px] font-semibold text-[#28323b]">Étiquette comprise et traduite</p><p className="mt-1 text-[12px] text-[#69747e]">Langue détectée : {result.detected_language.toUpperCase()} · Affichage : {result.target_language.toUpperCase()}</p><p className="mt-3 line-clamp-4 whitespace-pre-line text-[13px] leading-5 text-[#3e4952]">{result.translated_text}</p></div>
             </div>
-            <details className="md:col-span-2 text-[12px]">
-              <summary>Texte OCR brut</summary>
-              <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2">
-                {result.raw_text}
-              </pre>
-            </details>
-            <div className="md:col-span-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setResult(null)}
-                className={buttonClass}
-              >
-                Reprendre
-              </button>
-              <button disabled={busy} className={primaryButtonClass}>
-                Valider et créer
-              </button>
-            </div>
+            {result.matching.duplicate_package && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-800"><p className="font-semibold">Ce colis semble déjà enregistré</p><p className="mt-1">Référence {result.matching.duplicate_package.package_reference || result.matching.duplicate_package.tracking_id}. La création est bloquée pour éviter un doublon.</p></div>}
+            <section className="space-y-3"><div><h3 className="text-[14px] font-semibold text-[#26313a]">1. À quel client appartient ce colis ?</h3><p className="mt-0.5 text-[12px] text-[#6f7a84]">Suggestions basées sur le téléphone, le nom, le shipping mark et les colis attendus.</p></div>
+              {(result.fields.recipient_name || result.fields.recipient_phone) && <div className="rounded-lg border border-[#dfe4e8] bg-[#f8fafb] px-3 py-2 text-[12px] text-[#53606a]"><span className="font-semibold text-[#2e3942]">Lu sur l’étiquette :</span> {result.fields.recipient_name || "Nom non lisible"}{result.fields.recipient_phone ? ` · ${result.fields.recipient_phone}` : ""}</div>}
+              {result.matching.matches.length ? <div className="grid gap-2">{result.matching.matches.map((match) => <button type="button" key={match.client.id} onClick={()=>{setSelectedClientId(match.client.id);setSelectedDossierId(match.expectation?.dossier_id || (match.dossiers.length===1?match.dossiers[0].id:""));}} className={`flex items-center justify-between gap-4 rounded-lg border p-3 text-left ${selectedClientId===match.client.id?"border-[#0b875b] bg-[#f2faf6]":"border-[#dfe4e8] bg-white hover:bg-[#fafbfc]"}`}><span><span className="block text-[13px] font-semibold text-[#26313a]">{match.client.name || "Client sans nom"}</span><span className="mt-0.5 block text-[12px] text-[#6d7882]">{match.client.phone || match.client.email || "Coordonnée indisponible"} · {match.reasons.join(" · ")}</span></span><span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-[#39745d]">{match.score}%</span></button>)}</div> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">Aucun client fiable retrouvé. Choisissez un dossier existant ou créez d’abord le client.</div>}
+            </section>
+            <section className="space-y-3"><div><h3 className="text-[14px] font-semibold text-[#26313a]">2. Dossier de rattachement</h3><p className="mt-0.5 text-[12px] text-[#6f7a84]">Le colis reste relié à la vue métier complète du client.</p></div>
+              <select required name="dossier_id" value={selectedDossierId} onChange={(event)=>setSelectedDossierId(event.target.value)} className={inputClass}><option value="">Sélectionner un dossier</option>{(result.matching.matches.find((item)=>item.client.id===selectedClientId)?.dossiers || []).map((d)=><option key={d.id} value={d.id}>{d.reference} · {d.destination_city || d.destination_country || "Destination à compléter"} · {d.status}</option>)}{!selectedClientId && dossiers.map((d)=><option key={d.id} value={d.id}>{d.dossier_reference} · {d.client_name || d.client_full_name}</option>)}</select>
+            </section>
+            <section className="space-y-3"><div><h3 className="text-[14px] font-semibold text-[#26313a]">3. Informations lues sur l’étiquette</h3><p className="mt-0.5 text-[12px] text-[#6f7a84]">Vérifiez puis corrigez seulement les informations utiles.</p></div><div className="grid gap-3 md:grid-cols-2">
+              <TextInput name="supplier_tracking" label="Tracking fournisseur" defaultValue={result.fields.supplier_tracking || ""}/><TextInput name="shipping_mark" label="Shipping mark / code client" defaultValue={result.fields.shipping_mark || ""}/>
+              <TextInput name="order_number" label="Numéro de commande" defaultValue={result.fields.order_number || ""}/><TextInput name="supplier_name" label="Transporteur ou fournisseur" defaultValue={result.fields.carrier || result.fields.supplier_name || ""}/>
+              <TextInput name="warehouse_reference" label="Référence de tri entrepôt" defaultValue={result.fields.warehouse_reference || ""}/><TextInput name="description" label="Marchandise" defaultValue={result.fields.description || result.fields.product_lines.map((line)=>line.description).filter(Boolean).join(", ")}/>
+              <TextInput name="category" label="Catégorie" defaultValue={result.fields.category || ""}/><TextInput name="subcategory" label="Sous-catégorie" defaultValue={result.fields.subcategory || ""}/>
+              <label><FormLabel>Classification</FormLabel><select name="goods_classification" defaultValue={result.fields.goods_classification || "ORDINARY_GOODS"} className={inputClass}><option value="ORDINARY_GOODS">Marchandise ordinaire</option><option value="SENSITIVE_GOODS">Marchandise sensible</option><option value="FRAGILE">Fragile</option><option value="ELECTRONICS">Électronique</option><option value="BATTERY">Batterie</option><option value="LIQUID">Liquide</option><option value="FOOD">Alimentaire</option><option value="PHARMACEUTICAL">Pharmaceutique</option><option value="HIGH_VALUE">Haute valeur</option><option value="DANGEROUS_GOODS">Marchandise dangereuse</option></select></label>
+              <TextInput name="pieces_count" label="Nombre d’articles ou colis" type="number" step="1" defaultValue={valueOrEmpty(result.fields.pieces_count || 1)}/>
+              <TextInput name="destination_country" label="Destination lue (information)" defaultValue={[result.fields.destination_city,result.fields.destination_country].filter(Boolean).join(", ")}/><TextInput name="service_type" label="Service lu (information)" defaultValue={result.fields.service_type || ""}/>
+              <p className="md:col-span-2 -mt-1 text-[11px] text-[#75808a]">La route, le service et l’entrepôt réellement utilisés proviennent du dossier sélectionné et de la configuration de l’agence.</p><TextInput name="declared_weight_kg" label="Poids indiqué (kg)" type="number" step="0.001" defaultValue={valueOrEmpty(result.fields.weight_kg)}/>
+              <TextInput name="weight_kg" label="Poids mesuré par l’agence (kg)" type="number" step="0.001"/><TextInput name="length_cm" label="Longueur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.length_cm)}/>
+              <TextInput name="width_cm" label="Largeur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.width_cm)}/><TextInput name="height_cm" label="Hauteur cm" type="number" step="0.1" defaultValue={valueOrEmpty(result.fields.height_cm)}/>
+            </div></section>
+            {(result.ambiguities.length>0 || result.fields.handwritten_annotations.length>0) && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[12px] leading-5 text-amber-900"><p className="font-semibold">Points à vérifier manuellement</p><ul className="mt-1 list-disc pl-4">{result.ambiguities.map((item,index)=><li key={`a-${index}`}>{item}</li>)}{result.fields.handwritten_annotations.map((item,index)=><li key={`h-${index}`}>Annotation « {item.value || "illisible"} » : signification non confirmée.</li>)}</ul></div>}
+            <details className="rounded-lg border border-[#dfe4e8] text-[12px]"><summary className="cursor-pointer px-4 py-3 font-semibold text-[#3f4a53]">Comparer avec le texte original</summary><div className="grid gap-3 border-t border-[#e6eaed] p-4 md:grid-cols-2"><div><p className="mb-2 font-semibold">Original</p><pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-[#f6f7f8] p-3">{result.raw_text}</pre></div><div><p className="mb-2 font-semibold">Traduction</p><pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-[#f6f7f8] p-3">{result.translated_text}</pre></div></div></details>
+            <div className="flex justify-end gap-2 border-t border-[#e3e7ea] pt-4"><button type="button" onClick={()=>{setResult(null);setSelectedClientId("");setSelectedDossierId("");}} className={buttonClass}>Reprendre la photo</button><button disabled={busy || Boolean(result.matching.duplicate_package) || !selectedDossierId} className={primaryButtonClass}>{busy ? "Création…" : "Confirmer et créer le colis"}</button></div>
           </form>
         )}
         {error && <p className="mt-3 text-[13px] text-red-600">{error}</p>}

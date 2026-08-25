@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { routing } from "@/i18n/routing";
+import { isPilotV1, isPilotVisiblePath, pilotRedirectTarget } from "@/config/product-profile";
 
 const hasClerkKey = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 const hasApiUrl = Boolean(
@@ -41,6 +42,13 @@ export default function middleware(request: NextRequest, event: Parameters<typeo
           headers: { "Cache-Control": "no-store" },
         },
       );
+    }
+
+    if (isPilotV1() && pathname.startsWith("/app/") && !isPilotVisiblePath(pathname)) {
+      const destination = request.nextUrl.clone();
+      destination.pathname = pilotRedirectTarget(pathname);
+      destination.search = "";
+      return NextResponse.redirect(destination, 307);
     }
 
     if (hasClerkKey) {

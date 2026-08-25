@@ -1,28 +1,39 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { appNavigation, canAccessRoute } from "./app-navigation";
+import { canAccessRoute, getAppNavigation } from "./app-navigation";
+import { PRODUCT_PROFILES } from "./product-profile";
 
-afterEach(() => {
-  delete process.env.NEXT_PUBLIC_PILOT_MODE;
-});
+describe("product navigation", () => {
+  it("exposes only the official Pilot V1 surface", () => {
+    const navigation = getAppNavigation(PRODUCT_PROFILES.PILOT_V1);
+    const routes = navigation.flatMap((group) => group.routes);
 
-describe("pilot navigation", () => {
-  it("organizes the product around agency tasks", () => {
-    expect(appNavigation.map((group) => group.label)).toEqual([
-      "Clients",
-      "Opérations",
-      "Offre commerciale",
-      "Communication",
-      "Pilotage",
+    expect(routes.map((route) => route.href)).toEqual([
+      "/app/dossiers",
+      "/app/inbox",
+      "/app/followups",
+      "/app/knowledge",
+      "/app/settings",
     ]);
+    expect(routes.some((route) => route.href === "/app/clients")).toBe(false);
+    expect(routes.some((route) => route.href === "/app/assistant")).toBe(false);
+    expect(routes.some((route) => route.href === "/app/packages")).toBe(false);
   });
 
-  it("hides preview capabilities during an agency pilot", () => {
-    process.env.NEXT_PUBLIC_PILOT_MODE = "1";
-    const broadcast = appNavigation.flatMap((group) => group.routes).find((route) => route.href === "/app/broadcasts");
-    const clients = appNavigation.flatMap((group) => group.routes).find((route) => route.href === "/app/clients");
+  it("preserves the former Cargo OS navigation behind its explicit profile", () => {
+    const routes = getAppNavigation(PRODUCT_PROFILES.CARGO_OS).flatMap((group) => group.routes);
 
-    expect(broadcast && canAccessRoute(broadcast, ["broadcasts.read"], true)).toBe(false);
-    expect(clients && canAccessRoute(clients, ["clients.read"], true)).toBe(true);
+    expect(routes.some((route) => route.href === "/app/clients")).toBe(true);
+    expect(routes.some((route) => route.href === "/app/packages")).toBe(true);
+    expect(routes.some((route) => route.href === "/app/pricing")).toBe(true);
+  });
+
+  it("continues to filter visible routes by permission", () => {
+    const dossier = getAppNavigation(PRODUCT_PROFILES.PILOT_V1)
+      .flatMap((group) => group.routes)
+      .find((route) => route.href === "/app/dossiers");
+
+    expect(dossier && canAccessRoute(dossier, ["dossiers.read"], true)).toBe(true);
+    expect(dossier && canAccessRoute(dossier, [], true)).toBe(false);
   });
 });

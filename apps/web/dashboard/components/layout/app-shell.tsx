@@ -41,6 +41,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePermissions } from "@/components/permissions/permission-provider";
 import { OrganizationSwitcher } from "@/components/tenant/organization-switcher";
 import { appNavigation, canAccessRoute, searchableAppRoutes, type AppRoute } from "@/config/app-navigation";
+import { isPilotV1 } from "@/config/product-profile";
 import { SESSION_EXPIRED_EVENT } from "@/services/api";
 import { listNotifications, notificationAction, type CenterItem } from "@/services/notification-center";
 import { SlaivioBrand } from "@/components/ui/slaivio-brand";
@@ -56,6 +57,7 @@ const utilityRoutes: readonly AppRoute[] = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pilot = isPilotV1();
   const pathname = usePathname();
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -66,13 +68,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [floatingPanel, setFloatingPanel] = useState<FloatingPanel>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    Clients: false,
-    "Opérations": true,
-    "Offre commerciale": false,
-    Communication: false,
-    Pilotage: false,
-  });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
+    pilot ? { Communication: true } : { Clients: false, Opérations: true, "Offre commerciale": false, Communication: false, Pilotage: false },
+  );
 
   const groupedRoutes = useMemo(
     () => appNavigation.map((group) => ({
@@ -119,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (!pilot && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
         requestAnimationFrame(() => searchRef.current?.focus());
@@ -131,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
-  }, []);
+  }, [pilot]);
 
   useEffect(() => {
     const onSessionExpired = () => setSessionExpired(true);
@@ -194,7 +192,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
           <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
-          {groupedRoutes.map((group) => (
+          {groupedRoutes.map((group) => group.collapsible === false && group.routes[0] ? (
+            <div key={group.label} className="mt-1">
+              <SidebarLink
+                href={group.routes[0].href}
+                icon={<group.icon size={18} />}
+                active={pathname === group.routes[0].href || pathname.startsWith(`${group.routes[0].href}/`)}
+                label={group.routes[0].label}
+                collapsed={sidebarCollapsed}
+              />
+            </div>
+          ) : (
             <section data-ui="sidebar-group" key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-3"}>
               <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#53606c] hover:text-[#20252b] ${sidebarCollapsed ? "h-10 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-9 gap-2.5 px-2"}`}>
                 <group.icon size={16} strokeWidth={1.8} className="shrink-0 text-[#69747f]" />
@@ -233,7 +241,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu size={19} />
           </button>
 
-          <button
+          {!pilot && <button
             onClick={() => { setSearchOpen(true); requestAnimationFrame(() => searchRef.current?.focus()); }}
             className="absolute left-1/2 hidden h-9 w-[min(420px,42vw)] -translate-x-1/2 items-center rounded-[6px] border border-[#d7dade] bg-[#f8f8f7] px-3 text-left hover:border-[#bfc3c7] md:flex"
             aria-label="Ouvrir la recherche"
@@ -241,25 +249,25 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Search size={15} className="text-[#656c74]" />
             <span className="ml-2 min-w-0 flex-1 truncate text-[13px] text-[#777e86]">Rechercher dans Slaivio</span>
             <kbd className="rounded border border-[#d8dade] bg-white px-1.5 py-0.5 text-[10px] text-[#737981]">Ctrl K</kbd>
-          </button>
+          </button>}
 
           <div className="ml-auto flex items-center gap-1.5">
-            <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />
+            {!pilot && <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />}
             <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />
-            <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
+            {!pilot && <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />}
             <AccountTrigger onClick={() => togglePanel("account")} />
           </div>
 
           {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
           {floatingPanel === "help" && <div className="absolute right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
-          {floatingPanel === "notifications" && <div className="absolute right-[48px] top-[52px] z-50"><NotificationsMenu close={() => setFloatingPanel(null)} /></div>}
+          {!pilot && floatingPanel === "notifications" && <div className="absolute right-[48px] top-[52px] z-50"><NotificationsMenu close={() => setFloatingPanel(null)} /></div>}
           {floatingPanel === "account" && <div className="absolute right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
         </header>
 
         <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
       </section>
 
-      {searchOpen && (
+      {!pilot && searchOpen && (
         <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/25 px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="Recherche Slaivio" onMouseDown={(event) => { if (event.currentTarget === event.target) setSearchOpen(false); }}>
           <div className="w-full max-w-xl overflow-hidden rounded-[8px] border border-[#cfd2d5] bg-white shadow-2xl">
             <label className="flex h-12 items-center border-b border-[#e6e7e8] px-4">
@@ -360,6 +368,26 @@ function FallbackAccountMenu({ close }: { close: () => void }) {
 function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: () => void; name: string; email: string; imageUrl?: string | null; logout: () => void | Promise<unknown> }) {
   const { permissions, available } = usePermissions();
   const canOpenPlatform = !available || permissions.some((permission) => permission.startsWith("platform."));
+  const pilot = isPilotV1();
+
+  if (pilot) {
+    return (
+      <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
+        <div className="flex items-center gap-3 px-4 py-4">
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={imageUrl} name={name} size={40} /></div>
+          <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
+        </div>
+        <MenuDivider />
+        <MenuLink href="/app/settings" icon={<UserRound size={15} />} label="Compte et responsable" close={close} />
+        <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres de l’entreprise" close={close} />
+        <MenuDivider />
+        <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
+          <LogOut size={15} /> Se déconnecter
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
       <div className="flex items-center gap-3 px-4 py-4">

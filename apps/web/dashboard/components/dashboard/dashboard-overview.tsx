@@ -7,11 +7,13 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { OperationButton, OperationMetric, OperationMetricGrid, OperationStatus } from "@/components/ui/operation-controls";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { ErrorState } from "@/components/ui/page-state";
+import { isPilotV1, isPilotVisiblePath } from "@/config/product-profile";
 import { getDashboardHome, type DashboardHome, type HomeAttentionItem } from "@/services/dashboard";
 
 const dashboardCacheKey = "slaivio:dashboard-home";
 
 export function DashboardOverviewPage() {
+  const pilot = isPilotV1();
   const [data, setData] = useState<DashboardHome | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -45,10 +47,13 @@ export function DashboardOverviewPage() {
   if (!data && error) return <ErrorState title="Accueil indisponible" description={error} retry={() => load(false)} />;
   if (data?.status === "no_workspace") return <NoWorkspace />;
 
+  const resources = (data?.resources || []).filter((resource) => !pilot || isPilotVisiblePath(resource.href));
+  const attentionItems = (data?.attention_items || []).filter((item) => !pilot || isPilotVisiblePath(item.href));
+
   return <div className="min-h-full bg-[#f5f6f6]">
     <OperationPageHeader
       title={data?.workspace.name ? `Vue d’ensemble · ${data.workspace.name}` : "Vue d’ensemble de l’agence"}
-      description="Les priorités opérationnelles et les données réelles de votre agence, au même endroit."
+      description={pilot ? "Les dossiers, conversations et relances à suivre aujourd’hui." : "Les priorités opérationnelles et les données réelles de votre agence, au même endroit."}
       actions={<OperationButton onClick={() => load(true)} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : ""} />Actualiser</OperationButton>}
     />
 
@@ -57,18 +62,18 @@ export function DashboardOverviewPage() {
 
       <section aria-labelledby="dashboard-kpis">
         <div className="mb-2 flex items-center justify-between"><h2 id="dashboard-kpis" className="text-[13px] font-semibold text-[#30363d]">Activité de l’agence</h2><span className="text-[11px] text-[#7a838d]">Données opérationnelles</span></div>
-        <OperationMetricGrid className="lg:grid-cols-6">
-          {(data?.resources || []).slice(0, 6).map((resource) => <Link key={resource.key} href={resource.href} className="group min-w-0"><OperationMetric label={resource.label || resource.name} value={resource.count ?? "—"} detail={resource.description} /></Link>)}
+        <OperationMetricGrid className={pilot ? "lg:grid-cols-3" : "lg:grid-cols-6"}>
+          {resources.slice(0, 6).map((resource) => <Link key={resource.key} href={resource.href} className="group min-w-0"><OperationMetric label={resource.label || resource.name} value={resource.count ?? "—"} detail={resource.description} /></Link>)}
         </OperationMetricGrid>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]">
-        <DashboardSection title="À traiter maintenant" icon={<Clock3 size={16} />} count={data?.attention_items.length || 0}>
-          {data?.attention_items.length ? data.attention_items.map((item) => <AttentionRow key={`${item.kind}-${item.id}`} item={item} />) : <DashboardEmpty icon={<CheckCircle2 size={23} />} title="Aucune urgence opérationnelle" description="Les retards, suivis et paiements à traiter apparaîtront ici." />}
+      <div className={pilot ? "grid gap-5" : "grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,.8fr)]"}>
+        <DashboardSection title="À traiter maintenant" icon={<Clock3 size={16} />} count={attentionItems.length}>
+          {attentionItems.length ? attentionItems.map((item) => <AttentionRow key={`${item.kind}-${item.id}`} item={item} />) : <DashboardEmpty icon={<CheckCircle2 size={23} />} title="Rien à reprendre pour le moment" description={pilot ? "Les dossiers, conversations et relances nécessitant votre attention apparaîtront ici." : "Les retards, suivis et paiements à traiter apparaîtront ici."} />}
         </DashboardSection>
-        <DashboardSection title="Notifications récentes" icon={<Bell size={16} />} count={data?.unread_count || 0} action={<Link href="/app/notifications" className="text-[11px] font-medium text-[#087a46]">Tout voir</Link>}>
+        {!pilot && <DashboardSection title="Notifications récentes" icon={<Bell size={16} />} count={data?.unread_count || 0} action={<Link href="/app/notifications" className="text-[11px] font-medium text-[#087a46]">Tout voir</Link>}>
           {data?.notifications.length ? data.notifications.slice(0, 6).map((item) => <Link href="/app/notifications" key={item.id} className="flex gap-3 border-b border-[#eceff2] px-4 py-3 last:border-0 hover:bg-[#f7f8f8]"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "HIGH" ? "bg-amber-500" : item.is_read ? "bg-[#c4c8cc]" : "bg-[#12c76f]"}`} /><span className="min-w-0"><span className="block truncate text-[12px] font-medium">{item.title}</span><span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-[#727981]">{item.message}</span></span></Link>) : <DashboardEmpty title="Aucune notification récente" description="Les nouvelles activités de l’agence apparaîtront ici." />}
-        </DashboardSection>
+        </DashboardSection>}
       </div>
 
     </main>

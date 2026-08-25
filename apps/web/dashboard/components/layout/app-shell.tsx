@@ -170,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="slaivio-app-shell flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e]">
+    <div className={`slaivio-app-shell flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e] ${pilot ? "slaivio-pilot" : ""}`}>
       <button
         aria-label="Fermer la navigation"
         onClick={() => setMobileOpen(false)}

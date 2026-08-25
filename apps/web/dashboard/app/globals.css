@@ -32,6 +32,23 @@
   --app-text-muted: #69727c;
   --app-green: #12c76f;
   --app-green-dark: #087a46;
+  --pilot-canvas: #f6f7f8;
+  --pilot-surface: #ffffff;
+  --pilot-surface-subtle: #f8f9fa;
+  --pilot-border: #dfe3e7;
+  --pilot-border-subtle: #eceff2;
+  --pilot-text: #25292e;
+  --pilot-text-secondary: #626d78;
+  --pilot-text-muted: #7a848e;
+  --pilot-primary: #087a46;
+  --pilot-primary-hover: #06673b;
+  --pilot-primary-soft: #e8f6ef;
+  --pilot-danger: #b42318;
+  --pilot-warning: #8b5400;
+  --pilot-radius-control: 6px;
+  --pilot-radius-surface: 8px;
+  --pilot-shadow-popover: 0 16px 42px rgba(15, 23, 42, 0.16);
+  --pilot-shadow-drawer: -24px 0 56px rgba(15, 23, 42, 0.18);
 }
 
 * {
@@ -544,6 +561,187 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   font-size: 13px;
   line-height: 1.45;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Pilot V1 visual contract. All visible product surfaces inherit these
+   tokens; feature pages should compose shared operation primitives instead
+   of introducing local typography, borders or button treatments. */
+.slaivio-pilot {
+  background: var(--pilot-canvas);
+  color: var(--pilot-text);
+  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+
+.slaivio-pilot .slaivio-sidebar,
+.slaivio-pilot .slaivio-topbar,
+.slaivio-pilot [data-ui="operation-page-header"],
+.slaivio-pilot [data-ui="operation-tabs"],
+.slaivio-pilot [data-ui="operation-metrics"],
+.slaivio-pilot [data-ui="operation-toolbar"] {
+  background: var(--pilot-surface);
+  border-color: var(--pilot-border);
+}
+
+.slaivio-pilot .slaivio-operations {
+  background: var(--pilot-canvas);
+  color: var(--pilot-text);
+}
+
+.slaivio-pilot .slaivio-sidebar [data-ui="sidebar-group-label"] {
+  color: #46515c;
+  font-size: 13px !important;
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 20px;
+  text-transform: none;
+}
+
+.slaivio-pilot .slaivio-sidebar [data-ui="sidebar-link"] {
+  min-height: 40px;
+  border-radius: var(--pilot-radius-control);
+  font-size: 14px !important;
+  font-weight: 460;
+}
+
+.slaivio-pilot .slaivio-sidebar [data-ui="sidebar-link"][data-active="true"] {
+  background: var(--pilot-primary-soft);
+  color: #075d38;
+  font-weight: 620;
+}
+
+.slaivio-pilot [data-ui="operation-page-header"] > div:first-child {
+  min-height: 76px;
+  padding-block: 16px;
+}
+
+.slaivio-pilot [data-ui="operation-page-header"] h1 {
+  color: var(--pilot-text);
+  font-size: 22px !important;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  line-height: 28px;
+}
+
+.slaivio-pilot [data-ui="operation-page-header"] p {
+  color: var(--pilot-text-secondary);
+  font-size: 13px !important;
+  line-height: 20px;
+}
+
+.slaivio-pilot [data-ui="operation-button"],
+.slaivio-pilot [data-ui="operation-drawer-action"] {
+  min-height: 36px;
+  border-radius: var(--pilot-radius-control) !important;
+  font-size: 13px !important;
+  font-weight: 620;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.slaivio-pilot [data-ui="operation-button"][data-variant="primary"] {
+  border-color: var(--pilot-primary);
+  background: var(--pilot-primary);
+}
+
+.slaivio-pilot [data-ui="operation-button"][data-variant="primary"]:hover {
+  background: var(--pilot-primary-hover);
+}
+
+.slaivio-pilot [data-ui="operation-tab"] {
+  color: var(--pilot-text-secondary);
+  font-size: 14px !important;
+  font-weight: 520;
+}
+
+.slaivio-pilot [data-ui="operation-tab"][aria-current="page"] {
+  border-color: var(--pilot-primary);
+  color: var(--pilot-primary);
+  font-weight: 620;
+}
+
+.slaivio-pilot [data-ui="metric-grid"],
+.slaivio-pilot [data-ui="operation-table"],
+.slaivio-pilot [data-ui="page-state"] {
+  border-color: var(--pilot-border);
+  border-radius: var(--pilot-radius-surface);
+  background: var(--pilot-surface);
+  box-shadow: none;
+}
+
+.slaivio-pilot [data-ui="operation-toolbar"] {
+  min-height: 56px;
+}
+
+.slaivio-pilot [data-ui="operation-search"] {
+  height: 38px;
+  border-color: #cfd5db;
+  border-radius: var(--pilot-radius-control);
+}
+
+.slaivio-pilot [data-ui="operation-search"]:focus-within {
+  border-color: var(--pilot-primary);
+  box-shadow: 0 0 0 3px rgba(8, 122, 70, 0.1);
+}
+
+.slaivio-pilot [data-ui="operation-table"] table thead {
+  height: 42px;
+  background: var(--pilot-surface-subtle);
+  color: #58636e;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.slaivio-pilot [data-ui="operation-table"] table tbody {
+  color: #343b42;
+  font-size: 13px;
+}
+
+.slaivio-pilot [data-ui="operation-table"] table tr {
+  border-color: var(--pilot-border-subtle);
+}
+
+.slaivio-pilot :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid rgba(8, 122, 70, 0.7);
+  outline-offset: 2px;
+}
+
+.slaivio-pilot :is(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+}
+
+.slaivio-pilot [data-ui="operation-drawer"] {
+  border-color: var(--pilot-border);
+  box-shadow: var(--pilot-shadow-drawer);
+}
+
+.slaivio-pilot [data-ui="operation-drawer-header"],
+.slaivio-pilot .operation-drawer-footer {
+  border-color: var(--pilot-border);
+}
+
+.slaivio-pilot [data-ui="settings-dialog"] > div {
+  border-color: var(--pilot-border);
+  border-radius: var(--pilot-radius-surface);
+  box-shadow: var(--pilot-shadow-popover);
+}
+
+.slaivio-pilot [data-ui="loading-state"],
+.slaivio-pilot [data-ui="table-skeleton"] {
+  background: var(--pilot-surface);
+}
+
+@media (max-width: 640px) {
+  .slaivio-pilot [data-ui="operation-page-header"] > div:first-child {
+    min-height: 0;
+    padding-block: 14px;
+  }
+
+  .slaivio-pilot [data-ui="operation-toolbar"] {
+    padding-block: 10px;
+  }
 }
 
 .slaivio-app-shell .text-\[9px\],

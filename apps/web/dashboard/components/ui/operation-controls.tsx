@@ -30,6 +30,7 @@ export function OperationButton({
     <button
       type={type}
       data-ui="operation-button"
+      data-variant={variant}
       className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
       {...props}
     />
@@ -238,7 +239,7 @@ export function OperationFilterPopover({
     : 560;
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} data-ui="operation-filter" className="relative">
       <OperationButton
         onClick={() => setOpen(!open)}
         aria-expanded={open}

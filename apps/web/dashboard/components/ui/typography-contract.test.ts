@@ -25,4 +25,15 @@ describe("Slaivio typography contract", () => {
     expect(globalStyles).toContain(".slaivio-app-shell .text-\\[10px\\]");
     expect(globalStyles).toContain('[data-ui="operation-drawer-title"]');
   });
+
+  it("scopes the Pilot visual language to stable shared primitives", () => {
+    const globalStyles = read("app/globals.css");
+    const shell = read("components/layout/app-shell.tsx");
+
+    expect(globalStyles).toContain("--pilot-canvas: #f6f7f8");
+    expect(globalStyles).toContain('.slaivio-pilot [data-ui="operation-page-header"]');
+    expect(globalStyles).toContain('.slaivio-pilot [data-ui="operation-table"]');
+    expect(globalStyles).toContain('.slaivio-pilot [data-ui="operation-button"]');
+    expect(shell).toContain('pilot ? "slaivio-pilot" : ""');
+  });
 });

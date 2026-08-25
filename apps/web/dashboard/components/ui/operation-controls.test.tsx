@@ -35,6 +35,7 @@ describe("operational design primitives", () => {
     </>);
 
     expect(screen.getByRole("button", { name: "Créer" })).toHaveAttribute("data-ui", "operation-button");
+    expect(screen.getByRole("button", { name: "Créer" })).toHaveAttribute("data-variant", "primary");
     expect(screen.getByText("42")).toHaveAttribute("data-ui", "metric-value");
     expect(screen.getByText("Colis")).toHaveAttribute("data-ui", "metric-label");
     expect(screen.getByText("Actif")).toHaveAttribute("data-ui", "operation-status");

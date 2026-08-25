@@ -35,6 +35,7 @@ import {
 import {
   OperationMetrics,
   OperationSearch,
+  OperationTable,
   OperationToolbar,
 } from "@/components/ui/operation-primitives";
 import { EmptyState as SharedEmptyState, TableSkeleton } from "@/components/ui/page-state";
@@ -802,7 +803,7 @@ function DossiersTable({
     return <SharedEmptyState title="Aucun dossier trouvé" description="Créez un dossier à partir d’un client réel ou ajustez les filtres de cette vue." />;
   }
   return (
-    <div className="overflow-x-auto">
+    <OperationTable className="rounded-none border-x-0">
       <table className="min-w-[920px] w-full border-collapse text-left text-[13px]">
         <thead className="border-b border-[#d8dce2] bg-[#f7f8fa] font-medium text-[#5f6b76]">
           <tr>
@@ -882,7 +883,7 @@ function DossiersTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </OperationTable>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   type AgencyWhatsappNumber,
 } from "@/services/organization-admin";
 import { PermissionGuard } from "@/components/permissions/permission-guard";
+import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { FormSection, OperationButton, OperationField } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
@@ -135,17 +136,17 @@ export function OrganizationAdminPage() {
     ? <ErrorState title="Paramètres indisponibles" description={error} retry={load} />
     : <LoadingState label="Chargement des paramètres…" />;
   return (
-    <div className="min-h-full bg-white">
-      <header className="flex h-[72px] items-center border-b border-[#e0e2e4] px-5 lg:px-7">
-        <div>
-          <p className="text-[11px] text-[#7b8289]">Administration</p>
-          <h1 className="text-[21px] font-semibold">Paramètres</h1>
-        </div>
-        <OperationButton className="ml-auto" onClick={load}>
-          <RefreshCcw className="mr-2 inline" size={14} />
-          Actualiser
-        </OperationButton>
-      </header>
+    <div className="min-h-full bg-[#f6f7f8]">
+      <OperationPageHeader
+        title="Paramètres"
+        description="Configurez l’entreprise, les accès et les préférences de votre espace de travail."
+        actions={
+          <OperationButton onClick={load}>
+            <RefreshCcw className="mr-2 inline" size={14} />
+            Actualiser
+          </OperationButton>
+        }
+      />
       <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[272px_minmax(0,1fr)]">
         <aside className="hidden border-r border-[#e0e2e4] bg-[#fafafa] p-3 lg:block">
           <SettingsGroup label="Administration">
@@ -180,7 +181,6 @@ export function OrganizationAdminPage() {
               <p className="mt-1 text-[13px] text-[#69707d]">
                 {sectionTitles[tab][1]}
               </p></div>
-              <OperationButton onClick={load} title="Actualiser" aria-label="Actualiser la section"><RefreshCcw size={14} /></OperationButton>
             </div>
             {notice && (
               <div className="mb-3 rounded-[5px] bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">

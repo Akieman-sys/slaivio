@@ -12,7 +12,7 @@ export function OperationPageHeader({
   tabs?: ReactNode;
 }) {
   return (
-    <header className="operation-page-header border-b border-[#dfe1e3] bg-white">
+    <header data-ui="operation-page-header" className="operation-page-header border-b border-[#dfe1e3] bg-white">
       <div className="flex min-h-[72px] flex-col gap-3 px-5 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-[22px] font-semibold text-[#25292e]">{title}</h1>
@@ -34,6 +34,7 @@ export function OperationPageHeader({
 export function OperationTabs({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <nav
+      data-ui="operation-tabs"
       className={`operation-tabs flex min-h-[45px] items-end gap-1 overflow-x-auto border-b border-[#d8dce2] bg-white px-5 sm:px-6 ${className}`}
       aria-label="Vues du module"
     >

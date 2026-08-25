@@ -5,7 +5,7 @@ import {
   OperationPageHeader,
   OperationTabs,
 } from "@/components/ui/operation-page-header";
-import { OperationMetrics, OperationSearch, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationActionMenu, OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationTab, OperationTabMenu } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
@@ -225,7 +225,7 @@ function Table({
   open: (x: Followup) => void;
 }) {
   return (
-    <div className="min-h-[460px] overflow-x-auto bg-white">
+    <OperationTable className="min-h-[460px] rounded-none border-x-0">
       <table className="w-full min-w-[1100px] border-collapse text-left text-[13px]">
         <thead className="bg-[#fbfcfd] text-[#5f6b7a]">
           <tr className="border-b border-[#e6e9ee]">
@@ -284,7 +284,7 @@ function Table({
           Aucune relance dans cette vue.
         </p>
       )}
-    </div>
+    </OperationTable>
   );
 }
 function Detail({

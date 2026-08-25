@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 type StateProps = { title: string; description: string; action?: ReactNode };
 
 function PageState({ icon, title, description, action }: StateProps & { icon: ReactNode }) {
-  return <div className="flex min-h-[280px] items-center justify-center bg-white p-6">
+  return <div data-ui="page-state" className="flex min-h-[280px] items-center justify-center bg-white p-6">
     <section className="w-full max-w-md text-center" role="status">
       <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#f0f2f2] text-[#65707b]">{icon}</div>
       <h2 className="mt-4 text-[16px] font-semibold text-[#25292e]">{title}</h2>
@@ -15,7 +15,7 @@ function PageState({ icon, title, description, action }: StateProps & { icon: Re
 }
 
 export function LoadingState({ label = "Chargement des données…" }: { label?: string }) {
-  return <div className="grid min-h-[280px] place-items-center bg-white p-6" role="status" aria-live="polite">
+  return <div data-ui="loading-state" className="grid min-h-[280px] place-items-center bg-white p-6" role="status" aria-live="polite">
     <div className="flex flex-col items-center text-center">
       <span className="flex h-8 items-center gap-1" aria-hidden>{[0, 1, 2].map((item) => <span key={item} className="h-2 w-2 animate-bounce rounded-full bg-[#12c76f]" style={{ animationDelay: `${item * 120}ms` }} />)}</span>
       <p className="mt-3 text-[13px] font-medium text-[#65707b]">{label}</p>
@@ -29,7 +29,7 @@ function SkeletonLine({ className = "" }: { className?: string }) {
 
 export function TableSkeleton({ rows = 6, columns = 5, label = "Chargement du tableau" }: { rows?: number; columns?: number; label?: string }) {
   const cells = Array.from({ length: Math.max(2, columns) });
-  return <div className="bg-white" role="status" aria-label={label}>
+  return <div data-ui="table-skeleton" className="bg-white" role="status" aria-label={label}>
     <div className="grid h-11 items-center gap-5 border-b border-[#e4e7ea] bg-[#f7f8fa] px-5" style={{ gridTemplateColumns: `repeat(${columns}, minmax(72px, 1fr))` }}>
       {cells.map((_, index) => <SkeletonLine key={index} className={`h-2.5 ${index % 3 === 0 ? "w-24" : index % 3 === 1 ? "w-16" : "w-20"}`} />)}
     </div>

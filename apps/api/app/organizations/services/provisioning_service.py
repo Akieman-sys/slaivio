@@ -22,12 +22,12 @@ CLIENT_ROLE_PERMISSIONS = {
 }
 
 DOSSIER_ROLE_PERMISSIONS = {
-    "OWNER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export"),
-    "MANAGER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export"),
-    "OPERATOR": ("dossiers.read", "dossiers.create", "dossiers.update"),
-    "SUPPORT": ("dossiers.read", "dossiers.export"),
-    "WAREHOUSE": ("dossiers.read",),
-    "FINANCE": ("dossiers.read",),
+    "OWNER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export", "dossiers.clients.read", "dossiers.clients.manage"),
+    "MANAGER": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.archive", "dossiers.export", "dossiers.clients.read", "dossiers.clients.manage"),
+    "OPERATOR": ("dossiers.read", "dossiers.create", "dossiers.update", "dossiers.clients.read", "dossiers.clients.manage"),
+    "SUPPORT": ("dossiers.read", "dossiers.export", "dossiers.clients.read"),
+    "WAREHOUSE": ("dossiers.read", "dossiers.clients.read"),
+    "FINANCE": ("dossiers.read", "dossiers.clients.read"),
 }
 
 SHIPMENT_ROLE_PERMISSIONS = {

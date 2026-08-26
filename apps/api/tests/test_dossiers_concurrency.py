@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.api.dossiers import DossierPatchPayload, DossierPayload
+from app.api.dossiers import (
+    DossierClientCreatePayload,
+    DossierClientPatchPayload,
+    DossierPatchPayload,
+    DossierPayload,
+)
 from app.db.dossier_repository import (
     DOSSIER_STATUS_TRANSITIONS,
     validate_dossier_financials,
@@ -40,6 +45,41 @@ def test_dossier_creation_starts_in_an_initial_state():
     assert DossierPayload(client_id="client-a", status_global="LEAD").status_global == "LEAD"
     with pytest.raises(ValidationError, match="invalid_initial_dossier_status"):
         DossierPayload(client_id="client-a", status_global="IN_TRANSIT")
+
+
+def test_pilot_dossier_can_start_before_the_first_client_is_known():
+    payload = DossierPayload(idempotency_key="pilot-dossier-0001")
+    assert payload.client_id is None
+    assert payload.idempotency_key == "pilot-dossier-0001"
+
+
+def test_client_created_inside_a_dossier_requires_identity_contact_and_attention_reason():
+    with pytest.raises(ValidationError, match="client_identity_required"):
+        DossierClientCreatePayload(
+            phone="+243900000000", idempotency_key="client-create-0001"
+        )
+    with pytest.raises(ValidationError, match="client_contact_required"):
+        DossierClientCreatePayload(
+            name="Jean", idempotency_key="client-create-0002"
+        )
+    with pytest.raises(ValidationError, match="attention_reason_required"):
+        DossierClientCreatePayload(
+            name="Jean", phone="+243900000000", attention_required=True,
+            idempotency_key="client-create-0003",
+        )
+    client = DossierClientCreatePayload(
+        name="Jean", phone="+243900000000", attention_required=True,
+        attention_reason="Doit rappeler l'agence", idempotency_key="client-create-0004",
+    )
+    assert client.name == "Jean"
+
+
+def test_relation_update_is_versioned():
+    with pytest.raises(ValidationError):
+        DossierClientPatchPayload(situation="En attente de confirmation")
+    assert DossierClientPatchPayload(
+        row_version=3, situation="En attente de confirmation"
+    ).row_version == 3
 
 
 def test_dossier_status_machine_rejects_skips_and_terminal_reopens():

@@ -8,6 +8,7 @@ from app.organizations.services.provisioning_service import DOSSIER_ROLE_PERMISS
 EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers", "GET"): "dossiers.read",
     ("/dossiers", "POST"): "dossiers.create",
+    ("/dossiers/client-search", "GET"): "dossiers.clients.read",
     ("/dossiers/stats", "GET"): "dossiers.read",
     ("/dossiers/alerts", "GET"): "dossiers.read",
     ("/dossiers/alerts/{alert_id}/acknowledge", "PATCH"): "dossiers.update",
@@ -18,6 +19,14 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers/{dossier_id}", "DELETE"): "dossiers.archive",
     ("/dossiers/{dossier_id}/restore", "POST"): "dossiers.archive",
     ("/dossiers/{dossier_id}/timeline", "GET"): "dossiers.read",
+    ("/dossiers/{dossier_id}/clients", "GET"): "dossiers.clients.read",
+    ("/dossiers/{dossier_id}/clients", "POST"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/new", "POST"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}", "PATCH"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}", "DELETE"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}/restore", "POST"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}/move", "POST"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}/history", "GET"): "dossiers.clients.read",
     ("/dossiers/{dossier_id}/documents", "GET"): "dossiers.read",
     ("/dossiers/{dossier_id}/documents", "POST"): "dossiers.update",
     ("/dossiers/{dossier_id}/documents/{document_id}/download", "GET"): "dossiers.read",
@@ -65,9 +74,10 @@ def test_dossier_default_roles_follow_least_privilege():
     assert "dossiers.archive" not in DOSSIER_ROLE_PERMISSIONS["OPERATOR"]
     assert "dossiers.export" in DOSSIER_ROLE_PERMISSIONS["MANAGER"]
     assert "dossiers.export" not in DOSSIER_ROLE_PERMISSIONS["OPERATOR"]
-    assert DOSSIER_ROLE_PERMISSIONS["WAREHOUSE"] == ("dossiers.read",)
-    assert DOSSIER_ROLE_PERMISSIONS["FINANCE"] == ("dossiers.read",)
+    assert DOSSIER_ROLE_PERMISSIONS["WAREHOUSE"] == ("dossiers.read", "dossiers.clients.read")
+    assert DOSSIER_ROLE_PERMISSIONS["FINANCE"] == ("dossiers.read", "dossiers.clients.read")
     assert "dossiers.update" not in DOSSIER_ROLE_PERMISSIONS["SUPPORT"]
+    assert "dossiers.clients.manage" in DOSSIER_ROLE_PERMISSIONS["OPERATOR"]
 
 
 def test_dossier_rbac_migration_repairs_existing_organizations():

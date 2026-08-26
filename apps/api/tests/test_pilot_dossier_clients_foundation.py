@@ -70,3 +70,20 @@ def test_client_reference_is_stable_and_unique_per_agency():
     assert "assign_client_reference" in sql
     assert "before insert on clients" in sql
     assert "'cli-' || upper(left(replace(id::text, '-', ''), 12))" in sql
+
+
+def test_pilot_dossier_api_migration_adds_idempotency_and_permissions():
+    sql = " ".join(
+        (ROOT / "infra/sql/093_pilot_dossier_api_foundation.sql")
+        .read_text(encoding="utf-8")
+        .lower()
+        .split()
+    )
+
+    assert "add column if not exists idempotency_key text" in sql
+    assert "uq_dossiers_idempotency" in sql
+    assert "where idempotency_key is not null" in sql
+    assert "dossiers.clients.read" in sql
+    assert "dossiers.clients.manage" in sql
+    assert "role.role_code = 'operator'" in sql
+    assert "on conflict do nothing" in sql

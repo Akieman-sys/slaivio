@@ -49,13 +49,27 @@ from app.db.dossier_alert_repository import (
     refresh_dossier_alerts,
 )
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
+from app.clients.repository import CLIENT_SOURCES, CLIENT_STATUSES, CLIENT_TYPES
+from app.db.dossier_client_repository import (
+    DuplicateDossierClientError,
+    archive_dossier_client,
+    attach_client_to_dossier,
+    create_client_in_dossier,
+    dossier_client_history,
+    list_dossier_clients,
+    move_dossier_client,
+    restore_dossier_client,
+    search_clients_for_dossier,
+    update_dossier_client,
+)
 
 
 router = APIRouter()
 
 
 class DossierPayload(BaseModel):
-    client_id: str
+    client_id: str | None = None
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=160)
     workspace_id: str | None = None
     route_id: str | None = None
     shipping_service_id: str | None = None
@@ -183,6 +197,84 @@ class DossierNotePatchPayload(DossierNotePayload):
     row_version: int = Field(ge=1)
 
 
+class DossierClientRelationPayload(BaseModel):
+    relationship_role: str | None = Field(default=None, max_length=80)
+    situation: str | None = Field(default=None, max_length=500)
+    status_in_dossier: str | None = Field(default=None, max_length=120)
+    attention_required: bool = False
+    attention_reason: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+
+    @model_validator(mode="after")
+    def validate_attention(self):
+        if self.attention_required and not (self.attention_reason or "").strip():
+            raise ValueError("attention_reason_required")
+        return self
+
+
+class DossierClientCreatePayload(DossierClientRelationPayload):
+    name: str | None = Field(default=None, max_length=180)
+    display_name: str | None = Field(default=None, max_length=180)
+    company_name: str | None = Field(default=None, max_length=180)
+    phone: str | None = Field(default=None, max_length=40)
+    whatsapp_phone: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=200)
+    customer_type: str = "individual"
+    lifecycle_status: str = "lead"
+    source: str = "manual"
+    preferred_language: str = Field(default="FR", min_length=2, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_client(self):
+        if not any((self.name, self.display_name, self.company_name)):
+            raise ValueError("client_identity_required")
+        if not any((self.phone, self.whatsapp_phone, self.email)):
+            raise ValueError("client_contact_required")
+        if self.customer_type not in CLIENT_TYPES:
+            raise ValueError("invalid_customer_type")
+        if self.lifecycle_status not in CLIENT_STATUSES:
+            raise ValueError("invalid_lifecycle_status")
+        if self.source not in CLIENT_SOURCES:
+            raise ValueError("invalid_client_source")
+        return self
+
+
+class DossierClientAttachPayload(DossierClientRelationPayload):
+    client_id: str
+
+
+class DossierClientPatchPayload(BaseModel):
+    row_version: int = Field(ge=1)
+    relationship_role: str | None = Field(default=None, max_length=80)
+    situation: str | None = Field(default=None, max_length=500)
+    status_in_dossier: str | None = Field(default=None, max_length=120)
+    attention_required: bool | None = None
+    attention_reason: str | None = Field(default=None, max_length=500)
+    make_primary: bool = False
+
+    @model_validator(mode="after")
+    def validate_attention(self):
+        if self.attention_required is True and not (self.attention_reason or "").strip():
+            raise ValueError("attention_reason_required")
+        return self
+
+
+class DossierClientMovePayload(BaseModel):
+    target_dossier_id: str
+    row_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    situation: str | None = Field(default=None, max_length=500)
+    status_in_dossier: str | None = Field(default=None, max_length=120)
+    attention_required: bool | None = None
+    attention_reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_attention(self):
+        if self.attention_required is True and not (self.attention_reason or "").strip():
+            raise ValueError("attention_reason_required")
+        return self
+
+
 def _user_id(tenant: dict) -> str:
     return str(tenant.get("user_id") or "")
 
@@ -190,6 +282,21 @@ def _user_id(tenant: dict) -> str:
 def _validate_query_value(value: str | None, allowed: set[str], detail: str):
     if value and value not in allowed:
         raise HTTPException(status_code=422, detail=detail)
+
+
+def _raise_dossier_client_error(exc: ValueError) -> None:
+    detail = str(exc)
+    if detail in {
+        "dossier_not_found", "target_dossier_not_found", "client_not_found",
+        "dossier_client_not_found", "archived_dossier_client_not_found",
+    }:
+        raise HTTPException(status_code=404, detail=detail) from exc
+    if detail in {
+        "duplicate_client", "dossier_client_conflict", "stale_dossier_client_version",
+        "client_already_in_target_dossier", "same_target_dossier",
+    }:
+        raise HTTPException(status_code=409, detail=detail) from exc
+    raise HTTPException(status_code=422, detail=detail) from exc
 
 
 @router.get("/dossiers", dependencies=[Depends(require_permission("dossiers.read"))])
@@ -398,6 +505,181 @@ def dossier_collaboration_update(dossier_id: str, body: DossierCollaborationPayl
     if not dossier:
         raise HTTPException(status_code=404, detail="dossier_not_found")
     return {"status": "ok", "dossier": dossier}
+
+
+@router.get("/dossiers/client-search", dependencies=[Depends(require_permission("dossiers.clients.read"))])
+def dossiers_client_search(
+    q: str = Query(min_length=2, max_length=120),
+    dossier_id: str | None = None,
+    limit: int = Query(default=20, ge=1, le=50),
+    tenant=Depends(get_current_tenant),
+):
+    items = search_clients_for_dossier(
+        tenant["org_id"], q, dossier_id=dossier_id, limit=limit
+    )
+    return {"status": "ok", "items": items, "count": len(items)}
+
+
+@router.get("/dossiers/{dossier_id}/clients", dependencies=[Depends(require_permission("dossiers.clients.read"))])
+def dossier_clients_index(
+    dossier_id: str,
+    q: str | None = Query(default=None, max_length=120),
+    include_archived: bool = False,
+    tenant=Depends(get_current_tenant),
+):
+    if not get_dossier(tenant["org_id"], dossier_id, include_archived=True):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    items = list_dossier_clients(
+        tenant["org_id"], dossier_id, include_archived=include_archived, q=q
+    )
+    return {"status": "ok", "items": items, "count": len(items)}
+
+
+@router.post(
+    "/dossiers/{dossier_id}/clients",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_attach(
+    dossier_id: str,
+    body: DossierClientAttachPayload,
+    tenant=Depends(get_current_tenant),
+):
+    data = body.model_dump()
+    client_id = data.pop("client_id")
+    try:
+        relation, replayed = attach_client_to_dossier(
+            tenant["org_id"], dossier_id, client_id, _user_id(tenant), data
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation, "replayed": replayed}
+
+
+@router.post(
+    "/dossiers/{dossier_id}/clients/new",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_create(
+    dossier_id: str,
+    body: DossierClientCreatePayload,
+    tenant=Depends(get_current_tenant),
+):
+    data = body.model_dump()
+    relation_fields = {
+        key: data.pop(key)
+        for key in (
+            "relationship_role", "situation", "status_in_dossier",
+            "attention_required", "attention_reason", "idempotency_key",
+        )
+    }
+    try:
+        client, relation, replayed = create_client_in_dossier(
+            tenant["org_id"], dossier_id, _user_id(tenant), data, relation_fields
+        )
+    except DuplicateDossierClientError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_client", "existing_client": exc.client},
+        ) from exc
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {
+        "status": "ok", "client": client, "relation": relation, "replayed": replayed,
+    }
+
+
+@router.patch(
+    "/dossiers/{dossier_id}/clients/{client_id}",
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_update(
+    dossier_id: str,
+    client_id: str,
+    body: DossierClientPatchPayload,
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        relation = update_dossier_client(
+            tenant["org_id"], dossier_id, client_id, _user_id(tenant),
+            body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation}
+
+
+@router.delete(
+    "/dossiers/{dossier_id}/clients/{client_id}",
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_remove(
+    dossier_id: str,
+    client_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        relation = archive_dossier_client(
+            tenant["org_id"], dossier_id, client_id, _user_id(tenant), row_version
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation}
+
+
+@router.post(
+    "/dossiers/{dossier_id}/clients/{client_id}/restore",
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_restore(
+    dossier_id: str,
+    client_id: str,
+    row_version: int = Query(ge=1),
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        relation = restore_dossier_client(
+            tenant["org_id"], dossier_id, client_id, _user_id(tenant), row_version
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation}
+
+
+@router.post(
+    "/dossiers/{dossier_id}/clients/{client_id}/move",
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_move(
+    dossier_id: str,
+    client_id: str,
+    body: DossierClientMovePayload,
+    tenant=Depends(get_current_tenant),
+):
+    try:
+        relation, replayed = move_dossier_client(
+            tenant["org_id"], dossier_id, client_id, body.target_dossier_id,
+            _user_id(tenant), body.model_dump(),
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation, "replayed": replayed}
+
+
+@router.get(
+    "/dossiers/{dossier_id}/clients/{client_id}/history",
+    dependencies=[Depends(require_permission("dossiers.clients.read"))],
+)
+def dossier_client_history_index(
+    dossier_id: str,
+    client_id: str,
+    limit: int = Query(default=100, ge=1, le=200),
+    tenant=Depends(get_current_tenant),
+):
+    items = dossier_client_history(tenant["org_id"], dossier_id, client_id, limit=limit)
+    return {"status": "ok", "items": items, "count": len(items)}
 
 
 @router.get("/dossiers/{dossier_id}/notes", dependencies=[Depends(require_permission("dossiers.read"))])

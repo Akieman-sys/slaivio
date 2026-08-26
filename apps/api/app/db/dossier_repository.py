@@ -137,6 +137,23 @@ def _build_dossier_filters(
                 or {_client_display_sql()} ilike :q
                 or coalesce(c.phone, '') ilike :q
                 or coalesce(c.email, '') ilike :q
+                or exists (
+                    select 1
+                    from dossier_clients relation
+                    join clients member
+                      on member.org_id = relation.org_id
+                     and member.id = relation.client_id
+                    where relation.org_id = d.org_id
+                      and relation.dossier_id = d.id
+                      and relation.archived_at is null
+                      and (
+                        coalesce(member.client_reference, '') ilike :q
+                        or coalesce(member.display_name, member.name, member.company_name, '') ilike :q
+                        or coalesce(member.phone, '') ilike :q
+                        or coalesce(member.whatsapp_phone, '') ilike :q
+                        or coalesce(member.email, '') ilike :q
+                      )
+                )
             )"""
         )
         params["q"] = f"%{q.strip()}%"
@@ -156,7 +173,13 @@ def _build_dossier_filters(
         filters.append("d.payment_status = :payment_status")
         params["payment_status"] = payment_status
     if client_id:
-        filters.append("d.client_id = :client_id")
+        filters.append("""exists (
+            select 1 from dossier_clients relation
+            where relation.org_id = d.org_id
+              and relation.dossier_id = d.id
+              and relation.client_id = :client_id
+              and relation.archived_at is null
+        )""")
         params["client_id"] = client_id
 
     return " and ".join(filters), params
@@ -255,12 +278,22 @@ def list_dossiers(
                     d.row_version,
                     d.archived_at,
                     d.archived_by,
+                    coalesce(dc.client_count, 0)::int client_count,
+                    coalesce(dc.attention_count, 0)::int attention_count,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(p.package_count, 0)::int package_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
                 from dossiers d
                 left join clients c on c.id = d.client_id and c.org_id = d.org_id
+                left join (
+                    select dossier_id,
+                           count(*)::int client_count,
+                           count(*) filter (where attention_required)::int attention_count
+                    from dossier_clients
+                    where org_id = :org_id and archived_at is null
+                    group by dossier_id
+                ) dc on dc.dossier_id = d.id
                 left join (
                     select dossier_id, count(*) message_count
                     from messages_raw
@@ -316,7 +349,20 @@ def dossier_stats(org_id: str) -> dict:
                     count(*) filter (where status_global = 'IN_TRANSIT')::int in_transit,
                     count(*) filter (where status_global in ('DELIVERED', 'COMPLETED', 'CLOSED'))::int delivered,
                     count(*) filter (where payment_status in ('PENDING', 'WAITING', 'PARTIAL', 'OVERDUE'))::int payment_pending,
-                    coalesce(sum(coalesce(final_total, quoted_total, 0)), 0) total_value
+                    coalesce(sum(coalesce(final_total, quoted_total, 0)), 0) total_value,
+                    (select count(*)::int from dossier_clients relation
+                     where relation.org_id = :org_id and relation.archived_at is null) client_memberships,
+                    (select count(*)::int from dossier_clients relation
+                     where relation.org_id = :org_id and relation.archived_at is null
+                       and relation.attention_required) clients_requiring_attention,
+                    (select count(distinct relation.dossier_id)::int
+                     from dossier_clients relation
+                     join dossiers attention_dossier
+                       on attention_dossier.org_id = relation.org_id
+                      and attention_dossier.id = relation.dossier_id
+                     where relation.org_id = :org_id and relation.archived_at is null
+                       and relation.attention_required and attention_dossier.archived_at is null)
+                      dossiers_requiring_attention
                 from dossiers
                 where org_id = :org_id and archived_at is null
             """),
@@ -332,6 +378,9 @@ def dossier_stats(org_id: str) -> dict:
         "delivered": 0,
         "payment_pending": 0,
         "total_value": 0,
+        "client_memberships": 0,
+        "clients_requiring_attention": 0,
+        "dossiers_requiring_attention": 0,
     }
 
 
@@ -383,12 +432,22 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
                     d.row_version,
                     d.archived_at,
                     d.archived_by,
+                    coalesce(dc.client_count, 0)::int client_count,
+                    coalesce(dc.attention_count, 0)::int attention_count,
                     coalesce(m.message_count, 0)::int message_count,
                     coalesce(e.event_count, 0)::int event_count,
                     coalesce(p.package_count, 0)::int package_count,
                     coalesce(s.shipment_count, 0)::int shipment_count
                 from dossiers d
                 left join clients c on c.id = d.client_id and c.org_id = d.org_id
+                left join (
+                    select dossier_id,
+                           count(*)::int client_count,
+                           count(*) filter (where attention_required)::int attention_count
+                    from dossier_clients
+                    where org_id = :org_id and dossier_id = :dossier_id and archived_at is null
+                    group by dossier_id
+                ) dc on dc.dossier_id = d.id
                 left join (
                     select dossier_id, count(*) message_count
                     from messages_raw
@@ -475,11 +534,40 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
             """),
             {"org_id": org_id, "dossier_id": dossier_id},
         ).fetchall()
+        clients = conn.execute(
+            text("""
+                select
+                  relation.id::text relation_id,
+                  relation.client_id::text,
+                  client.client_reference,
+                  coalesce(client.display_name, client.name, client.company_name, client.phone, client.email, 'Client sans nom') display_name,
+                  client.phone,
+                  client.whatsapp_phone,
+                  client.email,
+                  client.customer_type,
+                  relation.relationship_role,
+                  relation.situation,
+                  relation.status_in_dossier,
+                  relation.attention_required,
+                  relation.attention_reason,
+                  relation.last_updated_at,
+                  relation.row_version
+                from dossier_clients relation
+                join clients client
+                  on client.org_id = relation.org_id and client.id = relation.client_id
+                where relation.org_id = :org_id and relation.dossier_id = :dossier_id
+                  and relation.archived_at is null
+                order by (relation.relationship_role = 'PRIMARY') desc,
+                         relation.attention_required desc, relation.last_updated_at desc
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
 
     dossier["messages"] = [_safe(dict(row._mapping)) for row in messages]
     dossier["events"] = [_safe(dict(row._mapping)) for row in events]
     dossier["notifications"] = [_safe(dict(row._mapping)) for row in notifications]
     dossier["shipments"] = [_safe(dict(row._mapping)) for row in shipments]
+    dossier["clients"] = [_safe(dict(row._mapping)) for row in clients]
     return dossier
 
 
@@ -530,12 +618,10 @@ def _hydrate_references(conn, org_id: str, payload: dict) -> dict:
 
 def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
     client_id = payload.get("client_id")
-    if not client_id:
-        raise ValueError("client_required")
     validate_dossier_financials(payload)
 
     with engine.begin() as conn:
-        if not _client_exists(conn, org_id, client_id):
+        if client_id and not _client_exists(conn, org_id, client_id):
             raise ValueError("client_not_found")
         payload = _hydrate_references(conn, org_id, payload)
         row = conn.execute(
@@ -548,7 +634,8 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     tracking_id, quoted_total, quoted_currency, pricing_status,
                     final_total, final_currency, payment_status, client_full_name,
                     supplier_payment_amount, supplier_payment_currency, workspace_id, route_id,
-                    shipping_service_id, origin_warehouse_id, destination_office_id, pricing_snapshot_id
+                    shipping_service_id, origin_warehouse_id, destination_office_id, pricing_snapshot_id,
+                    idempotency_key, created_by, updated_by
                 )
                 values (
                     :org_id, :client_id, :dossier_reference, :case_type, :status_global, :intake_status,
@@ -558,8 +645,12 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     :tracking_id, :quoted_total, :quoted_currency, :pricing_status,
                     :final_total, :final_currency, :payment_status, :client_full_name,
                     :supplier_payment_amount, :supplier_payment_currency, :workspace_id, :route_id,
-                    :shipping_service_id, :origin_warehouse_id, :destination_office_id, :pricing_snapshot_id
+                    :shipping_service_id, :origin_warehouse_id, :destination_office_id, :pricing_snapshot_id,
+                    :idempotency_key, :user_id, :user_id
                 )
+                on conflict (org_id, idempotency_key)
+                  where idempotency_key is not null
+                do nothing
                 returning id::text
             """),
             {
@@ -595,9 +686,21 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                 "origin_warehouse_id": payload.get("origin_warehouse_id"),
                 "destination_office_id": payload.get("destination_office_id"),
                 "pricing_snapshot_id": payload.get("pricing_snapshot_id"),
+                "idempotency_key": payload.get("idempotency_key"),
+                "user_id": user_id,
             },
         ).fetchone()
-        dossier_id = row[0]
+        if not row:
+            replayed = conn.execute(text("""
+                select id::text from dossiers
+                where org_id = :org_id and idempotency_key = :idempotency_key
+                limit 1
+            """), {"org_id": org_id, "idempotency_key": payload.get("idempotency_key")}).fetchone()
+            if not replayed:
+                raise ValueError("dossier_creation_conflict")
+            dossier_id = str(replayed[0])
+            return get_dossier(org_id, dossier_id, include_archived=True) or {}
+        dossier_id = str(row[0])
         conn.execute(
             text("""
                 insert into dossier_events (org_id, dossier_id, event_type, payload)
@@ -671,6 +774,7 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
                     origin_warehouse_id = :origin_warehouse_id,
                     destination_office_id = :destination_office_id,
                     pricing_snapshot_id = :pricing_snapshot_id,
+                    updated_by = :user_id,
                     updated_at = now(),
                     row_version = row_version + 1
                 where org_id = :org_id
@@ -682,6 +786,7 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
                 org_id=org_id,
                 dossier_id=dossier_id,
                 expected_version=expected_version,
+                user_id=user_id,
             ),
         )
         if result.rowcount == 0:

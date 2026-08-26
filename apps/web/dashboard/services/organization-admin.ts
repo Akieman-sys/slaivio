@@ -20,3 +20,15 @@ export async function createApiKey(payload:Record<string,unknown>){return(await 
 export async function revokeApiKey(id:string){return(await api.delete(`/organization/admin/api-keys/${id}`)).data}
 export type AgencyWhatsappNumber={id:string;display_phone_number?:string;verified_name?:string;role?:string;status?:string};
 export async function listAgencyWhatsappNumbers(){return(await api.get<{numbers:AgencyWhatsappNumber[]}>('/whatsapp/numbers')).data.numbers}
+
+export type PilotSettingsData={
+ organization:{id:string;organization_name:string;legal_name?:string|null;country?:string|null;city?:string|null;address?:string|null;phone?:string|null;email?:string|null;website?:string|null;logo_url?:string|null;row_version:number};
+ responsible?:{id:string;member_display_name?:string|null;member_email?:string|null;role_code:string;status:string;last_seen_at?:string|null}|null;
+ numbering:Array<{document_type:"CLIENT"|"DOSSIER";prefix_format:string;next_number:number;row_version:number;updated_at:string}>;
+ whatsapp_numbers:Array<{id:string;display_phone_number?:string|null;verified_name?:string|null;connection_status:string;quality_rating?:string|null;is_default:boolean;last_sync_at?:string|null}>;
+ ai:{pilot_response_mode:"SUGGESTION_ONLY"|"CONTROLLED_AUTO"|"PAUSED";pilot_require_published_knowledge:boolean;updated_at:string};
+ knowledge:{default_language:"FR"|"EN";pilot_default_review_days:number;pilot_row_version:number;published_count:number;draft_count:number;whatsapp_ready_count:number};
+};
+export async function getPilotSettings(){return(await api.get<PilotSettingsData>('/organization/admin/pilot')).data}
+export async function selectPilotWhatsappNumber(number_id:string){return(await api.patch('/organization/admin/pilot/whatsapp-number',{number_id})).data}
+export async function savePilotKnowledgeDefaults(payload:{default_language:"FR"|"EN";default_review_days:number;expected_version:number}){return(await api.patch('/organization/admin/pilot/knowledge',payload)).data}

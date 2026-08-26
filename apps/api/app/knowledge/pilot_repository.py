@@ -103,7 +103,13 @@ def stats(org_id: str) -> dict:
           left join pilot_knowledge_drafts draft on draft.org_id=entry.org_id and draft.knowledge_id=entry.id
           where entry.org_id=:org_id
         """), {"org_id": org_id}).fetchone()
-    return _dict(row)
+        defaults = conn.execute(text("""
+          select default_language,pilot_default_review_days
+          from knowledge_settings where org_id=:org_id
+        """), {"org_id": org_id}).mappings().first()
+    result = _dict(row)
+    result.update(dict(defaults) if defaults else {"default_language": "FR", "pilot_default_review_days": 180})
+    return result
 
 
 def detail(org_id: str, entry_id: str) -> dict:

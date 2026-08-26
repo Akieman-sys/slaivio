@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Any,Literal
 from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,Field
 from app.core.auth import get_current_manager
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 from app.organization_admin import repository as repo
+from app.organization_admin import pilot_repository as pilot_repo
 
 router=APIRouter(prefix='/organization/admin',tags=['organization-admin'])
 def actor(m):return m.get('user_id') or m.get('id')
@@ -21,6 +22,23 @@ class IntegrationSave(BaseModel):provider:str=Field(pattern=r'^(WHATSAPP|GMAIL)$
 class NumberingSave(BaseModel):prefix_format:str=Field(min_length=3,max_length=100);expected_version:int=Field(ge=1)
 class DataRequest(BaseModel):request_type:str=Field(pattern=r'^(EXPORT|ARCHIVE_WORKSPACE|DELETE_WORKSPACE|DELETE_ORGANIZATION)$');scope:dict[str,Any]={};confirmation:str|None=None
 class ApiKeyCreate(BaseModel):name:str=Field(min_length=2,max_length=80);scopes:list[str]=Field(min_length=1,max_length=30);expires_at:str|None=None
+class PilotWhatsappNumber(BaseModel):number_id:str=Field(min_length=1,max_length=80)
+class PilotKnowledgeDefaults(BaseModel):
+    default_language:Literal['FR','EN']='FR'
+    default_review_days:int=Field(ge=7,le=730)
+    expected_version:int=Field(ge=1)
+
+@router.get('/pilot',dependencies=[Depends(require_permission('pilot.settings.read'))])
+def get_pilot_settings(tenant=Depends(get_current_tenant)):
+    return {'status':'ok',**pilot_repo.overview(tenant['org_id'])}
+
+@router.patch('/pilot/whatsapp-number',dependencies=[Depends(require_permission('pilot.settings.manage'))])
+def patch_pilot_whatsapp_number(body:PilotWhatsappNumber,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    return {'status':'ok','number':pilot_repo.select_whatsapp_number(tenant['org_id'],actor(manager),body.number_id)}
+
+@router.patch('/pilot/knowledge',dependencies=[Depends(require_permission('pilot.settings.manage'))])
+def patch_pilot_knowledge(body:PilotKnowledgeDefaults,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    return {'status':'ok','knowledge':pilot_repo.save_knowledge_defaults(tenant['org_id'],actor(manager),body.default_language,body.default_review_days,body.expected_version)}
 
 @router.get('',dependencies=[Depends(require_permission('organization.read'))])
 def get_admin(tenant=Depends(get_current_tenant)):return {'status':'ok',**repo.overview(tenant['org_id'])}

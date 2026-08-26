@@ -60,7 +60,7 @@ export const pilotV1Navigation: readonly AppNavigationGroup[] = [
     icon: BookOpen,
     collapsible: false,
     routes: [
-      { label: "Base de connaissances", href: "/app/knowledge", icon: BookOpen, permission: "knowledge.read", keywords: ["connaissance", "question", "réponse", "information"] },
+      { label: "Base de connaissances", href: "/app/knowledge", icon: BookOpen, permission: "pilot.knowledge.read", keywords: ["connaissance", "question", "réponse", "information"] },
     ],
   },
   {
@@ -68,7 +68,7 @@ export const pilotV1Navigation: readonly AppNavigationGroup[] = [
     icon: Settings,
     collapsible: false,
     routes: [
-      { label: "Paramètres", href: "/app/settings", icon: Settings, permission: "organization.read", keywords: ["entreprise", "responsable", "whatsapp", "accès", "hors ligne"] },
+      { label: "Paramètres", href: "/app/settings", icon: Settings, permission: "pilot.settings.read", keywords: ["entreprise", "responsable", "whatsapp", "accès", "identifiant"] },
     ],
   },
 ];

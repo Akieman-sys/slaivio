@@ -49,7 +49,7 @@ export type PilotKnowledgeItem={
  pending_draft?:{subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;updated_by_name?:string|null;updated_at:string}|null;
  history?:Array<{event_type:string;actor_name?:string|null;created_at:string}>;
 };
-export type PilotKnowledgeStats={published:number;drafts:number;needs_review:number;available_to_ai:number;archived:number};
+export type PilotKnowledgeStats={published:number;drafts:number;needs_review:number;available_to_ai:number;archived:number;default_language:"FR"|"EN";pilot_default_review_days:number};
 export type PilotKnowledgePayload={subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;idempotency_key?:string};
 export async function listPilotKnowledge(params:Record<string,string|undefined>={}){return(await api.get<{items:PilotKnowledgeItem[];total:number}>("/knowledge/pilot",{params})).data}
 export async function getPilotKnowledgeStats(){return(await api.get<{stats:PilotKnowledgeStats}>("/knowledge/pilot/stats")).data.stats}

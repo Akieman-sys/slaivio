@@ -32,11 +32,59 @@ export type DashboardHome = {
   notifications: HomeNotification[];
   unread_count: number;
   whatsapp: { configured: boolean; status: string; phone?: string | null };
+  pilot: PilotHome;
+};
+
+export type PilotHomeStats = {
+  active_dossiers: number;
+  active_clients: number;
+  attention_dossiers: number;
+  attention_clients: number;
+  waiting_conversations: number;
+  pending_followups: number;
+};
+
+export type PilotDossierSummary = {
+  id: string;
+  title: string;
+  reference: string;
+  client_count?: number;
+  attention_clients?: number;
+  reason?: string | null;
+  updated_at: string;
+  href: string;
+};
+
+export type PilotClientSummary = {
+  id: string;
+  client_reference: string;
+  name: string;
+  dossier_title: string;
+  dossier_reference?: string | null;
+  created_at: string;
+  href: string;
+};
+
+export type PilotActivity = {
+  id: string;
+  kind: string;
+  label: string;
+  detail: string;
+  occurred_at: string;
+  href: string;
+};
+
+export type PilotHome = {
+  stats: PilotHomeStats;
+  attention_dossiers: PilotDossierSummary[];
+  recent_dossiers: PilotDossierSummary[];
+  recent_clients: PilotClientSummary[];
+  recent_activity: PilotActivity[];
 };
 
 export type HomeAttentionItem = {
   id: string;
-  kind: "shipment" | "followup" | "payment";
+  kind: "dossier" | "shipment" | "followup" | "payment";
   title: string;
   message: string;
   status: string;

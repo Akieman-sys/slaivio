@@ -150,6 +150,168 @@ def _module_counts(conn, org_id: str, tables: set[str]) -> dict[str, dict]:
     return counts
 
 
+def _pilot_home(conn, org_id: str, tables: set[str]) -> dict:
+    summary = {
+        "stats": {
+            "active_dossiers": 0,
+            "active_clients": 0,
+            "attention_dossiers": 0,
+            "attention_clients": 0,
+            "waiting_conversations": 0,
+            "pending_followups": 0,
+        },
+        "attention_dossiers": [],
+        "recent_dossiers": [],
+        "recent_clients": [],
+        "recent_activity": [],
+    }
+    active_sql = "d.archived_at is null and upper(coalesce(d.status_global, 'ACTIVE')) not in ('COMPLETED','CLOSED','CANCELLED')"
+
+    if {"dossiers", "dossier_clients", "clients"}.issubset(tables):
+        stats = _optional_row(conn, "pilot_stats", f"""
+            select
+              count(distinct d.id)::int active_dossiers,
+              count(distinct client.id)::int active_clients,
+              count(distinct d.id) filter (where relation.attention_required and client.id is not null)::int attention_dossiers,
+              count(distinct client.id) filter (where relation.attention_required and client.id is not null)::int attention_clients
+            from dossiers d
+            left join dossier_clients relation
+              on relation.org_id = d.org_id and relation.dossier_id = d.id
+             and relation.archived_at is null
+            left join clients client
+              on client.org_id = relation.org_id and client.id = relation.client_id
+             and client.deleted_at is null
+            where d.org_id = :org_id and {active_sql}
+        """, {"org_id": org_id})
+        summary["stats"].update(stats)
+
+        summary["attention_dossiers"] = _optional_rows(conn, "pilot_attention_dossiers", f"""
+            select d.id::text,
+                   coalesce(d.title, d.dossier_reference, 'Dossier') title,
+                   coalesce(d.dossier_reference, 'DOS-' || upper(left(replace(d.id::text, '-', ''), 12))) reference,
+                   count(relation.id) filter (where relation.attention_required)::int attention_clients,
+                   max(relation.attention_reason) filter (where relation.attention_required) reason,
+                   coalesce(d.updated_at, d.created_at) updated_at,
+                   '/app/dossiers/' || d.id::text href
+            from dossiers d
+            join dossier_clients relation
+              on relation.org_id = d.org_id and relation.dossier_id = d.id
+             and relation.archived_at is null
+            join clients client
+              on client.org_id = relation.org_id and client.id = relation.client_id
+             and client.deleted_at is null
+            where d.org_id = :org_id and {active_sql}
+            group by d.id, d.title, d.dossier_reference, d.updated_at, d.created_at
+            having count(client.id) filter (where relation.attention_required) > 0
+            order by count(client.id) filter (where relation.attention_required) desc,
+                     coalesce(d.updated_at, d.created_at) asc
+            limit 6
+        """, {"org_id": org_id})
+
+        summary["recent_dossiers"] = _optional_rows(conn, "pilot_recent_dossiers", f"""
+            select d.id::text,
+                   coalesce(d.title, d.dossier_reference, 'Dossier') title,
+                   coalesce(d.dossier_reference, 'DOS-' || upper(left(replace(d.id::text, '-', ''), 12))) reference,
+                   count(client.id)::int client_count,
+                   coalesce(d.updated_at, d.created_at) updated_at,
+                   '/app/dossiers/' || d.id::text href
+            from dossiers d
+            left join dossier_clients relation
+              on relation.org_id = d.org_id and relation.dossier_id = d.id
+             and relation.archived_at is null
+            left join clients client
+              on client.org_id = relation.org_id and client.id = relation.client_id
+             and client.deleted_at is null
+            where d.org_id = :org_id and {active_sql}
+            group by d.id, d.title, d.dossier_reference, d.updated_at, d.created_at
+            order by coalesce(d.updated_at, d.created_at) desc
+            limit 6
+        """, {"org_id": org_id})
+
+        summary["recent_clients"] = _optional_rows(conn, "pilot_recent_clients", f"""
+            select client.id::text,
+                   client.client_reference,
+                   coalesce(client.display_name, client.name, client.phone, 'Client') name,
+                   coalesce(d.title, d.dossier_reference, 'Dossier') dossier_title,
+                   d.dossier_reference,
+                   relation.created_at,
+                   '/app/dossiers/' || d.id::text href
+            from dossier_clients relation
+            join dossiers d on d.org_id = relation.org_id and d.id = relation.dossier_id
+            join clients client on client.org_id = relation.org_id and client.id = relation.client_id
+            where relation.org_id = :org_id and relation.archived_at is null
+              and client.deleted_at is null and {active_sql}
+            order by relation.created_at desc
+            limit 6
+        """, {"org_id": org_id})
+
+    if "conversation_assignments" in tables:
+        conversation = _optional_row(conn, "pilot_waiting_conversations", """
+            select count(*)::int waiting_conversations
+            from conversation_assignments
+            where org_id = :org_id
+              and upper(coalesce(status, 'OPEN')) not in ('CLOSED','RESOLVED')
+              and (coalesce(unread_count, 0) > 0 or coalesce(requires_attention, false) or waiting_since is not null)
+        """, {"org_id": org_id})
+        summary["stats"].update(conversation)
+
+    if "followup_tasks" in tables:
+        followups = _optional_row(conn, "pilot_pending_followups", """
+            select count(*)::int pending_followups
+            from followup_tasks
+            where org_id = :org_id and archived_at is null
+              and status in ('SCHEDULED','DUE','FAILED','ESCALATED')
+        """, {"org_id": org_id})
+        summary["stats"].update(followups)
+
+    activities: list[dict] = []
+    if "dossiers" in tables:
+        activities.extend(_optional_rows(conn, "pilot_activity_dossiers", """
+            select ('dossier-' || d.id::text) id, 'DOSSIER_CREATED' kind,
+                   'Dossier créé' label,
+                   coalesce(d.title, d.dossier_reference, 'Dossier') detail,
+                   d.created_at occurred_at, '/app/dossiers/' || d.id::text href
+            from dossiers d where d.org_id = :org_id
+            order by d.created_at desc limit 8
+        """, {"org_id": org_id}))
+    if {"dossier_client_events", "clients", "dossiers"}.issubset(tables):
+        activities.extend(_optional_rows(conn, "pilot_activity_clients", """
+            select ('client-event-' || event.id::text) id, event.event_type kind,
+                   case event.event_type
+                     when 'CLIENT_ATTACHED' then 'Client ajouté'
+                     when 'CLIENT_REMOVED' then 'Client retiré'
+                     when 'CLIENT_RESTORED' then 'Client restauré'
+                     else 'Client mis à jour'
+                   end label,
+                   coalesce(client.display_name, client.name, client.phone, 'Client') || ' · ' ||
+                   coalesce(d.title, d.dossier_reference, 'Dossier') detail,
+                   event.created_at occurred_at, '/app/dossiers/' || d.id::text href
+            from dossier_client_events event
+            join clients client on client.org_id = event.org_id and client.id = event.client_id
+            join dossiers d on d.org_id = event.org_id and d.id = event.dossier_id
+            where event.org_id = :org_id
+            order by event.created_at desc limit 12
+        """, {"org_id": org_id}))
+    if "followup_tasks" in tables:
+        activities.extend(_optional_rows(conn, "pilot_activity_followups", """
+            select ('followup-' || task.id::text) id, 'FOLLOWUP_UPDATED' kind,
+                   case when task.status = 'SENT' then 'Relance envoyée'
+                        when task.status = 'RESPONDED' then 'Réponse reçue'
+                        else 'Relance mise à jour' end label,
+                   coalesce(task.subject_reference, task.reference, 'Relance') detail,
+                   coalesce(task.updated_at, task.created_at) occurred_at,
+                   case when task.dossier_id is not null then '/app/dossiers/' || task.dossier_id::text else '/app/followups' end href
+            from followup_tasks task where task.org_id = :org_id
+            order by coalesce(task.updated_at, task.created_at) desc limit 8
+        """, {"org_id": org_id}))
+    summary["recent_activity"] = sorted(
+        activities,
+        key=lambda item: str(item.get("occurred_at") or ""),
+        reverse=True,
+    )[:10]
+    return summary
+
+
 def _attention_items(conn, org_id: str, tables: set[str]) -> list[dict]:
     items: list[dict] = []
     if "dossier_operational_alerts" in tables:
@@ -201,6 +363,10 @@ def get_home(org_id: str | None, user_id: str, organization_name: str | None, ma
         "manager": {"name": manager_name, "email": manager.get("email") or "", "initials": _initials(manager_name)},
         "resources": [], "attention_items": [], "notifications": [], "unread_count": 0,
         "whatsapp": {"configured": False, "status": "NOT_CONFIGURED"},
+        "pilot": {
+            "stats": {}, "attention_dossiers": [], "recent_dossiers": [],
+            "recent_clients": [], "recent_activity": [],
+        },
     }
     if not org_id:
         return dict(base, status="no_workspace")
@@ -237,21 +403,19 @@ def get_home(org_id: str | None, user_id: str, organization_name: str | None, ma
             from organization_whatsapp_numbers where org_id = :org_id and is_active = true
             order by is_default desc, updated_at desc limit 1
         """, {"org_id": org_id}) if "organization_whatsapp_numbers" in tables else {}
+        attention_items = _attention_items(conn, org_id, tables)
+        pilot_home = _pilot_home(conn, org_id, tables)
 
     base.update({
         "workspace": {"org_id": org_id, "name": workspace.get("name") or organization_name or "Mon espace Slaivio", "country": workspace.get("country"), "city": workspace.get("city")},
         "resources": resources,
-        "attention_items": _attention_items_from_connection(org_id, tables),
+        "attention_items": attention_items,
         "notifications": notifications,
         "unread_count": sum(1 for item in notifications if not item.get("is_read")),
         "whatsapp": whatsapp or {"configured": False, "status": "NOT_CONFIGURED"},
+        "pilot": pilot_home,
     })
     return base
-
-
-def _attention_items_from_connection(org_id: str, tables: set[str]) -> list[dict]:
-    with engine.connect() as conn:
-        return _attention_items(conn, org_id, tables)
 
 
 def update_resource_preference(org_id: str, user_id: str, resource_key: str, *, is_starred: bool | None, opened: bool) -> dict | None:

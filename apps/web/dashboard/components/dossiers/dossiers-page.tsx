@@ -2,8 +2,8 @@
 
 import axios from "axios";
 import { AlertCircle, Bell, ChevronLeft, ChevronRight, Download } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
@@ -29,6 +29,8 @@ const fieldClass = "h-10 w-full rounded-[7px] border border-[#d4d9df] bg-white p
 
 export function DossiersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const handledEntryAction = useRef(false);
   const [view, setView] = useState<PilotView>("active");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<DossierRecord[]>([]);
@@ -81,6 +83,22 @@ export function DossiersPage() {
   }, [load]);
 
   useEffect(() => { refreshStats(); }, [refreshStats]);
+
+  useEffect(() => {
+    if (handledEntryAction.current) return;
+    handledEntryAction.current = true;
+    const requestedView = searchParams.get("view");
+    if (requestedView === "attention" || requestedView === "recent" || requestedView === "archived") {
+      setView(requestedView);
+    }
+    if (searchParams.get("create") === "1") {
+      setCreateError("");
+      setClientQuery("");
+      setSelectedClients([]);
+      setClientMatches([]);
+      setCreateOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!createOpen || clientQuery.trim().length < 2) {

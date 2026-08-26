@@ -1,3 +1,9 @@
+"""Render cron entrypoint for approved broadcast campaigns."""
+
+import os
+
+os.environ["APP_RUNTIME"] = "cron"
+
 from app.db.broadcast_repository import process_queue
 from app.db.database import engine
 from sqlalchemy import text

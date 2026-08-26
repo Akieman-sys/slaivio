@@ -1,3 +1,9 @@
+"""Render cron entrypoint for knowledge maintenance."""
+
+import os
+
+os.environ["APP_RUNTIME"] = "cron"
+
 from app.knowledge.repository import maintenance
 
 

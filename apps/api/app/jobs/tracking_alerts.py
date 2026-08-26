@@ -1,8 +1,8 @@
-"""Railway cron entrypoint for deterministic Tracking alerts."""
+"""Render cron entrypoint for deterministic Tracking alerts."""
 
 import os
 
-os.environ.setdefault("APP_RUNTIME", "cron")
+os.environ["APP_RUNTIME"] = "cron"
 
 from app.core.logger import logger
 from app.tracking.repository import detect_all_tracking_alerts

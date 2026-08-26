@@ -28,8 +28,19 @@ def test_production_api_keeps_full_security_contract():
     assert "PUBLIC_BASE_URL must be an HTTPS URL" in message
 
 
-def test_dossier_alert_entrypoint_sets_runtime_before_repository_imports():
-    source = Path("app/jobs/dossier_alerts.py").read_text(encoding="utf-8")
-    runtime_position = source.index('os.environ.setdefault("APP_RUNTIME", "cron")')
-    repository_position = source.index("from app.db.dossier_alert_repository import")
-    assert runtime_position < repository_position
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        "broadcast_campaigns.py",
+        "departure_automation.py",
+        "dossier_alerts.py",
+        "followup_recovery.py",
+        "knowledge_maintenance.py",
+        "tracking_alerts.py",
+    ],
+)
+def test_cron_entrypoint_sets_runtime_before_application_imports(entrypoint: str):
+    source = Path("app/jobs", entrypoint).read_text(encoding="utf-8")
+    runtime_position = source.index('os.environ["APP_RUNTIME"] = "cron"')
+    application_import_position = source.index("from app.")
+    assert runtime_position < application_import_position

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 from app.db.conversation_assignment_repository import (
     get_assignment,
     upsert_assignment,
@@ -20,7 +21,7 @@ class AssignmentRequest(BaseModel):
     last_note: str | None = None
 
 
-@router.get("/inbox/conversations/{phone}/assignment")
+@router.get("/inbox/conversations/{phone}/assignment", dependencies=[Depends(require_permission("inbox.read"))])
 def read_assignment(
     phone: str,
     tenant=Depends(get_current_tenant),
@@ -38,7 +39,7 @@ def read_assignment(
     }
 
 
-@router.patch("/inbox/conversations/{phone}/assignment")
+@router.patch("/inbox/conversations/{phone}/assignment", dependencies=[Depends(require_permission("inbox.manage"))])
 def update_assignment(
     phone: str,
     body: AssignmentRequest,

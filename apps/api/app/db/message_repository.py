@@ -48,18 +48,24 @@ def insert_raw_message(
 
 
 def get_or_create_client(org_id: str, phone: str):
+    normalized_phone = "+" + "".join(character for character in phone if character.isdigit())
     with engine.connect() as conn:
         result = conn.execute(
             text("""
                 select id
                 from clients
                 where org_id = :org_id
-                  and phone = :phone
+                  and deleted_at is null
+                  and (
+                    normalized_phone = :normalized_phone
+                    or regexp_replace(coalesce(phone, whatsapp_phone, ''), '[^0-9]', '', 'g') = :digits
+                  )
                 limit 1
             """),
             {
                 "org_id": org_id,
-                "phone": phone,
+                "normalized_phone": normalized_phone,
+                "digits": normalized_phone.lstrip("+"),
             },
         ).fetchone()
 
@@ -68,13 +74,22 @@ def get_or_create_client(org_id: str, phone: str):
 
         result = conn.execute(
             text("""
-                insert into clients (org_id, phone)
-                values (:org_id, :phone)
+                insert into clients (
+                  org_id, phone, whatsapp_phone, normalized_phone,
+                  display_name, customer_type, lifecycle_status, source
+                ) values (
+                  :org_id, :phone, :phone, :normalized_phone,
+                  :phone, 'individual', 'lead', 'whatsapp'
+                )
+                on conflict(org_id, normalized_phone)
+                  where deleted_at is null and normalized_phone is not null
+                do update set whatsapp_phone = excluded.whatsapp_phone, updated_at = now()
                 returning id
             """),
             {
                 "org_id": org_id,
-                "phone": phone,
+                "phone": normalized_phone,
+                "normalized_phone": normalized_phone,
             },
         )
 
@@ -87,12 +102,16 @@ def get_or_create_active_dossier(org_id: str, client_id: str):
     with engine.connect() as conn:
         result = conn.execute(
             text("""
-                select id
-                from dossiers
-                where org_id = :org_id
-                  and client_id = :client_id
-                  and status_global not in ('COMPLETED', 'CLOSED', 'CANCELLED')
-                order by created_at desc
+                select dossier.id
+                from dossier_clients relation
+                join dossiers dossier
+                  on dossier.org_id = relation.org_id
+                 and dossier.id = relation.dossier_id
+                where relation.org_id = :org_id
+                  and relation.client_id = :client_id
+                  and relation.archived_at is null
+                  and dossier.archived_at is null
+                order by relation.last_updated_at desc, dossier.updated_at desc
                 limit 1
             """),
             {
@@ -109,21 +128,28 @@ def get_or_create_active_dossier(org_id: str, client_id: str):
                 insert into dossiers (
                     org_id,
                     client_id,
+                    title,
                     case_type,
                     status_global,
                     intake_status,
                     validation_status,
-                    primary_channel
+                    primary_channel,
+                    idempotency_key
                 )
                 values (
                     :org_id,
                     :client_id,
+                    'Conversation WhatsApp',
                     'UNKNOWN',
                     'LEAD',
                     'PARTIAL',
                     'PENDING',
-                    'whatsapp'
+                    'whatsapp',
+                    'whatsapp-intake:' || :client_id || ':' || to_char(current_date, 'YYYYMM')
                 )
+                on conflict(org_id, idempotency_key)
+                  where idempotency_key is not null
+                do update set updated_at = now()
                 returning id
             """),
             {

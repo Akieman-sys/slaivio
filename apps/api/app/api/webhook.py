@@ -11,6 +11,7 @@ from app.services.notification_engine import (
     build_notification_type,
 )
 from app.db.message_repository import create_message
+from app.db.pilot_inbox_repository import register_inbound
 from app.services.followup_engine import build_followup_for_business_action
 from app.services.pricing_orchestrator import handle_pricing_request
 from app.services.intake_parser import parse_intake_message
@@ -137,6 +138,13 @@ async def process_normalized_whatsapp_message(
         payload=payload,
         client_id=client_id,
         dossier_id=dossier_id,
+    )
+
+    register_inbound(
+        org_id=org_id,
+        phone=normalized_message.from_phone,
+        client_id=str(client_id) if client_id else None,
+        dossier_id=str(dossier_id) if dossier_id else None,
     )
 
     linked_followup = link_whatsapp_response(

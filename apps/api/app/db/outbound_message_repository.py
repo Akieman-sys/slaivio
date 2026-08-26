@@ -14,6 +14,7 @@ def create_outbound_message(
     waba_id: str | None = None,
     number_role: str | None = None,
     send_status: str = "PENDING",
+    dedupe_key: str | None = None,
 ):
     with engine.connect() as conn:
         row = conn.execute(
@@ -43,7 +44,7 @@ def create_outbound_message(
                     :text_body,
                     'text',
                     'whatsapp',
-                    gen_random_uuid()::text,
+                    coalesce(:dedupe_key, gen_random_uuid()::text),
                     now(),
                     :provider,
                     :provider_phone_number_id,
@@ -52,6 +53,7 @@ def create_outbound_message(
                     :number_role,
                     :send_status
                 )
+                on conflict(dedupe_key) do nothing
                 returning *
             """),
             {
@@ -65,8 +67,19 @@ def create_outbound_message(
                 "waba_id": waba_id,
                 "number_role": number_role,
                 "send_status": send_status,
+                "dedupe_key": dedupe_key,
             },
         ).fetchone()
+
+        if not row and dedupe_key:
+            row = conn.execute(
+                text("select * from messages where org_id=:org_id and dedupe_key=:dedupe_key limit 1"),
+                {"org_id": org_id, "dedupe_key": dedupe_key},
+            ).fetchone()
+            replay = dict(row._mapping) if row else None
+            if replay is not None:
+                replay["idempotent_replay"] = True
+            return replay
 
         conn.commit()
         return dict(row._mapping)

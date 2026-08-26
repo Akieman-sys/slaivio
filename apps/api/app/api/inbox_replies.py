@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
+from app.db.pilot_inbox_repository import update_state
 from app.db.conversation_timeline_repository import create_timeline_event
 from app.core.websocket_manager import manager
 from app.db.outbound_message_repository import (
@@ -20,14 +22,15 @@ router = APIRouter()
 
 
 class SendReplyRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
     preferred_role: str | None = "SUPPORT"
     manager_id: str | None = None
     manager_name: str | None = None
     draft_id: str | None = None
+    idempotency_key: str | None = Field(default=None, max_length=180)
 
 
-@router.post("/inbox/conversations/{phone}/reply")
+@router.post("/inbox/conversations/{phone}/reply", dependencies=[Depends(require_permission("inbox.reply"))])
 async def send_reply(
     phone: str,
     body: SendReplyRequest,
@@ -71,7 +74,15 @@ async def send_reply(
         waba_id=number.get("waba_id"),
         number_role=number.get("number_role"),
         send_status="PENDING",
+        dedupe_key=(f"pilot-inbox:{org_id}:{body.idempotency_key}" if body.idempotency_key else None),
     )
+
+    if outbound_message and outbound_message.get("idempotent_replay"):
+        return {
+            "status": "ok" if outbound_message.get("send_status") == "SENT" else "failed",
+            "message": outbound_message,
+            "idempotent_replay": True,
+        }
 
     try:
         provider = get_whatsapp_provider(
@@ -93,7 +104,7 @@ async def send_reply(
                 org_id=org_id,
                 client_phone=phone,
                 event_type="MESSAGE_SENT",
-                event_title="Reponse envoyee",
+                event_title="Réponse envoyée",
                 event_payload={
                     "message_id": str(outbound_message["id"]),
                     "provider_message_id": result.get(
@@ -101,8 +112,8 @@ async def send_reply(
                     ),
                     "number_role": number.get("number_role"),
                 },
-                created_by_id=body.manager_id,
-                created_by_name=body.manager_name,
+                created_by_id=tenant.get("user_id"),
+                created_by_name=tenant.get("actor_name"),
             )
 
             await manager.broadcast_to_org(
@@ -119,6 +130,11 @@ async def send_reply(
             if body.draft_id:
                 mark_ai_draft_used(body.draft_id)
 
+            update_state(
+                org_id, phone, "OPEN", False,
+                str(tenant.get("user_id") or "system"),
+            )
+
             return {
                 "status": "ok",
                 "message": sent_message,
@@ -133,7 +149,7 @@ async def send_reply(
         return {
             "status": "failed",
             "message": failed_message,
-            "provider_response": result,
+            "error": "provider_rejected_message",
         }
 
     except Exception as exc:
@@ -145,5 +161,5 @@ async def send_reply(
         return {
             "status": "failed",
             "message": failed_message,
-            "error": str(exc),
+            "error": "message_delivery_failed",
         }

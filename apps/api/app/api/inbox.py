@@ -1,15 +1,49 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
-from app.db.database import engine
+from app.db.pilot_inbox_repository import (
+    conversation_detail,
+    list_conversations as list_pilot_conversations,
+    mark_read,
+    set_context,
+    update_state,
+)
 
 
 router = APIRouter()
 
 
-@router.get("/inbox/conversations")
+class ConversationContextRequest(BaseModel):
+    client_id: str
+    dossier_id: str | None = None
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class ConversationStateRequest(BaseModel):
+    status: str = "OPEN"
+    requires_attention: bool = False
+
+
+def _actor(tenant: dict) -> str:
+    return str(tenant.get("user_id") or "system")
+
+
+def _translate_error(exc: ValueError):
+    code = str(exc)
+    status = 409 if code == "stale_conversation_version" else 404 if code in {"conversation_not_found", "client_not_found"} else 400
+    raise HTTPException(status_code=status, detail=code) from exc
+
+
+@router.get("/inbox/conversations", dependencies=[Depends(require_permission("inbox.read"))])
 def list_conversations(
+    view: str = Query(default="all", pattern="^(all|waiting|open|closed)$"),
+    q: str | None = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=40, ge=1, le=100),
     number_role: str | None = None,
     status: str | None = None,
     queue_name: str | None = None,
@@ -17,144 +51,62 @@ def list_conversations(
     requires_attention: bool | None = None,
     tenant=Depends(get_current_tenant),
 ):
-    org_id = tenant["org_id"]
-    where_clauses = [
-        "org_id = :org_id",
-    ]
-    params = {
-        "org_id": org_id,
-    }
-
-    if number_role:
-        where_clauses.append("number_role = :number_role")
-        params["number_role"] = number_role
-
-    if status:
-        where_clauses.append("conversation_status = :status")
-        params["status"] = status
-
-    if queue_name:
-        where_clauses.append("queue_name = :queue_name")
-        params["queue_name"] = queue_name
-
-    if priority:
-        where_clauses.append("priority = :priority")
-        params["priority"] = priority
-
-    if requires_attention is not None:
-        where_clauses.append("requires_attention = :requires_attention")
-        params["requires_attention"] = requires_attention
-
-    where_sql = " and ".join(where_clauses)
-
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text(f"""
-                select
-                    org_id,
-                    from_phone,
-                    last_message_at,
-                    last_message,
-                    message_count,
-                    number_role,
-                    provider_phone_number_id,
-                    whatsapp_number_id,
-                    conversation_status,
-                    priority,
-                    queue_name,
-                    unread_count,
-                    requires_attention,
-                    assigned_manager_id,
-                    assigned_manager_name,
-                    last_note,
-                    waiting_since
-                from inbox_conversations_view
-                where {where_sql}
-                order by last_message_at desc
-            """),
-            params,
-        ).fetchall()
-
+    result = list_pilot_conversations(
+        tenant["org_id"], view, q, page, page_size,
+        number_role, status, queue_name, priority, requires_attention,
+    )
     return {
         "status": "ok",
-        "conversations": [dict(row._mapping) for row in rows],
+        "conversations": result["items"],
+        "pagination": {key: result[key] for key in ("page", "page_size", "total")},
     }
 
 
-@router.get("/inbox/conversations/{phone}/messages")
-def get_conversation_messages(
+@router.get("/inbox/conversations/{phone}/messages", dependencies=[Depends(require_permission("inbox.read"))])
+def get_conversation(
     phone: str,
+    before: datetime | None = None,
+    limit: int = Query(default=100, ge=20, le=100),
     tenant=Depends(get_current_tenant),
 ):
-    org_id = tenant["org_id"]
-
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text("""
-                select
-                    id,
-                    org_id,
-                    from_phone,
-                    to_phone,
-                    direction,
-                    text_body,
-                    provider,
-                    provider_message_id,
-                    provider_phone_number_id,
-                    whatsapp_number_id,
-                    waba_id,
-                    number_role,
-                    conversation_status,
-                    priority,
-                    assigned_manager_id,
-                    send_status,
-                    error_message,
-                    created_at
-                from messages
-                where org_id = :org_id
-                  and (
-                    from_phone = :phone
-                    or to_phone = :phone
-                  )
-                order by created_at asc
-            """),
-            {
-                "org_id": org_id,
-                "phone": phone,
-            },
-        ).fetchall()
-
-    return {
-        "status": "ok",
-        "messages": [dict(row._mapping) for row in rows],
-    }
+    detail = conversation_detail(tenant["org_id"], phone, before, limit)
+    if not detail["messages"]:
+        raise HTTPException(status_code=404, detail="conversation_not_found")
+    return {"status": "ok", **detail}
 
 
-@router.patch("/inbox/conversations/{phone}/status")
-def update_conversation_status(
-    phone: str,
-    status: str,
-    tenant=Depends(get_current_tenant),
-):
-    org_id = tenant["org_id"]
-
-    with engine.connect() as conn:
-        conn.execute(
-            text("""
-                update messages
-                set conversation_status = :status
-                where org_id = :org_id
-                  and from_phone = :phone
-            """),
-            {
-                "org_id": org_id,
-                "phone": phone,
-                "status": status,
-            },
+@router.patch("/inbox/conversations/{phone}/context", dependencies=[Depends(require_permission("inbox.manage"))])
+def update_conversation_context(phone: str, body: ConversationContextRequest, tenant=Depends(get_current_tenant)):
+    try:
+        assignment = set_context(
+            tenant["org_id"], phone, body.client_id, body.dossier_id,
+            body.expected_version, _actor(tenant),
         )
-        conn.commit()
+    except ValueError as exc:
+        _translate_error(exc)
+    return {"status": "ok", "assignment": assignment}
 
-    return {
-        "status": "ok",
-        "conversation_status": status,
-    }
+
+@router.post("/inbox/conversations/{phone}/read", dependencies=[Depends(require_permission("inbox.read"))])
+def read_conversation(phone: str, tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "assignment": mark_read(tenant["org_id"], phone, _actor(tenant))}
+
+
+@router.patch("/inbox/conversations/{phone}/state", dependencies=[Depends(require_permission("inbox.manage"))])
+def change_conversation_state(phone: str, body: ConversationStateRequest, tenant=Depends(get_current_tenant)):
+    status = body.status.upper()
+    if status not in {"OPEN", "CLOSED"}:
+        raise HTTPException(status_code=400, detail="invalid_conversation_status")
+    assignment = update_state(
+        tenant["org_id"], phone, status, body.requires_attention, _actor(tenant),
+    )
+    return {"status": "ok", "assignment": assignment}
+
+
+@router.patch("/inbox/conversations/{phone}/status", dependencies=[Depends(require_permission("inbox.manage"))])
+def legacy_conversation_status(phone: str, status: str, tenant=Depends(get_current_tenant)):
+    normalized = status.upper()
+    if normalized not in {"OPEN", "CLOSED"}:
+        raise HTTPException(status_code=400, detail="invalid_conversation_status")
+    assignment = update_state(tenant["org_id"], phone, normalized, False, _actor(tenant))
+    return {"status": "ok", "conversation_status": normalized, "assignment": assignment}

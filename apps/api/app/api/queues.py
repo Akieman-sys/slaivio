@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 from app.db.database import engine
 from app.db.queue_repository import update_queue
 
@@ -9,7 +10,7 @@ from app.db.queue_repository import update_queue
 router = APIRouter()
 
 
-@router.get("/queues")
+@router.get("/queues", dependencies=[Depends(require_permission("inbox.read"))])
 def get_queues(
     tenant=Depends(get_current_tenant),
 ):
@@ -37,7 +38,7 @@ def get_queues(
     }
 
 
-@router.patch("/queues/{phone}")
+@router.patch("/queues/{phone}", dependencies=[Depends(require_permission("inbox.manage"))])
 def update_queue_route(
     phone: str,
     queue_name: str,

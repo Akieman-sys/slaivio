@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 from app.db.conversation_timeline_repository import (
     create_internal_note,
     create_timeline_event,
@@ -19,7 +20,7 @@ class CreateNoteRequest(BaseModel):
     manager_name: str | None = None
 
 
-@router.get("/inbox/conversations/{phone}/notes")
+@router.get("/inbox/conversations/{phone}/notes", dependencies=[Depends(require_permission("inbox.read"))])
 def get_notes(
     phone: str,
     tenant=Depends(get_current_tenant),
@@ -35,7 +36,7 @@ def get_notes(
     }
 
 
-@router.post("/inbox/conversations/{phone}/notes")
+@router.post("/inbox/conversations/{phone}/notes", dependencies=[Depends(require_permission("inbox.manage"))])
 def add_note(
     phone: str,
     body: CreateNoteRequest,
@@ -47,8 +48,8 @@ def add_note(
         org_id=org_id,
         client_phone=phone,
         note=body.note,
-        manager_id=body.manager_id,
-        manager_name=body.manager_name,
+        manager_id=tenant.get("user_id"),
+        manager_name=tenant.get("actor_name"),
     )
 
     create_timeline_event(
@@ -60,8 +61,8 @@ def add_note(
             "note_id": str(note["id"]),
             "note": body.note,
         },
-        created_by_id=body.manager_id,
-        created_by_name=body.manager_name,
+        created_by_id=tenant.get("user_id"),
+        created_by_name=tenant.get("actor_name"),
     )
 
     return {
@@ -70,7 +71,7 @@ def add_note(
     }
 
 
-@router.get("/inbox/conversations/{phone}/timeline")
+@router.get("/inbox/conversations/{phone}/timeline", dependencies=[Depends(require_permission("inbox.read"))])
 def get_timeline(
     phone: str,
     tenant=Depends(get_current_tenant),

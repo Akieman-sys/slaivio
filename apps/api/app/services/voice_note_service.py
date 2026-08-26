@@ -85,6 +85,7 @@ def process_voice_transcription(
         temp_path = download_meta_media_to_tempfile(
             media_url=job["media_url"],
             content_type=job.get("content_type"),
+            org_id=org_id,
         )
 
         result = transcribe_audio_file(temp_path)

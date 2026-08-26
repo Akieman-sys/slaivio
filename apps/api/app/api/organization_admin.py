@@ -1,6 +1,7 @@
+import re
 from typing import Any,Literal
 from fastapi import APIRouter,Depends,HTTPException
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,field_validator
 from app.core.auth import get_current_manager
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
@@ -19,7 +20,21 @@ class WorkspaceSave(BaseModel):name:str=Field(min_length=2,max_length=100);code:
 class WorkspaceArchive(BaseModel):expected_version:int=Field(ge=1)
 class LocationSave(BaseModel):workspace_id:str|None=None;name:str=Field(min_length=2,max_length=120);code:str=Field(pattern=r'^[A-Za-z0-9_-]{2,30}$');location_type:str;country:str;city:str;address:str|None=None;phone:str|None=None;whatsapp:str|None=None;email:str|None=None;manager_name:str|None=None;opening_hours:dict[str,Any]={};timezone:str='UTC';services:list[str]=[]
 class IntegrationSave(BaseModel):provider:str=Field(pattern=r'^(WHATSAPP|GMAIL)$');account_label:str=Field(min_length=2,max_length=120);status:str=Field(pattern=r'^(DISCONNECTED|CONNECTING|CONNECTED|ERROR)$');granted_permissions:list[str]=[];configuration:dict[str,Any]={}
-class NumberingSave(BaseModel):prefix_format:str=Field(min_length=3,max_length=100);expected_version:int=Field(ge=1)
+class NumberingSave(BaseModel):
+    prefix_format:str=Field(min_length=3,max_length=100)
+    expected_version:int=Field(ge=1)
+
+    @field_validator('prefix_format')
+    @classmethod
+    def validate_prefix_format(cls,value:str)->str:
+        value=value.strip()
+        tokens=re.findall(r'\{[^{}]+\}',value)
+        unknown=[token for token in tokens if token not in {'{YYYY}','{YEAR}','{000001}','{SEQUENCE}'}]
+        sequence_count=sum(value.count(token) for token in ('{000001}','{SEQUENCE}'))
+        if unknown:raise ValueError('unknown_identifier_placeholder')
+        if sequence_count!=1:raise ValueError('identifier_requires_one_sequence')
+        if any(ord(character)<32 for character in value):raise ValueError('identifier_contains_control_character')
+        return value
 class DataRequest(BaseModel):request_type:str=Field(pattern=r'^(EXPORT|ARCHIVE_WORKSPACE|DELETE_WORKSPACE|DELETE_ORGANIZATION)$');scope:dict[str,Any]={};confirmation:str|None=None
 class ApiKeyCreate(BaseModel):name:str=Field(min_length=2,max_length=80);scopes:list[str]=Field(min_length=1,max_length=30);expires_at:str|None=None
 class PilotWhatsappNumber(BaseModel):number_id:str=Field(min_length=1,max_length=80)
@@ -39,6 +54,14 @@ def patch_pilot_whatsapp_number(body:PilotWhatsappNumber,tenant=Depends(get_curr
 @router.patch('/pilot/knowledge',dependencies=[Depends(require_permission('pilot.settings.manage'))])
 def patch_pilot_knowledge(body:PilotKnowledgeDefaults,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
     return {'status':'ok','knowledge':pilot_repo.save_knowledge_defaults(tenant['org_id'],actor(manager),body.default_language,body.default_review_days,body.expected_version)}
+
+@router.patch('/pilot/numbering/{document_type}',dependencies=[Depends(require_permission('pilot.settings.manage'))])
+def patch_pilot_numbering(document_type:str,body:NumberingSave,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    document_type=document_type.upper()
+    if document_type not in {'CLIENT','DOSSIER'}:raise HTTPException(404,'pilot_identifier_type_not_found')
+    row=repo.save_numbering(tenant['org_id'],actor(manager),document_type,body.prefix_format,body.expected_version)
+    if not row:raise HTTPException(409,'numbering_was_modified')
+    return {'status':'ok','numbering':row}
 
 @router.get('/pilot/readiness',dependencies=[Depends(require_permission('pilot.readiness.read'))])
 def get_pilot_readiness(tenant=Depends(get_current_tenant)):

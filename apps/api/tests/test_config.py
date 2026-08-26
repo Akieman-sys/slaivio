@@ -53,7 +53,10 @@ def test_production_accepts_a_complete_secure_contract() -> None:
         meta_wa_verify_token="v" * 32,
         public_base_url="https://api.slaivio.example",
         platform_quarantine_encryption_key="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+        meta_app_id="1234567890",
         meta_app_secret="meta-secret",
+        meta_embedded_signup_config_id="9876543210",
+        meta_credentials_encryption_key="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
     )
 
     assert settings.is_deployed is True

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Check, MessageCircle, RefreshCcw, UserRound } from "lucide-react";
+import { Bot, Check, Loader2, MessageCircle, RefreshCcw, UserRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
@@ -9,9 +9,10 @@ import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { OperationButton, OperationStatus } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { updateInboxAIMode, type InboxAIMode } from "@/services/inbox";
+import { getMetaEmbeddedSignupConfig, launchMetaEmbeddedSignup, onboardMetaWhatsApp } from "@/services/meta-embedded-signup";
 import {
   getPilotSettings,
-  saveNumbering,
+  savePilotNumbering,
   savePilotKnowledgeDefaults,
   selectPilotWhatsappNumber,
   updateOrganization,
@@ -139,12 +140,23 @@ function ResponsibleSettings({data}:{data:PilotSettingsData}) {
   return <><SectionHeader title="Responsable" description="Le Pilot est exploité par une personne responsable. Les rôles avancés restent masqués tant qu’ils ne sont pas nécessaires."/><SettingsCard title="Responsable principal" description="Cette personne peut administrer le Pilot et contrôler les réponses de l’IA.">{person ? <div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-[#e7f6ef] text-[#126347]"><UserRound size={21}/></span><div className="min-w-0 flex-1"><p className="truncate text-[15px] font-semibold text-[#2d363e]">{person.member_display_name || "Responsable de l’entreprise"}</p><p className="mt-1 truncate text-[13px] text-[#6d7881]">{person.member_email || "Email non renseigné"}</p></div><div className="sm:text-right"><OperationStatus label="Accès actif" tone="success"/><p className="mt-2 text-[11px] text-[#818b93]">Dernière activité : {formatDate(person.last_seen_at)}</p></div></div> : <p className="text-[13px] text-[#727d85]">Aucun responsable actif n’a été trouvé. Contactez l’équipe SLAIVIO avant la mise en production.</p>}</SettingsCard></>;
 }
 
-const identifierOptions:Record<"CLIENT"|"DOSSIER",Array<[string,string]>> = {
-  CLIENT:[["CLI-{YYYY}-{000001}","CLI-2026-000001"],["CLI-{000001}","CLI-000001"],["CLIENT-{000001}","CLIENT-000001"]],
-  DOSSIER:[["DOS-{YYYY}-{000001}","DOS-2026-000001"],["DOS-{000001}","DOS-000001"],["DOSSIER-{000001}","DOSSIER-000001"]],
-};
 function IdentifierSettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {
-  return <><SectionHeader title="Identifiants" description="Choisissez la forme des références générées automatiquement. Le responsable ne saisira jamais ces numéros à la main."/><div className="grid gap-5">{data.numbering.map(item => <SettingsCard key={item.document_type} title={item.document_type === "CLIENT" ? "Identifiant client" : "Identifiant dossier"} description={item.document_type === "CLIENT" ? "Exemple visible sur la fiche d’une personne." : "Exemple visible dans la liste des dossiers."}><form onSubmit={(event) => {event.preventDefault();const format=String(new FormData(event.currentTarget).get("format"));run(()=>saveNumbering(item.document_type,format,item.row_version),"Le format des identifiants a été enregistré.");}} className="flex flex-col gap-4 sm:flex-row sm:items-end"><Field label="Format" hint={`Prochain numéro interne : ${item.next_number}`}><select name="format" defaultValue={item.prefix_format} className={`${inputClass} sm:min-w-[300px]`}>{identifierOptions[item.document_type].map(([format,example])=><option key={format} value={format}>{example}</option>)}</select></Field><PermissionGuard permission="pilot.settings.manage"><OperationButton type="submit" variant="primary">Enregistrer</OperationButton></PermissionGuard></form></SettingsCard>)}</div></>;
+  return <><SectionHeader title="Identifiants" description="Créez librement le format utilisé par votre entreprise. Il sera appliqué réellement à chaque nouveau client et à chaque nouveau dossier, quelle que soit leur origine."/><div className="grid gap-5">{data.numbering.map(item => <IdentifierEditor key={item.document_type} item={item} run={run}/>)}</div><div className="mt-5 rounded-[8px] border border-[#dce4e0] bg-[#f5faf7] px-4 py-3 text-[12px] leading-5 text-[#51665b]">Une modification concerne uniquement les prochaines créations. Les anciennes références restent inchangées pour préserver l’historique.</div></>;
+}
+
+function IdentifierEditor({item,run}:{item:PilotSettingsData["numbering"][number];run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {
+  const [format,setFormat]=useState(item.prefix_format);
+  useEffect(()=>setFormat(item.prefix_format),[item.prefix_format]);
+  const preview=format.replaceAll("{YYYY}",String(new Date().getFullYear())).replaceAll("{YEAR}",String(new Date().getFullYear())).replaceAll("{000001}",String(item.next_number).padStart(6,"0")).replaceAll("{SEQUENCE}",String(item.next_number));
+  const valid=(format.includes("{000001}")?1:0)+(format.includes("{SEQUENCE}")?1:0)===1;
+  return <SettingsCard title={item.document_type === "CLIENT" ? "Identifiant client" : "Identifiant dossier"} description={item.document_type === "CLIENT" ? "Référence générée lors de l’ajout d’un client." : "Référence générée lors de la création d’un dossier, y compris depuis WhatsApp."}>
+    <form onSubmit={(event)=>{event.preventDefault();if(valid)void run(()=>savePilotNumbering(item.document_type,format,item.row_version),"Le format des identifiants a été enregistré et sera utilisé pour les prochaines créations.");}} className="grid gap-4">
+      <Field label="Votre format" hint="Utilisez {YYYY} pour l’année et exactement un compteur : {000001} ou {SEQUENCE}."><input value={format} onChange={event=>setFormat(event.target.value)} className={inputClass} placeholder={item.document_type === "CLIENT" ? "MONAGENCE-CLI-{YYYY}-{000001}" : "MONAGENCE-DOS-{YYYY}-{000001}"}/></Field>
+      <div className="flex flex-col gap-3 rounded-[8px] bg-[#f5f7f7] px-4 py-3 sm:flex-row sm:items-center"><span className="text-[12px] font-medium text-[#68737c]">Aperçu de la prochaine référence</span><strong className="break-all font-mono text-[14px] text-[#27323a] sm:ml-auto">{preview || "—"}</strong></div>
+      {!valid&&<p className="text-[12px] text-[#a14a2b]">Ajoutez exactement un compteur <code>{"{000001}"}</code> ou <code>{"{SEQUENCE}"}</code>.</p>}
+      <PermissionGuard permission="pilot.settings.manage"><div className="flex justify-end border-t border-[#e7eaec] pt-4"><OperationButton type="submit" variant="primary" disabled={!valid}>Enregistrer ce format</OperationButton></div></PermissionGuard>
+    </form>
+  </SettingsCard>;
 }
 
 const modeContent:Record<InboxAIMode,{title:string;description:string}> = {
@@ -153,7 +165,31 @@ const modeContent:Record<InboxAIMode,{title:string;description:string}> = {
   PAUSED:{title:"IA en pause",description:"Aucune réponse ni suggestion IA n’est produite. Le responsable répond manuellement."},
 };
 function CommunicationSettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {
-  return <><SectionHeader title="WhatsApp & IA" description="Choisissez le numéro utilisé par l’entreprise et le niveau d’assistance souhaité. Aucun identifiant Meta technique n’est demandé ici."/><div className="grid gap-5"><SettingsCard title="Numéro WhatsApp de l’entreprise" description="Les numéros proviennent directement du portefeuille WhatsApp Business connecté.">{data.whatsapp_numbers.length ? <div className="grid gap-2">{data.whatsapp_numbers.map(number => {const connected=number.connection_status === "CONNECTED";return <button key={number.id} type="button" disabled={!connected} onClick={()=>!number.is_default&&run(()=>selectPilotWhatsappNumber(number.id),"Le numéro WhatsApp principal a été modifié.")} className={`flex items-center gap-3 rounded-[8px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${number.is_default?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#148b59]"><MessageCircle size={19}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-[14px] text-[#303941]">{number.verified_name || "Compte WhatsApp Business"}</strong><span className="mt-1 block text-[13px] text-[#6f7982]">{number.display_phone_number || "Numéro en cours de synchronisation"}</span></span>{number.is_default ? <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#117148]"><Check size={14}/>Utilisé</span> : <OperationStatus label={connected?"Disponible":"Non connecté"} tone={connected?"info":"neutral"}/>}</button>})}</div> : <div className="rounded-[8px] bg-[#f6f7f7] px-4 py-5 text-[13px] leading-5 text-[#68737c]">Aucun numéro WhatsApp Business n’est encore connecté. La connexion Meta devra être finalisée avant l’activation du Pilot.</div>}</SettingsCard><SettingsCard title="Mode de réponse de l’IA" description="Le changement s’applique immédiatement à la Boîte de réception."><div className="grid gap-2">{(Object.keys(modeContent) as InboxAIMode[]).map(mode => <button key={mode} type="button" onClick={()=>mode!==data.ai.pilot_response_mode&&run(()=>updateInboxAIMode(mode),"Le mode de réponse de l’IA a été modifié.")} className={`flex gap-3 rounded-[8px] border p-4 text-left transition ${mode===data.ai.pilot_response_mode?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${mode===data.ai.pilot_response_mode?"bg-[#d7f1e4] text-[#087848]":"bg-[#f1f3f4] text-[#66717a]"}`}><Bot size={16}/></span><span className="min-w-0 flex-1"><strong className="text-[14px] text-[#303941]">{modeContent[mode].title}</strong><span className="mt-1 block text-[12px] leading-5 text-[#727d86]">{modeContent[mode].description}</span></span>{mode===data.ai.pilot_response_mode&&<Check size={16} className="mt-2 text-[#0b8e51]"/>}</button>)}</div></SettingsCard></div></>;
+  const [connecting,setConnecting]=useState(false);
+  const [connectionError,setConnectionError]=useState("");
+  async function connectWhatsapp() {
+    setConnecting(true);setConnectionError("");
+    try {
+      const config=await getMetaEmbeddedSignupConfig();
+      if(!config.enabled) throw new Error("meta_not_configured");
+      const signup=await launchMetaEmbeddedSignup(config);
+      await onboardMetaWhatsApp(signup);
+      await run(async()=>undefined,"WhatsApp Business est connecté. Les numéros synchronisés sont maintenant disponibles.");
+    } catch(exception) {
+      const code=(exception as Error)?.message;
+      setConnectionError(code==="meta_signup_cancelled"?"La connexion a été annulée. Aucune modification n’a été enregistrée.":code==="meta_not_configured"?"La configuration Meta de SLAIVIO doit être finalisée avant de connecter ce compte.":"La connexion WhatsApp n’a pas abouti. Vérifiez les autorisations Meta puis réessayez.");
+    } finally {setConnecting(false);}
+  }
+  return <><SectionHeader title="WhatsApp & IA" description="Connectez le portefeuille WhatsApp Business de l’entreprise, choisissez le numéro principal puis définissez le niveau d’assistance."/><div className="grid gap-5">
+    <SettingsCard title="Connexion WhatsApp Business" description="Le parcours officiel Meta s’ouvre directement depuis SLAIVIO. Aucun mot de passe ni jeton technique ne vous sera demandé.">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid h-11 w-11 place-items-center rounded-full bg-[#e7f6ef] text-[#11764a]"><MessageCircle size={21}/></span><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#303940]">Portefeuille Meta Business</p><p className="mt-1 text-[12px] leading-5 text-[#717c85]">Connectez-vous à Meta, sélectionnez l’entreprise et autorisez le numéro utilisé pour le support client.</p></div><PermissionGuard permission="pilot.settings.manage"><OperationButton variant="primary" onClick={()=>void connectWhatsapp()} disabled={connecting}>{connecting?<Loader2 size={15} className="animate-spin"/>:<MessageCircle size={15}/>} {connecting?"Connexion en cours…":data.whatsapp_numbers.length?"Connecter un autre numéro":"Connecter WhatsApp"}</OperationButton></PermissionGuard></div>
+      {connectionError&&<div className="mt-4 rounded-[8px] border border-[#efd0cc] bg-[#fff6f5] px-4 py-3 text-[12px] text-[#9d352d]">{connectionError}</div>}
+    </SettingsCard>
+    <SettingsCard title="Numéro principal" description="Les numéros ci-dessous viennent du portefeuille Meta connecté. Le numéro choisi sera réellement utilisé pour les réponses et les relances.">
+      {data.whatsapp_numbers.length?<div className="grid gap-2">{data.whatsapp_numbers.map(number=>{const connected=number.connection_status==="CONNECTED";return <button key={number.id} type="button" disabled={!connected} onClick={()=>!number.is_default&&run(()=>selectPilotWhatsappNumber(number.id),"Le numéro WhatsApp principal a été modifié.")} className={`flex items-center gap-3 rounded-[8px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${number.is_default?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#148b59]"><MessageCircle size={19}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-[14px] text-[#303941]">{number.verified_name||"Compte WhatsApp Business"}</strong><span className="mt-1 block text-[13px] text-[#6f7982]">{number.display_phone_number||"Numéro en cours de synchronisation"}</span></span>{number.is_default?<span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#117148]"><Check size={14}/>Utilisé</span>:<OperationStatus label={connected?"Disponible":"Non connecté"} tone={connected?"info":"neutral"}/>}</button>})}</div>:<div className="rounded-[8px] bg-[#f6f7f7] px-4 py-5 text-[13px] leading-5 text-[#68737c]">Aucun numéro n’est encore connecté. Utilisez le bouton « Connecter WhatsApp » ci-dessus.</div>}
+    </SettingsCard>
+    <SettingsCard title="Mode de réponse de l’IA" description="Le choix s’applique réellement et immédiatement à la Boîte de réception."><div className="grid gap-2">{(Object.keys(modeContent) as InboxAIMode[]).map(mode=><button key={mode} type="button" onClick={()=>mode!==data.ai.pilot_response_mode&&run(()=>updateInboxAIMode(mode),"Le mode de réponse de l’IA a été modifié.")} className={`flex gap-3 rounded-[8px] border p-4 text-left transition ${mode===data.ai.pilot_response_mode?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${mode===data.ai.pilot_response_mode?"bg-[#d7f1e4] text-[#087848]":"bg-[#f1f3f4] text-[#66717a]"}`}><Bot size={16}/></span><span className="min-w-0 flex-1"><strong className="text-[14px] text-[#303941]">{modeContent[mode].title}</strong><span className="mt-1 block text-[12px] leading-5 text-[#727d86]">{modeContent[mode].description}</span></span>{mode===data.ai.pilot_response_mode&&<Check size={16} className="mt-2 text-[#0b8e51]"/>}</button>)}</div></SettingsCard>
+  </div></>;
 }
 
 function KnowledgeSettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {

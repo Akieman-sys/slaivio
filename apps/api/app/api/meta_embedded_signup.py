@@ -1,12 +1,15 @@
+import json
 import secrets
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.tenant_context import get_current_tenant
+from app.core.permissions import require_permission
 from app.core.logger import logger
 from app.db.meta_connection_repository import create_whatsapp_connection
 from app.db.whatsapp_account_repository import upsert_whatsapp_account
@@ -19,6 +22,7 @@ from app.db.whatsapp_webhook_repository import (
     update_waba_webhook_status,
 )
 from app.services.meta_http_client import meta_get
+from app.db.database import engine
 
 
 router = APIRouter()
@@ -36,6 +40,9 @@ class ExchangeCodeRequest(BaseModel):
 
 class OnboardWhatsappRequest(BaseModel):
     code: str
+    business_id: str | None = None
+    waba_id: str | None = None
+    phone_number_id: str | None = None
 
 
 class SaveWhatsappConnectionRequest(BaseModel):
@@ -80,6 +87,17 @@ def _sanitize_meta_error(data):
     return sanitized
 
 
+def _public_connection(connection: dict) -> dict:
+    public = {}
+    for key, value in (connection or {}).items():
+        if isinstance(value, dict):
+            public[key] = {item_key:item_value for item_key,item_value in value.items()
+                           if item_key not in {"access_token","access_token_encrypted","raw_payload","webhook_raw_response"}}
+        elif key not in {"access_token","access_token_encrypted","raw_payload","webhook_raw_response"}:
+            public[key] = value
+    return public
+
+
 def _raise_meta_error(stage: str, status_code: int, data):
     detail = {
         "stage": stage,
@@ -94,21 +112,23 @@ def _raise_meta_error(stage: str, status_code: int, data):
     )
 
 
-def _exchange_oauth_code(code: str) -> str:
-    if not settings.meta_app_id or not settings.meta_app_secret or not settings.meta_redirect_uri:
+def _exchange_oauth_code(code: str, *, embedded: bool = False) -> str:
+    if not settings.meta_app_id or not settings.meta_app_secret or (not embedded and not settings.meta_redirect_uri):
         raise HTTPException(
             status_code=500,
             detail="Meta OAuth environment is incomplete",
         )
 
+    params = {
+        "client_id": settings.meta_app_id,
+        "client_secret": settings.meta_app_secret,
+        "code": code,
+    }
+    if not embedded:
+        params["redirect_uri"] = settings.meta_redirect_uri
     result = meta_get(
-        "https://graph.facebook.com/v22.0/oauth/access_token",
-        params={
-            "client_id": settings.meta_app_id,
-            "client_secret": settings.meta_app_secret,
-            "redirect_uri": settings.meta_redirect_uri,
-            "code": code,
-        },
+        f"https://graph.facebook.com/{settings.meta_wa_api_version}/oauth/access_token",
+        params=params,
     )
 
     data = result["data"]
@@ -121,6 +141,20 @@ def _exchange_oauth_code(code: str) -> str:
         )
 
     return data["access_token"]
+
+
+def _record_onboarding_failure(org_id: str, actor_id: str, body: OnboardWhatsappRequest, stage: str, detail) -> None:
+    with engine.begin() as conn:
+        conn.execute(text("""
+          insert into pilot_meta_onboarding_events(
+            org_id,status,waba_id,phone_number_id,actor_id,error_stage,metadata
+          ) values(:org_id,'FAILED',:waba_id,:phone_number_id,:actor_id,:stage,
+                   cast(:metadata as jsonb))
+        """), {
+            "org_id":org_id, "actor_id":actor_id, "waba_id":body.waba_id,
+            "phone_number_id":body.phone_number_id, "stage":stage,
+            "metadata":json.dumps(_sanitize_meta_error(detail)),
+        })
 
 
 def _get_meta_collection(
@@ -145,7 +179,23 @@ def _get_meta_collection(
     return result["data"].get("data") or []
 
 
-@router.get("/meta/oauth/url")
+@router.get("/meta/embedded-signup/config", dependencies=[Depends(require_permission("pilot.settings.manage"))])
+def get_embedded_signup_config():
+    enabled = bool(
+        settings.meta_app_id
+        and settings.meta_app_secret
+        and settings.meta_embedded_signup_config_id
+    )
+    return {
+        "status": "ok",
+        "enabled": enabled,
+        "app_id": settings.meta_app_id if enabled else None,
+        "config_id": settings.meta_embedded_signup_config_id if enabled else None,
+        "api_version": settings.meta_wa_api_version,
+    }
+
+
+@router.get("/meta/oauth/url", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def get_oauth_url():
     if not settings.meta_app_id or not settings.meta_redirect_uri:
         raise HTTPException(
@@ -198,14 +248,14 @@ def oauth_callback(
     )
 
 
-@router.post("/meta/oauth/exchange")
+@router.post("/meta/oauth/exchange", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def exchange_code(body: ExchangeCodeRequest):
     return {
         "status": "ok",
         "access_token": _exchange_oauth_code(body.code),
     }
 
-@router.get("/meta/businesses")
+@router.get("/meta/businesses", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def get_businesses(access_token: str):
     result = meta_get(
         "https://graph.facebook.com/v22.0/me/businesses",
@@ -217,7 +267,7 @@ def get_businesses(access_token: str):
     return result["data"]
 
 
-@router.get("/meta/wabas")
+@router.get("/meta/wabas", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def get_wabas(
     business_id: str,
     access_token: str,
@@ -231,7 +281,7 @@ def get_wabas(
 
     return result["data"]
 
-@router.get("/meta/phone-numbers")
+@router.get("/meta/phone-numbers", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def get_phone_numbers(
     waba_id: str,
     access_token: str,
@@ -246,13 +296,73 @@ def get_phone_numbers(
     return result["data"]
 
 
-@router.post("/meta/oauth/onboard")
+@router.post("/meta/oauth/onboard", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def onboard_whatsapp(
     body: OnboardWhatsappRequest,
     tenant=Depends(get_current_tenant),
 ):
     org_id = tenant["org_id"]
-    access_token = _exchange_oauth_code(body.code)
+    actor_id = str(tenant.get("user_id") or "")
+    with engine.begin() as conn:
+        conn.execute(text("""
+          insert into pilot_meta_onboarding_events(org_id,status,waba_id,phone_number_id,actor_id)
+          values(:org_id,'STARTED',:waba_id,:phone_number_id,:actor_id)
+        """), {"org_id":org_id,"waba_id":body.waba_id,"phone_number_id":body.phone_number_id,"actor_id":actor_id})
+    try:
+        access_token = _exchange_oauth_code(body.code, embedded=True)
+    except HTTPException as exc:
+        _record_onboarding_failure(org_id, actor_id, body, "exchange_code", exc.detail)
+        raise
+
+    if body.waba_id and body.phone_number_id:
+        phone_result = meta_get(
+            f"https://graph.facebook.com/{settings.meta_wa_api_version}/{body.phone_number_id}",
+            params={"fields":"display_phone_number,verified_name,quality_rating", "access_token":access_token},
+        )
+        if not phone_result["ok"]:
+            _record_onboarding_failure(org_id, actor_id, body, "get_phone_number", phone_result["data"])
+            _raise_meta_error("get_phone_number", 400, phone_result["data"])
+        waba_result = meta_get(
+            f"https://graph.facebook.com/{settings.meta_wa_api_version}/{body.waba_id}",
+            params={"fields":"name", "access_token":access_token},
+        )
+        if not waba_result["ok"]:
+            _record_onboarding_failure(org_id, actor_id, body, "get_waba", waba_result["data"])
+            _raise_meta_error("get_waba", 400, waba_result["data"])
+        phone = phone_result["data"]
+        connection = create_whatsapp_connection(
+            org_id=org_id,
+            business_id=body.business_id or body.waba_id,
+            waba_id=body.waba_id,
+            phone_number_id=body.phone_number_id,
+            display_phone_number=phone.get("display_phone_number"),
+            verified_name=phone.get("verified_name"),
+            access_token=access_token,
+            account_name=waba_result["data"].get("name"),
+        )
+        subscription = subscribe_app_to_waba_webhooks(body.waba_id, access_token)
+        webhook_status = "SUBSCRIBED" if subscription["ok"] else "FAILED"
+        update_waba_webhook_status(
+            org_id=org_id, waba_id=body.waba_id, status=webhook_status,
+            raw_response=subscription["data"],
+            error_message=None if subscription["ok"] else str(subscription["data"]),
+        )
+        if not subscription["ok"]:
+            _record_onboarding_failure(org_id, actor_id, body, "subscribe_webhook", subscription["data"])
+            _raise_meta_error("subscribe_webhook", 502, subscription["data"])
+        with engine.begin() as conn:
+            conn.execute(text("""
+              insert into pilot_meta_onboarding_events(
+                org_id,status,waba_id,phone_number_id,actor_id,metadata
+              ) values(:org_id,'CONNECTED',:waba_id,:phone_number_id,:actor_id,
+                       cast(:metadata as jsonb))
+            """), {"org_id":org_id,"waba_id":body.waba_id,"phone_number_id":body.phone_number_id,
+                    "actor_id":actor_id,"metadata":json.dumps({"webhook_status":webhook_status})})
+        return {
+            "status":"ok", "business_count":1, "connection_count":1,
+            "connections":[_public_connection(connection)],
+            "webhook_subscriptions":[{"waba_id":body.waba_id,"status":webhook_status}],
+        }
     businesses = _get_meta_collection(
         "get_businesses",
         "https://graph.facebook.com/v22.0/me/businesses",
@@ -298,7 +408,7 @@ def onboard_whatsapp(
                     access_token=access_token,
                     account_name=waba.get("name"),
                 )
-                connections.append(connection)
+                connections.append(_public_connection(connection))
 
             subscription = subscribe_app_to_waba_webhooks(
                 waba_id=waba_id,
@@ -325,7 +435,7 @@ def onboard_whatsapp(
     }
 
 
-@router.post("/meta/connections")
+@router.post("/meta/connections", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def save_whatsapp_connection(
     body: SaveWhatsappConnectionRequest,
     tenant=Depends(get_current_tenant),
@@ -343,11 +453,11 @@ def save_whatsapp_connection(
 
     return {
         "status": "ok",
-        "connection": connection,
+        "connection": _public_connection(connection),
     }
 
 
-@router.post("/meta/waba/webhook/subscribe")
+@router.post("/meta/waba/webhook/subscribe", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def subscribe_waba_webhook(
     body: SubscribeWabaWebhookRequest,
     tenant=Depends(get_current_tenant),
@@ -401,7 +511,7 @@ def subscribe_waba_webhook(
     }
 
 
-@router.post("/meta/waba/webhook/check")
+@router.post("/meta/waba/webhook/check", dependencies=[Depends(require_permission("pilot.settings.manage"))])
 def check_waba_webhook(
     body: CheckWabaWebhookRequest,
     tenant=Depends(get_current_tenant),

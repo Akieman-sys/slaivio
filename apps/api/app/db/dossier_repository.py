@@ -4,8 +4,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from math import ceil
 from typing import Any
-from uuid import uuid4
-
 from sqlalchemy import text
 
 from app.db.database import engine
@@ -721,7 +719,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                 "client_id": client_id,
                 "title": (payload.get("title") or "").strip() or None,
                 "description": (payload.get("description") or "").strip() or None,
-                "dossier_reference": f"DOS-{datetime.now().year}-{uuid4().hex[:10].upper()}",
+                "dossier_reference": None,
                 "case_type": payload.get("case_type") or "UNKNOWN",
                 "status_global": payload.get("status_global") or "LEAD",
                 "intake_status": payload.get("intake_status") or "PARTIAL",

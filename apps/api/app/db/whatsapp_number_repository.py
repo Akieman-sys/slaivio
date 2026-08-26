@@ -1,6 +1,7 @@
 from sqlalchemy import text
 
 from app.db.database import engine
+from app.services.meta_credentials import reveal_access_token, token_for_storage
 
 
 def upsert_whatsapp_number(
@@ -25,6 +26,7 @@ def upsert_whatsapp_number(
     if not phone_number_id:
         raise ValueError("phone_number_id is required")
 
+    plain_token, encrypted_token = token_for_storage(access_token)
     with engine.connect() as conn:
         if is_default:
             conn.execute(
@@ -56,6 +58,7 @@ def upsert_whatsapp_number(
                     messaging_limit_tier,
                     is_default,
                     access_token,
+                    access_token_encrypted,
                     connected_at,
                     last_sync_at
                 )
@@ -77,6 +80,7 @@ def upsert_whatsapp_number(
                     :messaging_limit_tier,
                     :is_default,
                     :access_token,
+                    :access_token_encrypted,
                     now(),
                     now()
                 )
@@ -96,6 +100,7 @@ def upsert_whatsapp_number(
                     messaging_limit_tier = excluded.messaging_limit_tier,
                     is_default = excluded.is_default,
                     access_token = excluded.access_token,
+                    access_token_encrypted = excluded.access_token_encrypted,
                     last_sync_at = now(),
                     updated_at = now()
                 returning *
@@ -117,13 +122,14 @@ def upsert_whatsapp_number(
                 "quality_rating": quality_rating,
                 "messaging_limit_tier": messaging_limit_tier,
                 "is_default": is_default,
-                "access_token": access_token,
+                "access_token": plain_token,
+                "access_token_encrypted": encrypted_token,
             },
         ).fetchone()
 
         conn.commit()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def list_whatsapp_numbers(org_id: str):
@@ -139,7 +145,7 @@ def list_whatsapp_numbers(org_id: str):
             {"org_id": org_id},
         ).fetchall()
 
-        return [dict(row._mapping) for row in rows]
+        return [reveal_access_token(dict(row._mapping)) for row in rows]
 
 
 def get_default_whatsapp_number(org_id: str):
@@ -156,7 +162,7 @@ def get_default_whatsapp_number(org_id: str):
             {"org_id": org_id},
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def find_whatsapp_number_by_phone_number_id(
@@ -174,7 +180,7 @@ def find_whatsapp_number_by_phone_number_id(
             {"phone_number_id": phone_number_id},
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def update_whatsapp_number_role(
@@ -215,4 +221,4 @@ def update_whatsapp_number_role(
 
         conn.commit()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)

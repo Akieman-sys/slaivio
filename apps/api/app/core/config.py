@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     meta_wa_api_version: str = "v22.0"
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
+    meta_embedded_signup_config_id: str | None = None
+    meta_credentials_encryption_key: str | None = None
     meta_redirect_uri: str | None = None
     meta_oauth_frontend_redirect_uri: str | None = None
 
@@ -109,6 +111,17 @@ class Settings(BaseSettings):
             errors.append("PUBLIC_BASE_URL must be an HTTPS URL")
         if not self.meta_app_secret:
             errors.append("META_APP_SECRET is required")
+        if not self.meta_app_id:
+            errors.append("META_APP_ID is required")
+        if not self.meta_embedded_signup_config_id:
+            errors.append("META_EMBEDDED_SIGNUP_CONFIG_ID is required")
+        if not self.meta_credentials_encryption_key:
+            errors.append("META_CREDENTIALS_ENCRYPTION_KEY is required")
+        else:
+            try:
+                Fernet(self.meta_credentials_encryption_key.encode("ascii"))
+            except (ValueError, UnicodeEncodeError):
+                errors.append("META_CREDENTIALS_ENCRYPTION_KEY must be a valid Fernet key")
 
         if errors:
             raise ValueError("Invalid deployed configuration: " + "; ".join(errors))

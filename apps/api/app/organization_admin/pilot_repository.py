@@ -114,8 +114,12 @@ def readiness(org_id: str) -> dict:
                and nullif(btrim(numbering.prefix_format), '') is not null) identifiers_ready,
             exists(
               select 1 from organization_whatsapp_numbers number
+              join organization_whatsapp_accounts account
+                on account.id=number.whatsapp_account_id and account.org_id=number.org_id
               where number.org_id=:org_id and number.is_active=true and number.is_default=true
                 and number.connection_status='CONNECTED'
+                and account.connection_status='CONNECTED'
+                and account.webhook_subscription_status='SUBSCRIBED'
             ) whatsapp_ready,
             coalesce((select settings.pilot_response_mode from ai_settings settings
                       where settings.org_id=:org_id), 'PAUSED') ai_mode,

@@ -52,7 +52,9 @@ def test_pilot_settings_ui_uses_five_clear_business_sections():
         assert mode in page
     for hidden_term in ("Workspaces", "Rôles & permissions", "Clé API", "Journal d’audit", "meta_phone_number_id", "UUID"):
         assert hidden_term not in page
-    assert "Les numéros proviennent directement du portefeuille WhatsApp Business connecté" in page
+    assert "Connecter WhatsApp" in page
+    assert "launchMetaEmbeddedSignup" in page
+    assert "Aucun mot de passe ni jeton technique" in page
 
 
 def test_pilot_route_is_reversible_and_knowledge_defaults_are_effective():

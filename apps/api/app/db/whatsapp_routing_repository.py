@@ -1,6 +1,7 @@
 from sqlalchemy import text
 
 from app.db.database import engine
+from app.services.meta_credentials import reveal_access_token
 
 
 def find_number_by_phone_number_id(
@@ -26,7 +27,7 @@ def find_number_by_phone_number_id(
             },
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def get_default_number_for_org(
@@ -47,7 +48,7 @@ def get_default_number_for_org(
             },
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def get_numbers_by_role(
@@ -70,7 +71,4 @@ def get_numbers_by_role(
             },
         ).fetchall()
 
-        return [
-            dict(row._mapping)
-            for row in rows
-        ]
+        return [reveal_access_token(dict(row._mapping)) for row in rows]

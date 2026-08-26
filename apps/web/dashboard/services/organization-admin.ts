@@ -15,6 +15,7 @@ export async function archiveWorkspace(id:string,expected_version:number){return
 export async function saveLocation(payload:Record<string,unknown>){return(await api.post('/organization/admin/locations',payload)).data}
 export async function saveIntegration(payload:Record<string,unknown>){return(await api.post('/organization/admin/integrations',payload)).data}
 export async function saveNumbering(type:string,prefix_format:string,expected_version:number){return(await api.patch(`/organization/admin/numbering/${type}`,{prefix_format,expected_version})).data}
+export async function savePilotNumbering(type:"CLIENT"|"DOSSIER",prefix_format:string,expected_version:number){return(await api.patch(`/organization/admin/pilot/numbering/${type}`,{prefix_format,expected_version})).data}
 export async function requestDataOperation(payload:Record<string,unknown>){return(await api.post('/organization/admin/data-requests',payload)).data}
 export async function createApiKey(payload:Record<string,unknown>){return(await api.post('/organization/admin/api-keys',payload)).data}
 export async function revokeApiKey(id:string){return(await api.delete(`/organization/admin/api-keys/${id}`)).data}

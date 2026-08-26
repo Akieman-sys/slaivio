@@ -1,6 +1,7 @@
 from sqlalchemy import text
 
 from app.db.database import engine
+from app.services.meta_credentials import reveal_access_token, token_for_storage
 
 
 def upsert_whatsapp_account(
@@ -20,6 +21,7 @@ def upsert_whatsapp_account(
     if not waba_id:
         raise ValueError("waba_id is required")
 
+    plain_token, encrypted_token = token_for_storage(access_token)
     with engine.connect() as conn:
         if is_default:
             conn.execute(
@@ -40,6 +42,7 @@ def upsert_whatsapp_account(
                     waba_id,
                     account_name,
                     access_token,
+                    access_token_encrypted,
                     connection_status,
                     webhook_subscription_status,
                     quality_rating,
@@ -56,6 +59,7 @@ def upsert_whatsapp_account(
                     :waba_id,
                     :account_name,
                     :access_token,
+                    :access_token_encrypted,
                     :connection_status,
                     :webhook_subscription_status,
                     :quality_rating,
@@ -70,6 +74,7 @@ def upsert_whatsapp_account(
                     business_id = excluded.business_id,
                     account_name = excluded.account_name,
                     access_token = excluded.access_token,
+                    access_token_encrypted = excluded.access_token_encrypted,
                     connection_status = excluded.connection_status,
                     webhook_subscription_status = excluded.webhook_subscription_status,
                     quality_rating = excluded.quality_rating,
@@ -86,7 +91,8 @@ def upsert_whatsapp_account(
                 "business_id": business_id,
                 "waba_id": waba_id,
                 "account_name": account_name,
-                "access_token": access_token,
+                "access_token": plain_token,
+                "access_token_encrypted": encrypted_token,
                 "connection_status": connection_status,
                 "webhook_subscription_status": webhook_subscription_status,
                 "quality_rating": quality_rating,
@@ -98,7 +104,7 @@ def upsert_whatsapp_account(
 
         conn.commit()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def list_whatsapp_accounts(org_id: str):
@@ -113,7 +119,7 @@ def list_whatsapp_accounts(org_id: str):
             {"org_id": org_id},
         ).fetchall()
 
-        return [dict(row._mapping) for row in rows]
+        return [reveal_access_token(dict(row._mapping)) for row in rows]
 
 
 def get_default_whatsapp_account(org_id: str):
@@ -129,7 +135,7 @@ def get_default_whatsapp_account(org_id: str):
             {"org_id": org_id},
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)
 
 
 def get_whatsapp_account_by_waba(
@@ -151,4 +157,4 @@ def get_whatsapp_account_by_waba(
             },
         ).fetchone()
 
-        return dict(row._mapping) if row else None
+        return reveal_access_token(dict(row._mapping) if row else None)

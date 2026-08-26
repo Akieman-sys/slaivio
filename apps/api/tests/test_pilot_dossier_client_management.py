@@ -86,7 +86,8 @@ def test_client_creation_uses_only_the_fields_confirmed_by_the_dg():
     for unconfirmed_field in ('name="company_name"', 'name="whatsapp_phone"', 'name="preferred_language"', 'name="situation"', 'name="lifecycle_status"'):
         assert unconfirmed_field not in form
     assert "Email — facultatif" in form
-    assert "Numéro de téléphone et WhatsApp" in form
+    assert 'label="Téléphone"' in form
+    assert "Téléphone et WhatsApp" not in form
     assert all(label in form for label in ("Particulier", "Entreprise", "Partenaire"))
     assert "Intermédiaire" not in form
     assert "identifiant SLAIVIO" not in form
@@ -98,7 +99,8 @@ def test_client_record_displays_the_agency_identifier_and_one_phone():
     record = page.split("function ClientRecord", 1)[1].split("function ClientSituation", 1)[0]
 
     assert "Identifiant client" in record
-    assert "Téléphone et WhatsApp" in record
+    assert 'label="Téléphone"' in record
+    assert "Téléphone et WhatsApp" not in record
     assert "Type de client" in record
     for hidden_label in ("Langue", "Statut"):
         assert hidden_label not in record

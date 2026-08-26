@@ -60,6 +60,7 @@ from app.db.dossier_client_repository import (
     move_dossier_client,
     restore_dossier_client,
     search_clients_for_dossier,
+    update_client_profile_in_dossier,
     update_dossier_client,
 )
 
@@ -267,6 +268,30 @@ class DossierClientPatchPayload(BaseModel):
         return self
 
 
+class DossierClientProfilePatchPayload(BaseModel):
+    client_row_version: int = Field(ge=1)
+    name: str | None = Field(default=None, max_length=180)
+    company_name: str | None = Field(default=None, max_length=180)
+    phone: str | None = Field(default=None, max_length=40)
+    whatsapp_phone: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=200)
+    customer_type: str | None = None
+    lifecycle_status: str | None = None
+    preferred_language: str | None = Field(default=None, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_profile(self):
+        if not any((self.name, self.company_name)):
+            raise ValueError("client_identity_required")
+        if not any((self.phone, self.whatsapp_phone, self.email)):
+            raise ValueError("client_contact_required")
+        if self.customer_type is not None and self.customer_type not in CLIENT_TYPES:
+            raise ValueError("invalid_customer_type")
+        if self.lifecycle_status is not None and self.lifecycle_status not in CLIENT_STATUSES:
+            raise ValueError("invalid_lifecycle_status")
+        return self
+
+
 class DossierClientMovePayload(BaseModel):
     target_dossier_id: str
     row_version: int = Field(ge=1)
@@ -301,7 +326,7 @@ def _raise_dossier_client_error(exc: ValueError) -> None:
         raise HTTPException(status_code=404, detail=detail) from exc
     if detail in {
         "duplicate_client", "dossier_client_conflict", "stale_dossier_client_version",
-        "client_already_in_target_dossier", "same_target_dossier",
+        "stale_client_version", "client_already_in_target_dossier", "same_target_dossier",
     }:
         raise HTTPException(status_code=409, detail=detail) from exc
     raise HTTPException(status_code=422, detail=detail) from exc
@@ -618,6 +643,28 @@ def dossier_client_update(
         relation = update_dossier_client(
             tenant["org_id"], dossier_id, client_id, _user_id(tenant),
             body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        _raise_dossier_client_error(exc)
+    return {"status": "ok", "relation": relation}
+
+
+@router.patch(
+    "/dossiers/{dossier_id}/clients/{client_id}/profile",
+    dependencies=[Depends(require_permission("dossiers.clients.manage"))],
+)
+def dossier_client_profile_update(
+    dossier_id: str,
+    client_id: str,
+    body: DossierClientProfilePatchPayload,
+    tenant=Depends(get_current_tenant),
+):
+    data = body.model_dump(exclude_unset=True)
+    data["row_version"] = data.pop("client_row_version")
+    data["display_name"] = data.get("name") or data.get("company_name")
+    try:
+        relation = update_client_profile_in_dossier(
+            tenant["org_id"], dossier_id, client_id, _user_id(tenant), data
         )
     except ValueError as exc:
         _raise_dossier_client_error(exc)

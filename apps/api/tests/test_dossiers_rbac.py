@@ -23,6 +23,7 @@ EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers/{dossier_id}/clients", "POST"): "dossiers.clients.manage",
     ("/dossiers/{dossier_id}/clients/new", "POST"): "dossiers.clients.manage",
     ("/dossiers/{dossier_id}/clients/{client_id}", "PATCH"): "dossiers.clients.manage",
+    ("/dossiers/{dossier_id}/clients/{client_id}/profile", "PATCH"): "dossiers.clients.manage",
     ("/dossiers/{dossier_id}/clients/{client_id}", "DELETE"): "dossiers.clients.manage",
     ("/dossiers/{dossier_id}/clients/{client_id}/restore", "POST"): "dossiers.clients.manage",
     ("/dossiers/{dossier_id}/clients/{client_id}/move", "POST"): "dossiers.clients.manage",

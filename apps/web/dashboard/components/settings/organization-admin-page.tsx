@@ -1145,6 +1145,7 @@ function documentTypeLabel(type: string) {
     INVOICE: "Factures clients",
     QUOTE: "Devis",
     RECEIPT: "Reçus de paiement",
+    CLIENT: "Clients des dossiers",
     DOSSIER: "Dossiers",
     PACKAGE: "Colis",
     SHIPMENT: "Expéditions",
@@ -1156,7 +1157,11 @@ function documentTypeLabel(type: string) {
   return labels[type] || type.toLowerCase().replaceAll("_", " ");
 }
 function numberingExample(format: string) {
-  return format.replaceAll("{YYYY}", "2026").replace(/\{0+\}/g, "000184");
+  return format
+    .replaceAll("{YYYY}", "2026")
+    .replaceAll("{YEAR}", "2026")
+    .replaceAll("{SEQUENCE}", "184")
+    .replace(/\{0+\}/g, "000184");
 }
 function BillingSettings({ data }: { data: AdminData }) {
   const b = data.billing || {};

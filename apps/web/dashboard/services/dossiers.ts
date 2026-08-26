@@ -114,6 +114,12 @@ export type DossierClientRelation = {
   whatsapp_phone?: string | null;
   email?: string | null;
   customer_type?: string | null;
+  lifecycle_status?: string | null;
+  country?: string | null;
+  city?: string | null;
+  address?: string | null;
+  preferred_language?: string | null;
+  client_row_version: number;
   relationship_role?: string | null;
   situation?: string | null;
   status_in_dossier?: string | null;
@@ -333,6 +339,9 @@ export type NewDossierClientPayload = {
   phone?: string | null;
   whatsapp_phone?: string | null;
   email?: string | null;
+  customer_type?: string | null;
+  lifecycle_status?: string | null;
+  preferred_language?: string | null;
   situation?: string | null;
   attention_required?: boolean;
   attention_reason?: string | null;
@@ -353,6 +362,58 @@ export async function updateDossierClientRelation(
   return (await api.patch<{ status: "ok"; relation: DossierClientRelation }>(
     `/dossiers/${dossierId}/clients/${clientId}`, payload,
   )).data.relation;
+}
+
+export async function updateDossierClientProfile(
+  dossierId: string,
+  clientId: string,
+  payload: {
+    client_row_version: number;
+    name?: string | null;
+    company_name?: string | null;
+    phone?: string | null;
+    whatsapp_phone?: string | null;
+    email?: string | null;
+    customer_type?: string | null;
+    lifecycle_status?: string | null;
+    preferred_language?: string | null;
+  },
+) {
+  return (await api.patch<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients/${clientId}/profile`, payload,
+  )).data.relation;
+}
+
+export async function moveDossierClient(
+  dossierId: string,
+  clientId: string,
+  targetDossierId: string,
+  rowVersion: number,
+) {
+  return (await api.post<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients/${clientId}/move`,
+    {
+      target_dossier_id: targetDossierId,
+      row_version: rowVersion,
+      idempotency_key: `move-client:${dossierId}:${clientId}:${targetDossierId}`,
+    },
+  )).data.relation;
+}
+
+export type DossierClientHistoryEvent = {
+  id: string;
+  event_type: string;
+  actor_id?: string | null;
+  old_data?: Record<string, unknown> | null;
+  new_data?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export async function getDossierClientHistory(dossierId: string, clientId: string) {
+  return (await api.get<{ status: "ok"; items: DossierClientHistoryEvent[] }>(
+    `/dossiers/${dossierId}/clients/${clientId}/history`,
+  )).data.items;
 }
 
 export async function removeClientFromDossier(dossierId: string, clientId: string, rowVersion: number) {

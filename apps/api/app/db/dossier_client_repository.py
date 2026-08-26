@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.clients.repository import normalize_email, normalize_phone
+from app.clients.repository import normalize_email, normalize_phone, update_client
 from app.db.database import engine
 
 
@@ -50,6 +50,9 @@ RELATION_SELECT = """
       client.email,
       client.customer_type,
       client.lifecycle_status,
+      client.country,
+      client.city,
+      client.address,
       client.preferred_language,
       client.row_version client_row_version,
       relation.relationship_role,
@@ -434,6 +437,50 @@ def update_dossier_client(org_id: str, dossier_id: str, client_id: str, user_id:
         _event(conn, org_id=org_id, dossier_id=dossier_id, user_id=user_id,
                event_type="DOSSIER_CLIENT_UPDATED", payload={"client_id": client_id})
         return _relation_by_id(conn, org_id, str(result[0])) or {}
+
+
+def update_client_profile_in_dossier(
+    org_id: str,
+    dossier_id: str,
+    client_id: str,
+    user_id: str,
+    payload: dict,
+) -> dict:
+    """Update the canonical client record through its Pilot dossier context."""
+    with engine.connect() as conn:
+        relation = _relation_for_client(conn, org_id, dossier_id, client_id)
+    if not relation:
+        raise ValueError("dossier_client_not_found")
+
+    updated = update_client(org_id, client_id, user_id, payload)
+    if not updated:
+        raise ValueError("client_not_found")
+
+    with engine.begin() as conn:
+        current = _relation_for_client(conn, org_id, dossier_id, client_id)
+        if not current:
+            raise ValueError("dossier_client_not_found")
+        relation_id = conn.execute(text("""
+            update dossier_clients
+            set updated_by = :user_id
+            where org_id = :org_id and dossier_id = :dossier_id
+              and client_id = :client_id and archived_at is null
+            returning id::text
+        """), {
+            "org_id": org_id,
+            "dossier_id": dossier_id,
+            "client_id": client_id,
+            "user_id": user_id,
+        }).scalar_one()
+        _event(
+            conn,
+            org_id=org_id,
+            dossier_id=dossier_id,
+            user_id=user_id,
+            event_type="DOSSIER_CLIENT_PROFILE_UPDATED",
+            payload={"client_id": client_id},
+        )
+        return _relation_by_id(conn, org_id, relation_id) or {}
 
 
 def archive_dossier_client(org_id: str, dossier_id: str, client_id: str, user_id: str, expected_version: int) -> dict:

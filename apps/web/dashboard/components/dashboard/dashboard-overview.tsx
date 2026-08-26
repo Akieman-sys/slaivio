@@ -9,6 +9,7 @@ import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { ErrorState } from "@/components/ui/page-state";
 import { isPilotV1, isPilotVisiblePath } from "@/config/product-profile";
 import { getDashboardHome, type DashboardHome, type HomeAttentionItem, type PilotActivity, type PilotDossierSummary } from "@/services/dashboard";
+import { PilotReadinessPanel } from "@/components/dashboard/pilot-readiness";
 
 const dashboardCacheKey = "slaivio:dashboard-home";
 
@@ -96,6 +97,8 @@ function PilotDashboard({ data, loading, error, reload }: { data: DashboardHome;
     />
     <main className="mx-auto grid w-full max-w-[1320px] gap-5 p-5 sm:p-6">
       {error && <div className="flex items-center gap-3 rounded-[7px] border border-[#f1c7c3] bg-[#fff5f4] px-4 py-3 text-[12px] text-[#a52a22]"><span>{error} Les dernières données connues restent affichées.</span><button type="button" onClick={reload} className="ml-auto font-semibold">Réessayer</button></div>}
+
+      <PilotReadinessPanel />
 
       <section aria-label="Résumé de l’activité">
         <OperationMetricGrid>

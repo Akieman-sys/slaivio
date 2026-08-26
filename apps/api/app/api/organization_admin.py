@@ -40,6 +40,14 @@ def patch_pilot_whatsapp_number(body:PilotWhatsappNumber,tenant=Depends(get_curr
 def patch_pilot_knowledge(body:PilotKnowledgeDefaults,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
     return {'status':'ok','knowledge':pilot_repo.save_knowledge_defaults(tenant['org_id'],actor(manager),body.default_language,body.default_review_days,body.expected_version)}
 
+@router.get('/pilot/readiness',dependencies=[Depends(require_permission('pilot.readiness.read'))])
+def get_pilot_readiness(tenant=Depends(get_current_tenant)):
+    return {'status':'ok','readiness':pilot_repo.readiness(tenant['org_id'])}
+
+@router.post('/pilot/readiness/reviews',dependencies=[Depends(require_permission('pilot.readiness.review'))])
+def post_pilot_readiness_review(tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    return {'status':'ok','review':pilot_repo.record_readiness_review(tenant['org_id'],actor(manager))}
+
 @router.get('',dependencies=[Depends(require_permission('organization.read'))])
 def get_admin(tenant=Depends(get_current_tenant)):return {'status':'ok',**repo.overview(tenant['org_id'])}
 @router.patch('',dependencies=[Depends(require_permission('organization.manage'))])

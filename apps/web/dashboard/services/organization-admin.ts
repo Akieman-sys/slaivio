@@ -32,3 +32,8 @@ export type PilotSettingsData={
 export async function getPilotSettings(){return(await api.get<PilotSettingsData>('/organization/admin/pilot')).data}
 export async function selectPilotWhatsappNumber(number_id:string){return(await api.patch('/organization/admin/pilot/whatsapp-number',{number_id})).data}
 export async function savePilotKnowledgeDefaults(payload:{default_language:"FR"|"EN";default_review_days:number;expected_version:number}){return(await api.patch('/organization/admin/pilot/knowledge',payload)).data}
+
+export type PilotReadinessCheck={key:string;label:string;status:"READY"|"WARNING"|"ACTION_REQUIRED";description:string;action_label:string;href:string};
+export type PilotReadiness={status:"READY"|"ACTION_REQUIRED";score:number;ready_count:number;total_count:number;action_required_count:number;warning_count:number;checks:PilotReadinessCheck[]};
+export async function getPilotReadiness(){return(await api.get<{readiness:PilotReadiness}>('/organization/admin/pilot/readiness')).data.readiness}
+export async function recordPilotReadinessReview(){return(await api.post('/organization/admin/pilot/readiness/reviews')).data.review}

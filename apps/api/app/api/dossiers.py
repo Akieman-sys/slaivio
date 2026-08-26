@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.responses import StreamingResponse
 
 from app.core.tenant_context import get_current_tenant
@@ -49,7 +49,6 @@ from app.db.dossier_alert_repository import (
     refresh_dossier_alerts,
 )
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
-from app.clients.repository import CLIENT_STATUSES, CLIENT_TYPES
 from app.db.dossier_client_repository import (
     DuplicateDossierClientError,
     archive_dossier_client,
@@ -221,12 +220,13 @@ class DossierClientRelationPayload(BaseModel):
         return self
 
 
-class DossierClientCreatePayload(DossierClientRelationPayload):
-    name: str | None = Field(default=None, max_length=180)
-    phone: str | None = Field(default=None, max_length=40)
+class DossierClientCreatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=180)
+    phone: str = Field(min_length=6, max_length=40)
     email: str | None = Field(default=None, max_length=200)
-    customer_type: str = "individual"
-    lifecycle_status: str = "lead"
+    idempotency_key: str = Field(min_length=8, max_length=160)
 
     @model_validator(mode="after")
     def validate_client(self):
@@ -234,10 +234,6 @@ class DossierClientCreatePayload(DossierClientRelationPayload):
             raise ValueError("client_identity_required")
         if not (self.phone or "").strip():
             raise ValueError("client_contact_required")
-        if self.customer_type not in CLIENT_TYPES:
-            raise ValueError("invalid_customer_type")
-        if self.lifecycle_status not in CLIENT_STATUSES:
-            raise ValueError("invalid_lifecycle_status")
         return self
 
 
@@ -262,26 +258,19 @@ class DossierClientPatchPayload(BaseModel):
 
 
 class DossierClientProfilePatchPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     client_row_version: int = Field(ge=1)
-    name: str | None = Field(default=None, max_length=180)
-    company_name: str | None = Field(default=None, max_length=180)
-    phone: str | None = Field(default=None, max_length=40)
-    whatsapp_phone: str | None = Field(default=None, max_length=40)
+    name: str = Field(min_length=2, max_length=180)
+    phone: str = Field(min_length=6, max_length=40)
     email: str | None = Field(default=None, max_length=200)
-    customer_type: str | None = None
-    lifecycle_status: str | None = None
-    preferred_language: str | None = Field(default=None, max_length=10)
 
     @model_validator(mode="after")
     def validate_profile(self):
-        if not any((self.name, self.company_name)):
+        if not (self.name or "").strip():
             raise ValueError("client_identity_required")
-        if not any((self.phone, self.whatsapp_phone, self.email)):
+        if not (self.phone or "").strip():
             raise ValueError("client_contact_required")
-        if self.customer_type is not None and self.customer_type not in CLIENT_TYPES:
-            raise ValueError("invalid_customer_type")
-        if self.lifecycle_status is not None and self.lifecycle_status not in CLIENT_STATUSES:
-            raise ValueError("invalid_lifecycle_status")
         return self
 
 
@@ -598,13 +587,14 @@ def dossier_client_create(
     body: DossierClientCreatePayload,
     tenant=Depends(get_current_tenant),
 ):
-    data = body.model_dump()
+    data = body.model_dump(exclude={"idempotency_key"})
     relation_fields = {
-        key: data.pop(key)
-        for key in (
-            "relationship_role", "situation", "status_in_dossier",
-            "attention_required", "attention_reason", "idempotency_key",
-        )
+        "relationship_role": None,
+        "situation": None,
+        "status_in_dossier": None,
+        "attention_required": False,
+        "attention_reason": None,
+        "idempotency_key": body.idempotency_key,
     }
     try:
         client, relation, replayed = create_client_in_dossier(
@@ -654,7 +644,8 @@ def dossier_client_profile_update(
 ):
     data = body.model_dump(exclude_unset=True)
     data["row_version"] = data.pop("client_row_version")
-    data["display_name"] = data.get("name") or data.get("company_name")
+    data["display_name"] = data.get("name")
+    data["whatsapp_phone"] = data.get("phone")
     try:
         relation = update_client_profile_in_dossier(
             tenant["org_id"], dossier_id, client_id, _user_id(tenant), data

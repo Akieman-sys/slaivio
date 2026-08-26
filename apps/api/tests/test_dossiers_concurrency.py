@@ -53,23 +53,23 @@ def test_pilot_dossier_can_start_before_the_first_client_is_known():
     assert payload.idempotency_key == "pilot-dossier-0001"
 
 
-def test_client_created_inside_a_dossier_requires_identity_contact_and_attention_reason():
-    with pytest.raises(ValidationError, match="client_identity_required"):
+def test_client_created_inside_a_dossier_requires_only_identity_and_phone():
+    with pytest.raises(ValidationError):
         DossierClientCreatePayload(
             phone="+243900000000", idempotency_key="client-create-0001"
         )
-    with pytest.raises(ValidationError, match="client_contact_required"):
+    with pytest.raises(ValidationError):
         DossierClientCreatePayload(
             name="Jean", idempotency_key="client-create-0002"
         )
-    with pytest.raises(ValidationError, match="attention_reason_required"):
+    with pytest.raises(ValidationError, match="extra_forbidden"):
         DossierClientCreatePayload(
             name="Jean", phone="+243900000000", attention_required=True,
             idempotency_key="client-create-0003",
         )
     client = DossierClientCreatePayload(
-        name="Jean", phone="+243900000000", attention_required=True,
-        attention_reason="Doit rappeler l'agence", idempotency_key="client-create-0004",
+        name="Jean", phone="+243900000000", email=None,
+        idempotency_key="client-create-0004",
     )
     assert client.name == "Jean"
 

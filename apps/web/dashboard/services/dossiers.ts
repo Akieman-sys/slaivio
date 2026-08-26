@@ -334,11 +334,9 @@ export async function attachClientToDossier(dossierId: string, clientId: string)
 }
 
 export type NewDossierClientPayload = {
-  name?: string | null;
-  phone?: string | null;
+  name: string;
+  phone: string;
   email?: string | null;
-  customer_type?: string | null;
-  lifecycle_status?: string | null;
 };
 
 export async function createClientInDossier(dossierId: string, payload: NewDossierClientPayload) {
@@ -363,14 +361,9 @@ export async function updateDossierClientProfile(
   clientId: string,
   payload: {
     client_row_version: number;
-    name?: string | null;
-    company_name?: string | null;
-    phone?: string | null;
-    whatsapp_phone?: string | null;
+    name: string;
+    phone: string;
     email?: string | null;
-    customer_type?: string | null;
-    lifecycle_status?: string | null;
-    preferred_language?: string | null;
   },
 ) {
   return (await api.patch<{ status: "ok"; relation: DossierClientRelation }>(

@@ -284,7 +284,9 @@ def attach_client_to_dossier(org_id: str, dossier_id: str, client_id: str, user_
 
 def create_client_in_dossier(org_id: str, dossier_id: str, user_id: str, client_payload: dict, relation_payload: dict) -> tuple[dict, dict, bool]:
     phone = normalize_phone(client_payload.get("phone"))
-    whatsapp = normalize_phone(client_payload.get("whatsapp_phone")) or phone
+    # Dans le Pilot V1, le numéro principal est aussi le numéro WhatsApp.
+    # whatsapp_phone reste synchronisé uniquement pour les anciens consommateurs.
+    whatsapp = phone
     email = normalize_email(client_payload.get("email"))
     with engine.begin() as conn:
         dossier = _locked_dossier(conn, org_id, dossier_id)
@@ -322,7 +324,6 @@ def create_client_in_dossier(org_id: str, dossier_id: str, user_id: str, client_
         display_name = (
             client_payload.get("display_name")
             or client_payload.get("name")
-            or client_payload.get("company_name")
             or phone
             or email
         )
@@ -343,16 +344,16 @@ def create_client_in_dossier(org_id: str, dossier_id: str, user_id: str, client_
                 "org_id": org_id,
                 "name": client_payload.get("name"),
                 "display_name": display_name,
-                "company_name": client_payload.get("company_name"),
+                "company_name": None,
                 "phone": phone,
                 "whatsapp_phone": whatsapp,
                 "email": email,
                 "normalized_phone": phone or whatsapp,
                 "normalized_email": email,
-                "customer_type": client_payload.get("customer_type") or "individual",
-                "lifecycle_status": client_payload.get("lifecycle_status") or "lead",
-                "source": client_payload.get("source") or "manual",
-                "preferred_language": client_payload.get("preferred_language") or "FR",
+                "customer_type": "individual",
+                "lifecycle_status": "lead",
+                "source": "manual",
+                "preferred_language": "FR",
                 "user_id": user_id,
             }).scalar_one()
         except IntegrityError as exc:

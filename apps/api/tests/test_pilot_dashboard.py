@@ -74,6 +74,6 @@ def test_pilot_dashboard_links_rows_to_real_dossier_pages():
     assert "conversation_assignments" in repository
     assert "followup_tasks" in repository
     assert 'href="/app/dossiers?create=1"' in dashboard
-    assert 'href="/app/dossiers?view=attention"' in dashboard
+    assert 'href="/app/dossiers?view=attention"' not in dashboard
     assert 'searchParams.get("create") === "1"' in dossiers
-    assert 'searchParams.get("view")' in dossiers
+    assert 'requestedView === "recent" || requestedView === "archived"' in dossiers

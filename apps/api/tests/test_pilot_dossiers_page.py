@@ -14,10 +14,9 @@ def test_pilot_dossiers_page_uses_the_multi_client_model():
 
     for label in (
         "Dossiers actifs",
-        "À traiter",
         "Modifiés récemment",
         "Clients rattachés",
-        "Rechercher un dossier ou un client",
+        "Dernière activité",
     ):
         assert label in page
 
@@ -26,6 +25,11 @@ def test_pilot_dossiers_page_uses_the_multi_client_model():
     assert "client_count" in service
     assert "attention_count" in service
     assert "clients?: DossierClientRelation[]" in service
+    assert "dossier.client_name" not in page
+    assert 'name="assigned_to"' not in page
+    assert "OperationActionMenu" not in page
+    assert "Rechercher un dossier ou un client" not in page
+    assert 'key: "attention"' not in page
 
 
 def test_pilot_dossiers_page_does_not_expose_the_old_cargo_workflow():

@@ -42,7 +42,6 @@ def test_detail_page_uses_only_the_new_pilot_structure():
         "Vue d’ensemble",
         "Clients",
         "Communications et suivi",
-        "Ajouter un client",
         "Nouveau client",
         "Type de client",
     ):
@@ -54,6 +53,9 @@ def test_detail_page_uses_only_the_new_pilot_structure():
     assert "payment_status" not in page
     assert "shipping_mode" not in page
     assert "Situation dans ce dossier" not in page
+    assert "Ajouter un client" not in page
+    assert 'name="assigned_to"' not in page
+    assert 'label="Responsable"' not in page
 
 
 def test_repository_creates_all_client_relations_in_the_same_transaction():

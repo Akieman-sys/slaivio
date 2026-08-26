@@ -1,23 +1,23 @@
 "use client";
 
 import axios from "axios";
-import { AlertCircle, Bell, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationDrawer } from "@/components/ui/operation-drawer";
-import { OperationActionMenu, OperationButton, OperationMetric, OperationMetricGrid, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
-import { OperationContent, OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
+import { OperationButton, OperationMetric, OperationMetricGrid, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
+import { OperationContent, OperationMetrics, OperationSearch, OperationTable } from "@/components/ui/operation-primitives";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { EmptyState, TableSkeleton } from "@/components/ui/page-state";
 import {
   createDossier, exportDossiers, getDossierStats,
-  listArchivedDossiers, listDossierMembers, listDossiers, searchDossierClients,
-  type DossierClientSearchResult, type DossierMember, type DossierRecord, type DossierStats,
+  listArchivedDossiers, listDossiers, searchDossierClients,
+  type DossierClientSearchResult, type DossierRecord, type DossierStats,
 } from "@/services/dossiers";
 
-type PilotView = "active" | "attention" | "recent" | "archived";
+type PilotView = "active" | "recent" | "archived";
 
 const EMPTY_STATS: DossierStats = {
   total: 0, active: 0, leads: 0, quoted: 0, waiting_packages: 0, in_transit: 0,
@@ -32,7 +32,6 @@ export function DossiersPage() {
   const searchParams = useSearchParams();
   const handledEntryAction = useRef(false);
   const [view, setView] = useState<PilotView>("active");
-  const [query, setQuery] = useState("");
   const [items, setItems] = useState<DossierRecord[]>([]);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [page, setPage] = useState(1);
@@ -46,7 +45,6 @@ export function DossiersPage() {
   const [clientQuery, setClientQuery] = useState("");
   const [clientMatches, setClientMatches] = useState<DossierClientSearchResult[]>([]);
   const [selectedClients, setSelectedClients] = useState<DossierClientSearchResult[]>([]);
-  const [members, setMembers] = useState<DossierMember[]>([]);
   const [clientSearching, setClientSearching] = useState(false);
 
   const load = useCallback(async (nextPage = 1) => {
@@ -54,10 +52,9 @@ export function DossiersPage() {
     setError("");
     try {
       const response = view === "archived"
-        ? await listArchivedDossiers({ q: query || undefined, page: nextPage, page_size: PAGE_SIZE })
+        ? await listArchivedDossiers({ page: nextPage, page_size: PAGE_SIZE })
         : await listDossiers({
-            q: query || undefined, active_only: true,
-            attention_required: view === "attention",
+            active_only: true,
             updated_since_hours: view === "recent" ? 168 : undefined,
             page: nextPage, page_size: PAGE_SIZE, sort: "updated_desc",
           });
@@ -71,15 +68,14 @@ export function DossiersPage() {
     } finally {
       setLoading(false);
     }
-  }, [query, view]);
+  }, [view]);
 
   const refreshStats = useCallback(async () => {
     try { setStats(await getDossierStats()); } catch { setStats(EMPTY_STATS); }
   }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => load(1), 220);
-    return () => window.clearTimeout(timeout);
+    load(1);
   }, [load]);
 
   useEffect(() => { refreshStats(); }, [refreshStats]);
@@ -88,7 +84,7 @@ export function DossiersPage() {
     if (handledEntryAction.current) return;
     handledEntryAction.current = true;
     const requestedView = searchParams.get("view");
-    if (requestedView === "attention" || requestedView === "recent" || requestedView === "archived") {
+    if (requestedView === "recent" || requestedView === "archived") {
       setView(requestedView);
     }
     if (searchParams.get("create") === "1") {
@@ -116,11 +112,6 @@ export function DossiersPage() {
     return () => window.clearTimeout(timeout);
   }, [clientQuery, createOpen, selectedClients]);
 
-  useEffect(() => {
-    if (!createOpen) return;
-    listDossierMembers().then(setMembers).catch(() => setMembers([]));
-  }, [createOpen]);
-
   function openDetail(dossier: DossierRecord) { router.push(`/app/dossiers/${dossier.id}`); }
 
   function openCreate() {
@@ -142,7 +133,6 @@ export function DossiersPage() {
         idempotency_key: `pilot-dossier:${crypto.randomUUID()}`,
         title: clean(form.get("title")),
         description: clean(form.get("description")),
-        assigned_to: clean(form.get("assigned_to")),
         primary_channel: "manual",
       });
       setCreateOpen(false);
@@ -154,7 +144,7 @@ export function DossiersPage() {
 
   async function handleExport() {
     try {
-      const blob = await exportDossiers({ q: query || undefined, sort: "updated_desc" });
+      const blob = await exportDossiers({ sort: "updated_desc" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -166,7 +156,6 @@ export function DossiersPage() {
 
   const tabs = useMemo(() => [
     { key: "active" as const, label: "Dossiers actifs", count: stats.active },
-    { key: "attention" as const, label: "À traiter", count: stats.dossiers_requiring_attention },
     { key: "recent" as const, label: "Modifiés récemment" },
     { key: "archived" as const, label: "Archivés", count: stats.archived },
   ], [stats]);
@@ -176,7 +165,6 @@ export function DossiersPage() {
       title="Dossiers"
       description="Regroupez les clients concernés, suivez leur situation et retrouvez les dossiers qui demandent votre attention."
       actions={<>
-        <OperationActionMenu><button type="button" onClick={() => setView("attention")}><Bell size={15} /> Voir les dossiers à traiter</button></OperationActionMenu>
         <PermissionGuard permission="dossiers.export"><OperationButton onClick={handleExport}><Download size={15} /> Exporter</OperationButton></PermissionGuard>
         <PermissionGuard permission="dossiers.create"><OperationButton variant="primary" onClick={openCreate}>Nouveau dossier</OperationButton></PermissionGuard>
       </>}
@@ -190,7 +178,6 @@ export function DossiersPage() {
     </OperationMetricGrid></OperationMetrics>
 
     <OperationTabs>{tabs.map((tab) => <OperationTab key={tab.key} active={view === tab.key} count={tab.count} onClick={() => setView(tab.key)}>{tab.label}</OperationTab>)}</OperationTabs>
-    <OperationToolbar search={<OperationSearch value={query} onChange={setQuery} placeholder="Rechercher un dossier ou un client" />} />
 
     {error && <div className="mx-5 mt-5 flex items-start gap-3 rounded-[8px] border border-[#efcaca] bg-[#fff5f5] p-4 text-[13px] text-[#a62b25] sm:mx-6">
       <AlertCircle size={17} className="mt-0.5 shrink-0" /><div><p className="font-semibold">Impossible d’afficher les dossiers</p><p className="mt-0.5">{error}</p></div>
@@ -199,8 +186,8 @@ export function DossiersPage() {
     <OperationContent>
       <OperationTable>
         {loading ? <TableSkeleton rows={7} columns={6} /> : items.length === 0 ? <EmptyState
-          title={view === "attention" ? "Aucun dossier ne demande votre attention" : "Aucun dossier dans cette vue"}
-          description={query ? "Essayez une autre recherche." : "Créez un dossier lorsque vous commencez à suivre une nouvelle situation."}
+          title="Aucun dossier dans cette vue"
+          description="Créez un dossier lorsque vous commencez à suivre une nouvelle situation."
           action={view === "active" ? <OperationButton variant="primary" onClick={openCreate}>Nouveau dossier</OperationButton> : undefined}
         /> : <DossiersTable items={items} openDetail={openDetail} />}
       </OperationTable>
@@ -222,7 +209,6 @@ export function DossiersPage() {
         <section className="grid gap-4"><div><h3 className="text-[15px] font-semibold text-[#25292e]">Informations du dossier</h3><p className="mt-1 text-[13px] leading-5 text-[#68737d]">Renseignez uniquement ce que vous connaissez maintenant.</p></div>
           <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Nom ou objet du dossier</span><input name="title" maxLength={180} placeholder="Ex. Suivi des commandes boutique Mardoche" className={fieldClass} /></label>
           <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Contexte <span className="font-normal text-[#7a848d]">— facultatif</span></span><textarea name="description" maxLength={3000} rows={4} placeholder="Expliquez brièvement ce qui doit être suivi dans ce dossier." className={`${fieldClass} h-auto py-2.5`} /></label>
-          <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Responsable <span className="font-normal text-[#7a848d]">— facultatif</span></span><select name="assigned_to" className={fieldClass}><option value="">Non attribué</option>{members.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}</select></label>
         </section>
         <section><h3 className="text-[15px] font-semibold text-[#25292e]">Clients concernés <span className="font-normal text-[#7a848d]">— facultatif</span></h3>
           <p className="mt-1 text-[13px] leading-5 text-[#68737d]">Ajoutez un ou plusieurs clients existants. Vous pourrez aussi le faire plus tard.</p>
@@ -237,13 +223,14 @@ export function DossiersPage() {
 }
 
 function DossiersTable({ items, openDetail }: { items: DossierRecord[]; openDetail: (dossier: DossierRecord) => void }) {
-  return <table className="w-full min-w-[850px] border-collapse text-left"><thead className="bg-[#f7f8f9] text-[12px] font-semibold text-[#606b75]"><tr className="border-b border-[#e2e6e9]">
-    <th className="px-5 py-3">Dossier</th><th className="px-5 py-3">Clients</th><th className="px-5 py-3">Suivi</th><th className="px-5 py-3">Responsable</th><th className="px-5 py-3">Dernière modification</th><th className="w-14 px-4 py-3"><span className="sr-only">Ouvrir</span></th>
+  return <table className="w-full min-w-[780px] border-collapse text-left"><thead className="bg-[#f7f8f9] text-[12px] font-semibold text-[#606b75]"><tr className="border-b border-[#e2e6e9]">
+    <th className="px-5 py-3">Dossier</th><th className="px-5 py-3">Objet</th><th className="px-5 py-3">Clients</th><th className="px-5 py-3">Situation</th><th className="px-5 py-3">Dernière activité</th><th className="w-14 px-4 py-3"><span className="sr-only">Ouvrir</span></th>
   </tr></thead><tbody className="divide-y divide-[#edf0f2] bg-white text-[13px]">{items.map((dossier) => <tr key={dossier.id} className="transition-colors hover:bg-[#fafbfb]">
-    <td className="px-5 py-3.5"><button type="button" onClick={() => openDetail(dossier)} className="text-left"><span className="block font-semibold text-[#25292e]">{dossier.title || dossier.dossier_reference}</span><span className="mt-0.5 block text-[12px] text-[#78828c]">{dossier.title ? dossier.dossier_reference : `Créé le ${formatDate(dossier.created_at)}`}</span></button></td>
-    <td className="px-5 py-3.5"><p className="font-medium text-[#343b42]">{dossier.client_count ? dossier.client_name || "Clients rattachés" : "Aucun client"}</p><p className="mt-0.5 text-[12px] text-[#78828c]">{plural(dossier.client_count || 0, "client")}</p></td>
-    <td className="px-5 py-3.5">{dossier.attention_count > 0 ? <OperationStatus label={plural(dossier.attention_count, "attention")} tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}</td>
-    <td className="px-5 py-3.5 text-[#4c5660]">{dossier.assigned_to || "Non attribué"}</td><td className="px-5 py-3.5 text-[#4c5660]">{formatRelative(dossier.updated_at || dossier.created_at)}</td>
+    <td className="px-5 py-4"><button type="button" onClick={() => openDetail(dossier)} className="text-left"><span className="block font-semibold text-[#25292e]">{dossier.title || "Dossier sans intitulé"}</span><span className="mt-1 block text-[12px] text-[#78828c]">{dossier.dossier_reference}</span></button></td>
+    <td className="max-w-[300px] px-5 py-4"><p className="line-clamp-2 leading-5 text-[#4c5660]">{dossier.description || "Aucun contexte renseigné"}</p></td>
+    <td className="px-5 py-4"><span className="font-semibold text-[#343b42]">{(dossier.client_count || 0).toLocaleString("fr-FR")}</span><span className="ml-1 text-[#68737d]">{(dossier.client_count || 0) > 1 ? "clients" : "client"}</span></td>
+    <td className="px-5 py-4">{dossier.attention_count > 0 ? <OperationStatus label={`${plural(dossier.attention_count, "client")} à traiter`} tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}</td>
+    <td className="px-5 py-4 text-[#4c5660]">{formatRelative(dossier.updated_at || dossier.created_at)}</td>
     <td className="px-4 py-3.5 text-right"><button type="button" onClick={() => openDetail(dossier)} className="grid h-8 w-8 place-items-center rounded-[6px] text-[#68737d] hover:bg-[#eef1f2] hover:text-[#25292e]" aria-label={`Ouvrir ${dossier.dossier_reference}`}><ChevronRight size={17} /></button></td>
   </tr>)}</tbody></table>;
 }
@@ -258,7 +245,6 @@ function ClientSearch({ query, setQuery, searching, matches, select }: { query: 
 }
 
 function plural(value: number, label: string) { return `${value.toLocaleString("fr-FR")} ${label}${value > 1 ? "s" : ""}`; }
-function formatDate(value: string) { return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)); }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function formatRelative(value: string) { const diff = Date.now() - new Date(value).getTime(); const hours = Math.floor(diff / 3_600_000); if (hours < 1) return "Il y a moins d’une heure"; if (hours < 24) return `Il y a ${hours} h`; const days = Math.floor(hours / 24); if (days < 8) return `Il y a ${days} jour${days > 1 ? "s" : ""}`; return formatDateTime(value); }
 function apiError(cause: unknown) { if (!axios.isAxiosError(cause)) return "Une erreur inattendue est survenue."; if (!cause.response) return "Le serveur ne répond pas. Réessayez dans un instant."; const detail = cause.response.data?.detail; if (detail === "stale_dossier_version") return "Ce dossier a été modifié ailleurs. Actualisez la page."; if (detail === "client_not_found") return "Le client sélectionné n’existe plus."; return typeof detail === "string" ? detail : "L’opération n’a pas pu être terminée."; }

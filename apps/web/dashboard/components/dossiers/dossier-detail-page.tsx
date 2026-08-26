@@ -14,10 +14,10 @@ import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-pa
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
   archiveDossier, attachClientToDossier, createClientInDossier, getDossier, getDossierClientHistory,
-  listDossierMembers, listDossiers, moveDossierClient, removeClientFromDossier, restoreDossier,
+  listDossiers, moveDossierClient, removeClientFromDossier, restoreDossier,
   searchDossierClients, updateDossier, updateDossierClientProfile,
   type DossierClientHistoryEvent, type DossierClientRelation, type DossierClientSearchResult,
-  type DossierMember, type DossierRecord,
+  type DossierRecord,
 } from "@/services/dossiers";
 
 type DetailTab = "overview" | "clients" | "activity";
@@ -45,7 +45,6 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [moveQuery, setMoveQuery] = useState("");
   const [moveTargets, setMoveTargets] = useState<DossierRecord[]>([]);
-  const [members, setMembers] = useState<DossierMember[]>([]);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<DossierClientSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -64,7 +63,6 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
   }, [dossierId]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { listDossierMembers().then(setMembers).catch(() => setMembers([])); }, []);
   useEffect(() => {
     if (tab !== "clients" || query.trim().length < 2) { setMatches([]); return; }
     setSearching(true);
@@ -90,7 +88,6 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
       setDossier(await updateDossier(dossier.id, {
         row_version: dossier.row_version,
         title: clean(form.get("title")), description: clean(form.get("description")),
-        assigned_to: clean(form.get("assigned_to")),
       }));
       setEditOpen(false);
     } catch (cause) { setFormError(apiError(cause)); }
@@ -199,7 +196,6 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
         <OperationButton onClick={() => router.push("/app/dossiers")}><ArrowLeft size={15} /> Tous les dossiers</OperationButton>
         {!dossier.archived_at && <PermissionGuard permission="dossiers.update"><OperationButton onClick={() => { setFormError(""); setEditOpen(true); }}>Modifier</OperationButton></PermissionGuard>}
         <PermissionGuard permission="dossiers.archive"><OperationButton variant={dossier.archived_at ? "secondary" : "danger"} onClick={toggleArchive}>{dossier.archived_at ? "Restaurer" : "Archiver"}</OperationButton></PermissionGuard>
-        {!dossier.archived_at && <PermissionGuard permission="dossiers.clients.manage"><OperationButton variant="primary" onClick={openAddClient}><Plus size={15} /> Ajouter un client</OperationButton></PermissionGuard>}
       </>}
     />
     <OperationTabs>
@@ -213,7 +209,7 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
     </OperationContent>
 
     <OperationDrawer open={editOpen} close={() => !saving && setEditOpen(false)} title="Modifier le dossier" description="Mettez à jour uniquement les informations communes au dossier." width="max-w-[620px]" footer={<><OperationButton disabled={saving} onClick={() => setEditOpen(false)}>Annuler</OperationButton><OperationButton variant="primary" type="submit" form="edit-pilot-dossier" disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</OperationButton></>}>
-      <form id="edit-pilot-dossier" onSubmit={saveDossier} className="grid gap-5"><Field label="Nom ou objet du dossier"><input name="title" defaultValue={dossier.title || ""} maxLength={180} className={fieldClass} /></Field><Field label="Contexte"><textarea name="description" defaultValue={dossier.description || ""} rows={6} maxLength={3000} className={`${fieldClass} h-auto py-2.5`} /></Field><Field label="Responsable"><select name="assigned_to" defaultValue={dossier.assigned_to || ""} className={fieldClass}><option value="">Non attribué</option>{members.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}</select></Field>{formError && <FormError text={formError} />}</form>
+      <form id="edit-pilot-dossier" onSubmit={saveDossier} className="grid gap-5"><Field label="Nom ou objet du dossier"><input name="title" defaultValue={dossier.title || ""} maxLength={180} className={fieldClass} /></Field><Field label="Contexte"><textarea name="description" defaultValue={dossier.description || ""} rows={6} maxLength={3000} className={`${fieldClass} h-auto py-2.5`} /></Field>{formError && <FormError text={formError} />}</form>
     </OperationDrawer>
 
     <OperationDrawer open={clientOpen} close={() => !saving && setClientOpen(false)} title={clientMode === "profile" ? "Modifier les coordonnées" : clientMode === "move" ? "Déplacer vers un autre dossier" : "Nouveau client"} description={editingClient?.display_name || "Créez la fiche avec les informations essentielles communiquées par le client."} width="max-w-[640px]" footer={clientMode === "new" ? <><OperationButton disabled={saving} onClick={() => setClientOpen(false)}>Annuler</OperationButton><OperationButton variant="primary" type="submit" form="new-dossier-client" disabled={saving}>{saving ? "Ajout…" : "Créer et ajouter"}</OperationButton></> : clientMode === "profile" ? <><OperationButton disabled={saving} onClick={() => setClientOpen(false)}>Annuler</OperationButton><OperationButton variant="primary" type="submit" form="edit-client-profile" disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</OperationButton></> : undefined}>
@@ -239,7 +235,7 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
 }
 
 function Overview({ dossier }: { dossier: DossierRecord }) {
-  return <div className="grid gap-5 lg:grid-cols-[1.4fr_.8fr]"><section className="rounded-[10px] border border-[#e0e4e7] bg-white p-6"><h2 className="text-[16px] font-semibold">Résumé du dossier</h2><p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-[#59656f]">{dossier.description || "Aucun contexte n’a encore été ajouté."}</p><dl className="mt-6 grid gap-5 border-t border-[#edf0f2] pt-5 sm:grid-cols-2"><Info label="Référence" value={dossier.dossier_reference} /><Info label="Responsable" value={dossier.assigned_to || "Non attribué"} /><Info label="Créé le" value={formatDateTime(dossier.created_at)} /><Info label="Dernière modification" value={formatDateTime(dossier.updated_at || dossier.created_at)} /></dl></section><aside className="grid content-start gap-4"><SummaryCard label="Clients rattachés" value={String(dossier.clients?.length || 0)} icon={<Users size={18} />} /><SummaryCard label="Clients à traiter" value={String((dossier.clients || []).filter((client) => client.attention_required).length)} tone="warning" icon={<MessageCircle size={18} />} /></aside></div>;
+  return <div className="grid gap-5 lg:grid-cols-[1.4fr_.8fr]"><section className="rounded-[10px] border border-[#e0e4e7] bg-white p-6"><h2 className="text-[16px] font-semibold">Résumé du dossier</h2><p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-[#59656f]">{dossier.description || "Aucun contexte n’a encore été ajouté."}</p><dl className="mt-6 grid gap-5 border-t border-[#edf0f2] pt-5 sm:grid-cols-2"><Info label="Référence" value={dossier.dossier_reference} /><Info label="Créé le" value={formatDateTime(dossier.created_at)} /><Info label="Dernière modification" value={formatDateTime(dossier.updated_at || dossier.created_at)} /></dl></section><aside className="grid content-start gap-4"><SummaryCard label="Clients rattachés" value={String(dossier.clients?.length || 0)} icon={<Users size={18} />} /><SummaryCard label="Clients à traiter" value={String((dossier.clients || []).filter((client) => client.attention_required).length)} tone="warning" icon={<MessageCircle size={18} />} /></aside></div>;
 }
 
 function Clients({ dossier, view, add, query, setQuery, searching, matches, attach, saving, error }: { dossier: DossierRecord; view: (client: DossierClientRelation) => void; add: () => void; query: string; setQuery: (value: string) => void; searching: boolean; matches: DossierClientSearchResult[]; attach: (client: DossierClientSearchResult) => void; saving: boolean; error: string }) {

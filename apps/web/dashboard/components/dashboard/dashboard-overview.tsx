@@ -101,13 +101,13 @@ function PilotDashboard({ data, loading, error, reload }: { data: DashboardHome;
         <OperationMetricGrid>
           <Link href="/app/dossiers" className="min-w-0"><OperationMetric label="Dossiers actifs" value={stats.active_dossiers ?? 0} detail="Dossiers actuellement suivis" /></Link>
           <Link href="/app/dossiers" className="min-w-0"><OperationMetric label="Clients actifs" value={stats.active_clients ?? 0} detail="Présents dans les dossiers actifs" /></Link>
-          <Link href="/app/dossiers?view=attention" className="min-w-0"><OperationMetric label="À traiter" value={stats.attention_clients ?? 0} detail={`${stats.attention_dossiers ?? 0} dossier(s) concerné(s)`} tone={(stats.attention_clients ?? 0) > 0 ? "warning" : "default"} /></Link>
+          <Link href="/app/dossiers" className="min-w-0"><OperationMetric label="À traiter" value={stats.attention_clients ?? 0} detail={`${stats.attention_dossiers ?? 0} dossier(s) concerné(s)`} tone={(stats.attention_clients ?? 0) > 0 ? "warning" : "default"} /></Link>
           <Link href="/app/inbox" className="min-w-0"><OperationMetric label="Conversations en attente" value={stats.waiting_conversations ?? 0} detail="Messages à reprendre" tone={(stats.waiting_conversations ?? 0) > 0 ? "warning" : "default"} /></Link>
         </OperationMetricGrid>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,.7fr)]">
-        <PilotSection title="Dossiers nécessitant une attention" count={pilot.attention_dossiers.length} action={<Link href="/app/dossiers?view=attention" className="text-[12px] font-semibold text-[#087a46]">Voir tous les dossiers</Link>}>
+        <PilotSection title="Dossiers nécessitant une attention" count={pilot.attention_dossiers.length} action={<Link href="/app/dossiers" className="text-[12px] font-semibold text-[#087a46]">Voir tous les dossiers</Link>}>
           {pilot.attention_dossiers.length ? pilot.attention_dossiers.map((item) => <PilotDossierRow key={item.id} item={item} attention />) : <PilotEmpty title="Aucun dossier à traiter" description="Les dossiers signalés apparaîtront ici." />}
         </PilotSection>
         <PilotSection title="À reprendre" count={(stats.waiting_conversations ?? 0) + (stats.pending_followups ?? 0)}>

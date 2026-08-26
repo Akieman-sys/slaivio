@@ -12,6 +12,7 @@ import { OperationButton, OperationStatus, OperationTab } from "@/components/ui/
 import { OperationSearch } from "@/components/ui/operation-primitives";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { EmptyState, LoadingState } from "@/components/ui/page-state";
+import { usePilotOffline } from "@/components/offline/pilot-offline-provider";
 import { searchDossierClients, type DossierClientSearchResult } from "@/services/dossiers";
 import {
   generateInboxAISuggestion, getInboxAISettings, getInboxConversation, listInboxAIDrafts, listInboxConversations,
@@ -24,6 +25,7 @@ import {
 const fieldClass = "h-10 w-full rounded-[7px] border border-[#d4d9df] bg-white px-3 text-[13px] text-[#30373e] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function PilotInboxPage() {
+  const { online, cache, cached } = usePilotOffline();
   const [view, setView] = useState<InboxView>("waiting");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<InboxConversation[]>([]);
@@ -55,32 +57,49 @@ export function PilotInboxPage() {
     if (!quiet) setLoading(true);
     try {
       const response = await listInboxConversations({ view, q: query.trim() || undefined });
+      await cache(`inbox:list:${view}:${query.trim()}`, response);
       setItems(response.conversations);
       setError("");
       if (selectedPhone && !response.conversations.some((item) => item.phone === selectedPhone)) {
         setSelectedPhone(null); setDetail(null);
       }
-    } catch (cause) { setError(apiError(cause)); }
+    } catch (cause) {
+      const stored = await cached<Awaited<ReturnType<typeof listInboxConversations>>>(`inbox:list:${view}:${query.trim()}`);
+      if (stored) { setItems(stored.conversations); setError("Conversations enregistrées sur cet appareil. Les nouveaux messages apparaîtront au retour du réseau."); }
+      else setError(apiError(cause));
+    }
     finally { if (!quiet) setLoading(false); }
-  }, [query, selectedPhone, view]);
+  }, [cache, cached, query, selectedPhone, view]);
 
   const openConversation = useCallback(async (phone: string) => {
     if (phone !== selectedPhone) {
       setSuggestion(null); setSummary(""); setReplyText(""); setDraftId(undefined);
     }
     setSelectedPhone(phone); setDetailLoading(true); setActionError("");
+    if (!online) {
+      const stored = await cached<InboxDetail>(`inbox:conversation:${phone}`);
+      if (stored) setDetail(stored);
+      else setActionError("Cette conversation n’a pas encore été enregistrée sur cet appareil.");
+      setDetailLoading(false);
+      return;
+    }
     try {
-      await markInboxConversationRead(phone);
+      if (online) await markInboxConversationRead(phone);
       const current = await getInboxConversation(phone);
+      await cache(`inbox:conversation:${phone}`, current);
       setDetail(current);
       try {
         const drafts = await listInboxAIDrafts(phone);
         setSuggestion(suggestionFromStoredDraft(drafts, current, aiSettings?.pilot_response_mode || "SUGGESTION_ONLY"));
       } catch { /* The responsible user may not have the AI permission. */ }
       await loadList(true);
-    } catch (cause) { setActionError(apiError(cause)); }
+    } catch (cause) {
+      const stored = await cached<InboxDetail>(`inbox:conversation:${phone}`);
+      if (stored) { setDetail(stored); setActionError("Conversation consultée hors connexion. L’envoi et l’IA sont temporairement désactivés."); }
+      else setActionError(apiError(cause));
+    }
     finally { setDetailLoading(false); }
-  }, [aiSettings?.pilot_response_mode, loadList, selectedPhone]);
+  }, [aiSettings?.pilot_response_mode, cache, cached, loadList, online, selectedPhone]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadList(), 220);
@@ -92,6 +111,7 @@ export function PilotInboxPage() {
   }, []);
 
   useEffect(() => {
+    if (!online) return;
     const timer = window.setInterval(() => {
       void loadList(true);
       if (selectedPhone) void getInboxConversation(selectedPhone).then((current) => {
@@ -100,7 +120,7 @@ export function PilotInboxPage() {
       }).catch(() => undefined);
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [aiSettings?.pilot_response_mode, loadList, selectedPhone]);
+  }, [aiSettings?.pilot_response_mode, loadList, online, selectedPhone]);
 
   useEffect(() => {
     if (preserveScroll.current) { preserveScroll.current = false; return; }
@@ -116,6 +136,7 @@ export function PilotInboxPage() {
   async function reply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detail) return;
+    if (!online) { setActionError("Reconnectez-vous pour envoyer ce message WhatsApp."); return; }
     const message = replyText.trim();
     if (!message) return;
     setSending(true); setActionError("");
@@ -146,6 +167,7 @@ export function PilotInboxPage() {
 
   async function askAISuggestion() {
     if (!detail) return;
+    if (!online) { setActionError("L’IA nécessite une connexion. La conversation reste consultable hors ligne."); return; }
     setAiLoading(true); setActionError("");
     try { setSuggestion(await generateInboxAISuggestion(detail.phone)); }
     catch (cause) { setActionError(apiError(cause)); }
@@ -154,6 +176,7 @@ export function PilotInboxPage() {
 
   async function askAISummary() {
     if (!detail) return;
+    if (!online) { setActionError("L’IA nécessite une connexion. La conversation reste consultable hors ligne."); return; }
     setAiLoading(true); setActionError("");
     try { setSummary((await summarizeInboxConversation(detail.phone)).summary); }
     catch (cause) { setActionError(apiError(cause)); }

@@ -80,6 +80,7 @@ export type DossierRecord = {
   row_version: number;
   archived_at: string | null;
   archived_by: string | null;
+  offline_state?: "PENDING" | "CONFLICT";
   messages?: DossierMessage[];
   events?: DossierEvent[];
   notifications?: DossierNotification[];
@@ -339,6 +340,23 @@ export type NewDossierClientPayload = {
   email?: string | null;
   customer_type: "individual" | "business" | "partner";
 };
+
+export function createOfflineDossierRecord(id: string, title: string | null, description: string | null, clientCount: number): DossierRecord {
+  const now = new Date().toISOString();
+  return {
+    id, org_id: "local", client_id: null, title, description,
+    dossier_reference: "Référence attribuée après synchronisation", client_name: null,
+    case_type: "UNKNOWN", status_global: "LEAD", intake_status: "PARTIAL", validation_status: "PENDING",
+    primary_channel: "manual", origin_country: null, origin_city: null, destination_country: null,
+    destination_city: null, goods_type: null, estimated_weight_kg: null, estimated_volume_cbm: null,
+    shipping_mode: null, tracking_id: null, quoted_total: null, quoted_currency: null, pricing_status: null,
+    final_total: null, final_currency: null, payment_status: "PENDING", client_full_name: null,
+    supplier_payment_amount: null, supplier_payment_currency: null, priority: "NORMAL", assigned_to: null,
+    assigned_at: null, assigned_by: null, due_at: null, message_count: 0, event_count: 0, package_count: 0,
+    shipment_count: 0, client_count: clientCount, attention_count: 0, created_at: now, updated_at: now,
+    row_version: 1, archived_at: null, archived_by: null, offline_state: "PENDING",
+  };
+}
 
 export async function createClientInDossier(dossierId: string, payload: NewDossierClientPayload) {
   return (await api.post<{ status: "ok"; relation: DossierClientRelation }>(

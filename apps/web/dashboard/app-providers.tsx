@@ -9,6 +9,8 @@ import { PermissionProvider } from "@/components/permissions/permission-provider
 import { setAccessTokenProvider } from "@/services/api";
 import { LoadingState } from "@/components/ui/page-state";
 import { ApiMutationFeedback } from "@/components/ui/api-mutation-feedback";
+import { PilotOfflineProvider } from "@/components/offline/pilot-offline-provider";
+import { clearPilotOfflineData } from "@/services/pilot-offline";
 
 export function AppProviders({
   children,
@@ -25,7 +27,7 @@ export function AppProviders({
   );
 
   if (!publishableKey) {
-    return content;
+    return <PilotOfflineProvider scopeKey="local-development">{content}</PilotOfflineProvider>;
   }
 
   return (
@@ -36,7 +38,7 @@ export function AppProviders({
 }
 
 function ClerkApiAuthBridge({ children }: { children: ReactNode }) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId, orgId } = useAuth();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -46,6 +48,7 @@ function ClerkApiAuthBridge({ children }: { children: ReactNode }) {
     }
     if (!isSignedIn) {
       setAccessTokenProvider(null);
+      void clearPilotOfflineData();
       setReady(true);
       return;
     }
@@ -60,5 +63,5 @@ function ClerkApiAuthBridge({ children }: { children: ReactNode }) {
   if (!ready) {
     return <div className="min-h-screen bg-[#f7f7f6]"><LoadingState label="Préparation de votre espace Slaivio…" /></div>;
   }
-  return children;
+  return <PilotOfflineProvider scopeKey={`${userId || "account"}:${orgId || "personal"}`}>{children}</PilotOfflineProvider>;
 }

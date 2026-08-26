@@ -10,6 +10,7 @@ from app.api.pricing import router as pricing_router
 from app.api.manager import router as manager_router
 from app.api.shipments import router as shipments_router
 from app.api.knowledge import router as knowledge_router
+from app.api.pilot_sync import router as pilot_sync_router
 from app.db.database import test_db_connection
 from app.api.batches import router as batches_router
 from app.api.goods import router as goods_router
@@ -136,6 +137,7 @@ app.include_router(batches_router)
 app.include_router(batch_center_router)
 app.include_router(notifications_router)
 app.include_router(knowledge_router)
+app.include_router(pilot_sync_router)
 app.include_router(dossiers_router)
 app.include_router(followups_router)
 app.include_router(offices_router)

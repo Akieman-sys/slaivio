@@ -45,6 +45,7 @@ import { isPilotV1 } from "@/config/product-profile";
 import { SESSION_EXPIRED_EVENT } from "@/services/api";
 import { listNotifications, notificationAction, type CenterItem } from "@/services/notification-center";
 import { SlaivioBrand } from "@/components/ui/slaivio-brand";
+import { PilotOfflineIndicator } from "@/components/offline/pilot-offline-indicator";
 
 type FloatingPanel = "account" | "notifications" | "help" | null;
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -264,6 +265,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {floatingPanel === "account" && <div className="absolute right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
         </header>
 
+        {pilot && <PilotOfflineIndicator />}
         <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
       </section>
 

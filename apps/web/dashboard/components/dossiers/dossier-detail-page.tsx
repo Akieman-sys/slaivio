@@ -12,6 +12,8 @@ import { OperationButton, OperationStatus, OperationTab } from "@/components/ui/
 import { OperationContent } from "@/components/ui/operation-primitives";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import { usePilotOffline } from "@/components/offline/pilot-offline-provider";
+import { newOfflineKey } from "@/services/pilot-offline";
 import {
   archiveDossier, attachClientToDossier, createClientInDossier, getDossier, getDossierClientHistory,
   listDossiers, moveDossierClient, removeClientFromDossier, restoreDossier,
@@ -30,6 +32,7 @@ type PendingConfirmation =
 const fieldClass = "h-10 w-full rounded-[7px] border border-[#d4d9df] bg-white px-3 text-[13px] text-[#30373e] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function DossierDetailPage({ dossierId }: { dossierId: string }) {
+  const { cache, cached, enqueue, online } = usePilotOffline();
   const router = useRouter();
   const [dossier, setDossier] = useState<DossierRecord | null>(null);
   const [tab, setTab] = useState<DetailTab>("overview");
@@ -57,10 +60,20 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    try { setDossier(await getDossier(dossierId, true)); }
-    catch (cause) { setError(apiError(cause)); }
+    try {
+      const current = await getDossier(dossierId, true);
+      await cache(`dossier:${dossierId}`, current);
+      setDossier(current);
+    }
+    catch (cause) {
+      const stored = await cached<DossierRecord>(`dossier:${dossierId}`);
+      if (stored) {
+        setDossier(stored);
+        setError("Vous consultez la dernière version enregistrée sur cet appareil.");
+      } else setError(apiError(cause));
+    }
     finally { setLoading(false); }
-  }, [dossierId]);
+  }, [cache, cached, dossierId]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -84,13 +97,33 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
     if (!dossier) return;
     setSaving(true); setFormError("");
     const form = new FormData(event.currentTarget);
+    const changes = { title: clean(form.get("title")), description: clean(form.get("description")) };
     try {
-      setDossier(await updateDossier(dossier.id, {
+      if (!online) throw new OfflineUpdateRequested();
+      const updated = await updateDossier(dossier.id, {
         row_version: dossier.row_version,
-        title: clean(form.get("title")), description: clean(form.get("description")),
-      }));
+        ...changes,
+      });
+      await cache(`dossier:${dossierId}`, updated);
+      setDossier(updated);
       setEditOpen(false);
-    } catch (cause) { setFormError(apiError(cause)); }
+    } catch (cause) {
+      if (!online || cause instanceof OfflineUpdateRequested || isNetworkError(cause)) {
+        await enqueue({
+          operation_key: newOfflineKey(`pilot-dossier-update:${dossier.id}`),
+          operation_type: "DOSSIER_UPDATE",
+          entity_type: "DOSSIER",
+          entity_id: dossier.id,
+          expected_version: dossier.row_version,
+          payload: changes,
+        });
+        const local = { ...dossier, ...changes, updated_at: new Date().toISOString(), offline_state: "PENDING" as const };
+        await cache(`dossier:${dossierId}`, local);
+        setDossier(local);
+        setEditOpen(false);
+        setError("Modification enregistrée sur cet appareil. Elle sera synchronisée au retour du réseau.");
+      } else setFormError(apiError(cause));
+    }
     finally { setSaving(false); }
   }
 
@@ -279,6 +312,8 @@ function Field({ label, children }: { label: string; children: ReactNode }) { re
 function Info({ label, value }: { label: string; value: string }) { return <div><dt className="text-[12px] font-medium text-[#78828c]">{label}</dt><dd className="mt-1 text-[13px] font-medium text-[#30373e]">{value}</dd></div>; }
 function FormError({ text }: { text: string }) { return <p className="rounded-[7px] bg-[#fff2f2] px-3 py-2.5 text-[13px] text-[#a62b25]">{text}</p>; }
 function clean(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }
+class OfflineUpdateRequested extends Error {}
+function isNetworkError(cause: unknown) { return axios.isAxiosError(cause) && !cause.response; }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function followupLabel(value: string) { return ({ DUE: "À envoyer", SCHEDULED: "Programmée", SENT: "Envoyée", RESPONDED: "Réponse reçue", COMPLETED: "Terminée", FAILED: "Échec" } as Record<string, string>)[value] || "En cours"; }
 function pilotClientTypeLabel(value?: string | null) { return ({ individual: "Particulier", business: "Entreprise", partner: "Partenaire" } as Record<string, string>)[String(value)] || "Particulier"; }

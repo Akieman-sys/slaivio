@@ -11,11 +11,13 @@ import { OperationButton, OperationMetric, OperationMetricGrid, OperationStatus,
 import { OperationContent, OperationMetrics, OperationSearch, OperationTable } from "@/components/ui/operation-primitives";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { EmptyState, TableSkeleton } from "@/components/ui/page-state";
+import { usePilotOffline } from "@/components/offline/pilot-offline-provider";
 import {
-  createDossier, exportDossiers, getDossierStats,
+  createDossier, createOfflineDossierRecord, exportDossiers, getDossierStats,
   listArchivedDossiers, listDossiers, searchDossierClients,
   type DossierClientSearchResult, type DossierRecord, type DossierStats,
 } from "@/services/dossiers";
+import { listPilotOperations, newOfflineKey, PILOT_SYNCED_EVENT } from "@/services/pilot-offline";
 
 type PilotView = "active" | "recent" | "archived";
 
@@ -28,6 +30,8 @@ const PAGE_SIZE = 30;
 const fieldClass = "h-10 w-full rounded-[7px] border border-[#d4d9df] bg-white px-3 text-[13px] text-[#30373e] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function DossiersPage() {
+  const offline = usePilotOffline();
+  const { cache, cached, enqueue, online, scopeKey } = offline;
   const router = useRouter();
   const searchParams = useSearchParams();
   const handledEntryAction = useRef(false);
@@ -58,17 +62,29 @@ export function DossiersPage() {
             updated_since_hours: view === "recent" ? 168 : undefined,
             page: nextPage, page_size: PAGE_SIZE, sort: "updated_desc",
           });
-      setItems(response.items);
+      await cache(`dossiers:${view}:${nextPage}`, response);
+      const localItems = view === "active" && nextPage === 1 ? await localDossiers(scopeKey) : [];
+      setItems([...localItems, ...response.items]);
       setPage(response.pagination.page);
       setTotal(response.pagination.total);
       setTotalPages(response.pagination.total_pages);
     } catch (cause) {
-      setItems([]);
-      setError(apiError(cause));
+      const stored = await cached<Awaited<ReturnType<typeof listDossiers>>>(`dossiers:${view}:${nextPage}`);
+      if (stored) {
+        const localItems = view === "active" && nextPage === 1 ? await localDossiers(scopeKey) : [];
+        setItems([...localItems, ...stored.items]);
+        setPage(stored.pagination.page);
+        setTotal(stored.pagination.total);
+        setTotalPages(stored.pagination.total_pages);
+        setError("Vous consultez la dernière version enregistrée sur cet appareil.");
+      } else {
+        setItems([]);
+        setError(apiError(cause));
+      }
     } finally {
       setLoading(false);
     }
-  }, [view]);
+  }, [cache, cached, scopeKey, view]);
 
   const refreshStats = useCallback(async () => {
     try { setStats(await getDossierStats()); } catch { setStats(EMPTY_STATS); }
@@ -79,6 +95,12 @@ export function DossiersPage() {
   }, [load]);
 
   useEffect(() => { refreshStats(); }, [refreshStats]);
+
+  useEffect(() => {
+    const synchronized = () => void load(1);
+    window.addEventListener(PILOT_SYNCED_EVENT, synchronized);
+    return () => window.removeEventListener(PILOT_SYNCED_EVENT, synchronized);
+  }, [load]);
 
   useEffect(() => {
     if (handledEntryAction.current) return;
@@ -127,18 +149,36 @@ export function DossiersPage() {
     setCreating(true);
     setCreateError("");
     const form = new FormData(event.currentTarget);
+    const operationKey = newOfflineKey("pilot-dossier");
+    const payload = {
+      client_ids: selectedClients.map((client) => client.id),
+      idempotency_key: operationKey,
+      title: clean(form.get("title")),
+      description: clean(form.get("description")),
+      primary_channel: "manual",
+    };
     try {
-      const dossier = await createDossier({
-        client_ids: selectedClients.map((client) => client.id),
-        idempotency_key: `pilot-dossier:${crypto.randomUUID()}`,
-        title: clean(form.get("title")),
-        description: clean(form.get("description")),
-        primary_channel: "manual",
-      });
+      if (!online) throw new OfflineCreationRequested();
+      const dossier = await createDossier(payload);
       setCreateOpen(false);
       await Promise.all([load(1), refreshStats()]);
       router.push(`/app/dossiers/${dossier.id}`);
-    } catch (cause) { setCreateError(apiError(cause)); }
+    } catch (cause) {
+      if (!online || cause instanceof OfflineCreationRequested || isNetworkError(cause)) {
+        const localId = newOfflineKey("local");
+        await enqueue({
+          operation_key: operationKey,
+          operation_type: "DOSSIER_CREATE",
+          entity_type: "DOSSIER",
+          local_entity_id: localId,
+          payload,
+        });
+        setItems((current) => [createOfflineDossierRecord(localId, payload.title, payload.description, selectedClients.length), ...current]);
+        setTotal((current) => current + 1);
+        setCreateOpen(false);
+        setError("Le dossier est enregistré sur cet appareil et sera créé automatiquement au retour du réseau.");
+      } else setCreateError(apiError(cause));
+    }
     finally { setCreating(false); }
   }
 
@@ -226,12 +266,12 @@ function DossiersTable({ items, openDetail }: { items: DossierRecord[]; openDeta
   return <table className="w-full min-w-[780px] border-collapse text-left"><thead className="bg-[#f7f8f9] text-[12px] font-semibold text-[#606b75]"><tr className="border-b border-[#e2e6e9]">
     <th className="px-5 py-3">Dossier</th><th className="px-5 py-3">Objet</th><th className="px-5 py-3">Clients</th><th className="px-5 py-3">Situation</th><th className="px-5 py-3">Dernière activité</th><th className="w-14 px-4 py-3"><span className="sr-only">Ouvrir</span></th>
   </tr></thead><tbody className="divide-y divide-[#edf0f2] bg-white text-[13px]">{items.map((dossier) => <tr key={dossier.id} className="transition-colors hover:bg-[#fafbfb]">
-    <td className="px-5 py-4"><button type="button" onClick={() => openDetail(dossier)} className="text-left"><span className="block font-semibold text-[#25292e]">{dossier.title || "Dossier sans intitulé"}</span><span className="mt-1 block text-[12px] text-[#78828c]">{dossier.dossier_reference}</span></button></td>
+    <td className="px-5 py-4"><button type="button" disabled={dossier.id.startsWith("local:")} onClick={() => openDetail(dossier)} className="text-left disabled:cursor-default"><span className="block font-semibold text-[#25292e]">{dossier.title || "Dossier sans intitulé"}</span><span className="mt-1 flex items-center gap-2 text-[12px] text-[#78828c]">{dossier.dossier_reference}{dossier.offline_state === "PENDING" && <OperationStatus label="À synchroniser" tone="info" />}</span></button></td>
     <td className="max-w-[300px] px-5 py-4"><p className="line-clamp-2 leading-5 text-[#4c5660]">{dossier.description || "Aucun contexte renseigné"}</p></td>
     <td className="px-5 py-4"><span className="font-semibold text-[#343b42]">{(dossier.client_count || 0).toLocaleString("fr-FR")}</span><span className="ml-1 text-[#68737d]">{(dossier.client_count || 0) > 1 ? "clients" : "client"}</span></td>
     <td className="px-5 py-4">{dossier.attention_count > 0 ? <OperationStatus label={`${plural(dossier.attention_count, "client")} à traiter`} tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}</td>
     <td className="px-5 py-4 text-[#4c5660]">{formatRelative(dossier.updated_at || dossier.created_at)}</td>
-    <td className="px-4 py-3.5 text-right"><button type="button" onClick={() => openDetail(dossier)} className="grid h-8 w-8 place-items-center rounded-[6px] text-[#68737d] hover:bg-[#eef1f2] hover:text-[#25292e]" aria-label={`Ouvrir ${dossier.dossier_reference}`}><ChevronRight size={17} /></button></td>
+    <td className="px-4 py-3.5 text-right">{!dossier.id.startsWith("local:") && <button type="button" onClick={() => openDetail(dossier)} className="grid h-8 w-8 place-items-center rounded-[6px] text-[#68737d] hover:bg-[#eef1f2] hover:text-[#25292e]" aria-label={`Ouvrir ${dossier.dossier_reference}`}><ChevronRight size={17} /></button>}</td>
   </tr>)}</tbody></table>;
 }
 
@@ -249,3 +289,16 @@ function formatDateTime(value: string) { return new Intl.DateTimeFormat("fr-FR",
 function formatRelative(value: string) { const diff = Date.now() - new Date(value).getTime(); const hours = Math.floor(diff / 3_600_000); if (hours < 1) return "Il y a moins d’une heure"; if (hours < 24) return `Il y a ${hours} h`; const days = Math.floor(hours / 24); if (days < 8) return `Il y a ${days} jour${days > 1 ? "s" : ""}`; return formatDateTime(value); }
 function apiError(cause: unknown) { if (!axios.isAxiosError(cause)) return "Une erreur inattendue est survenue."; if (!cause.response) return "Le serveur ne répond pas. Réessayez dans un instant."; const detail = cause.response.data?.detail; if (detail === "stale_dossier_version") return "Ce dossier a été modifié ailleurs. Actualisez la page."; if (detail === "client_not_found") return "Le client sélectionné n’existe plus."; return typeof detail === "string" ? detail : "L’opération n’a pas pu être terminée."; }
 function clean(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }
+class OfflineCreationRequested extends Error {}
+function isNetworkError(cause: unknown) { return axios.isAxiosError(cause) && !cause.response; }
+async function localDossiers(scope: string) {
+  const operations = await listPilotOperations(scope);
+  return operations
+    .filter((item) => item.operation_type === "DOSSIER_CREATE" && (item.state === "PENDING" || item.state === "SYNCING"))
+    .map((item) => createOfflineDossierRecord(
+      item.local_entity_id || item.id,
+      typeof item.payload.title === "string" ? item.payload.title : null,
+      typeof item.payload.description === "string" ? item.payload.description : null,
+      Array.isArray(item.payload.client_ids) ? item.payload.client_ids.length : 0,
+    ));
+}

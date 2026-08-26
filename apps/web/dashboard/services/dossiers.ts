@@ -337,6 +337,7 @@ export type NewDossierClientPayload = {
   name: string;
   phone: string;
   email?: string | null;
+  customer_type: "individual" | "business" | "partner";
 };
 
 export async function createClientInDossier(dossierId: string, payload: NewDossierClientPayload) {
@@ -364,6 +365,7 @@ export async function updateDossierClientProfile(
     name: string;
     phone: string;
     email?: string | null;
+    customer_type: "individual" | "business" | "partner";
   },
 ) {
   return (await api.patch<{ status: "ok"; relation: DossierClientRelation }>(

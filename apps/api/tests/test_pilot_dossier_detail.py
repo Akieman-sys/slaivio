@@ -43,8 +43,8 @@ def test_detail_page_uses_only_the_new_pilot_structure():
         "Clients",
         "Communications et suivi",
         "Ajouter un client",
-        "Situation dans ce dossier",
-        "Créer un nouveau client",
+        "Nouveau client",
+        "Type de client",
     ):
         assert label in page
 
@@ -53,6 +53,7 @@ def test_detail_page_uses_only_the_new_pilot_structure():
     assert "validation_status" not in page
     assert "payment_status" not in page
     assert "shipping_mode" not in page
+    assert "Situation dans ce dossier" not in page
 
 
 def test_repository_creates_all_client_relations_in_the_same_transaction():

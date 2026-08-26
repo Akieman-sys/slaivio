@@ -350,7 +350,7 @@ def create_client_in_dossier(org_id: str, dossier_id: str, user_id: str, client_
                 "email": email,
                 "normalized_phone": phone or whatsapp,
                 "normalized_email": email,
-                "customer_type": "individual",
+                "customer_type": client_payload.get("customer_type") or "individual",
                 "lifecycle_status": "lead",
                 "source": "manual",
                 "preferred_language": "FR",

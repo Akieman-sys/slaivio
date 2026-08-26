@@ -29,6 +29,7 @@ def test_profile_update_requires_human_identity_and_contact():
         client_row_version=3,
         name="Jérémie",
         phone="+243970000000",
+        customer_type="partner",
     )
     assert payload.name == "Jérémie"
 
@@ -41,11 +42,13 @@ def test_client_creation_rejects_the_old_unconfirmed_profile_fields():
         name="Jérémie Bawaba",
         phone="+243970000000",
         email=None,
+        customer_type="business",
         idempotency_key="client-create-0001",
     )
     assert payload.phone == "+243970000000"
+    assert payload.customer_type == "business"
 
-    for legacy_field in ("whatsapp_phone", "company_name", "preferred_language", "situation", "customer_type", "lifecycle_status"):
+    for legacy_field in ("whatsapp_phone", "company_name", "preferred_language", "situation", "lifecycle_status"):
         with pytest.raises(ValidationError):
             DossierClientCreatePayload.model_validate({
                 "name": "Jérémie Bawaba",
@@ -53,6 +56,11 @@ def test_client_creation_rejects_the_old_unconfirmed_profile_fields():
                 "idempotency_key": "client-create-0001",
                 legacy_field: "ancienne-valeur",
             })
+    with pytest.raises(ValidationError, match="invalid_customer_type"):
+        DossierClientCreatePayload(
+            name="Jérémie Bawaba", phone="+243970000000",
+            customer_type="agent", idempotency_key="client-create-0002",
+        )
 
 
 def test_client_management_stays_inside_the_pilot_dossier():
@@ -73,12 +81,14 @@ def test_client_creation_uses_only_the_fields_confirmed_by_the_dg():
     page = read("apps/web/dashboard/components/dossiers/dossier-detail-page.tsx")
     form = page.split("function NewClientForm", 1)[1].split("function EditClientForm", 1)[0]
 
-    for field in ('name="name"', 'name="phone"', 'name="email"'):
+    for field in ('name="name"', 'name="phone"', 'name="email"', 'name="customer_type"'):
         assert field in form
-    for unconfirmed_field in ('name="company_name"', 'name="whatsapp_phone"', 'name="preferred_language"', 'name="situation"', 'name="customer_type"', 'name="lifecycle_status"'):
+    for unconfirmed_field in ('name="company_name"', 'name="whatsapp_phone"', 'name="preferred_language"', 'name="situation"', 'name="lifecycle_status"'):
         assert unconfirmed_field not in form
     assert "Email — facultatif" in form
     assert "Numéro de téléphone et WhatsApp" in form
+    assert all(label in form for label in ("Particulier", "Entreprise", "Partenaire"))
+    assert "Intermédiaire" not in form
     assert "identifiant SLAIVIO" not in form
     assert "identifiant client" in form
 
@@ -89,5 +99,18 @@ def test_client_record_displays_the_agency_identifier_and_one_phone():
 
     assert "Identifiant client" in record
     assert "Téléphone et WhatsApp" in record
-    for hidden_label in ("Entreprise", "Langue", "Type", "Statut"):
+    assert "Type de client" in record
+    for hidden_label in ("Langue", "Statut"):
         assert hidden_label not in record
+
+
+def test_client_search_is_in_the_clients_page_not_the_creation_drawer():
+    page = read("apps/web/dashboard/components/dossiers/dossier-detail-page.tsx")
+    clients_page = page.split("function Clients", 1)[1].split("function Activity", 1)[0]
+    new_form = page.split("function NewClientForm", 1)[1].split("function ClientProfileForm", 1)[0]
+
+    assert "Rechercher et rattacher un client existant" in clients_page
+    assert "Rattacher" in clients_page
+    assert "Rechercher" not in new_form
+    assert "window.confirm" not in page
+    assert "OperationConfirmDialog" in page

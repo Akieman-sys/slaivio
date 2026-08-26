@@ -65,6 +65,7 @@ from app.db.dossier_client_repository import (
 
 
 router = APIRouter()
+PILOT_CLIENT_TYPES = {"individual", "business", "partner"}
 
 
 class DossierPayload(BaseModel):
@@ -226,6 +227,7 @@ class DossierClientCreatePayload(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     phone: str = Field(min_length=6, max_length=40)
     email: str | None = Field(default=None, max_length=200)
+    customer_type: str = "individual"
     idempotency_key: str = Field(min_length=8, max_length=160)
 
     @model_validator(mode="after")
@@ -234,6 +236,8 @@ class DossierClientCreatePayload(BaseModel):
             raise ValueError("client_identity_required")
         if not (self.phone or "").strip():
             raise ValueError("client_contact_required")
+        if self.customer_type not in PILOT_CLIENT_TYPES:
+            raise ValueError("invalid_customer_type")
         return self
 
 
@@ -264,6 +268,7 @@ class DossierClientProfilePatchPayload(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     phone: str = Field(min_length=6, max_length=40)
     email: str | None = Field(default=None, max_length=200)
+    customer_type: str = "individual"
 
     @model_validator(mode="after")
     def validate_profile(self):
@@ -271,6 +276,8 @@ class DossierClientProfilePatchPayload(BaseModel):
             raise ValueError("client_identity_required")
         if not (self.phone or "").strip():
             raise ValueError("client_contact_required")
+        if self.customer_type not in PILOT_CLIENT_TYPES:
+            raise ValueError("invalid_customer_type")
         return self
 
 

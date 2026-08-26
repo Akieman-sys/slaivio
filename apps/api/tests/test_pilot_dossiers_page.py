@@ -22,7 +22,7 @@ def test_pilot_dossiers_page_uses_the_multi_client_model():
         assert label in page
 
     assert "searchDossierClients" in page
-    assert "client_id: selectedClient?.id || null" in page
+    assert "client_ids: selectedClients.map" in page
     assert "client_count" in service
     assert "attention_count" in service
     assert "clients?: DossierClientRelation[]" in service

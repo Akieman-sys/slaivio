@@ -8,7 +8,7 @@ from app.organizations.services.provisioning_service import DOSSIER_ROLE_PERMISS
 EXPECTED_ROUTE_PERMISSIONS = {
     ("/dossiers", "GET"): "dossiers.read",
     ("/dossiers", "POST"): "dossiers.create",
-    ("/dossiers/client-search", "GET"): "dossiers.clients.read",
+    ("/dossiers/clients/search", "GET"): "dossiers.clients.read",
     ("/dossiers/stats", "GET"): "dossiers.read",
     ("/dossiers/alerts", "GET"): "dossiers.read",
     ("/dossiers/alerts/{alert_id}/acknowledge", "PATCH"): "dossiers.update",

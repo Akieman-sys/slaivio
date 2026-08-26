@@ -132,6 +132,8 @@ def _build_dossier_filters(
         filters.append(
             f"""(
                 {_dossier_reference_sql()} ilike :q
+                or coalesce(d.title, '') ilike :q
+                or coalesce(d.description, '') ilike :q
                 or coalesce(d.goods_type, '') ilike :q
                 or coalesce(d.origin_city, '') ilike :q
                 or coalesce(d.origin_country, '') ilike :q
@@ -263,6 +265,8 @@ def list_dossiers(
                     d.id::text,
                     d.org_id,
                     d.client_id::text,
+                    d.title,
+                    d.description,
                     {_dossier_reference_sql()} dossier_reference,
                     {_client_display_sql()} client_name,
                     c.phone client_phone,
@@ -418,6 +422,8 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
                     d.id::text,
                     d.org_id,
                     d.client_id::text,
+                    d.title,
+                    d.description,
                     {_dossier_reference_sql()} dossier_reference,
                     {_client_display_sql()} client_name,
                     c.phone client_phone,
@@ -588,12 +594,25 @@ def get_dossier(org_id: str, dossier_id: str, *, include_archived: bool = False)
             """),
             {"org_id": org_id, "dossier_id": dossier_id},
         ).fetchall()
+        followups = conn.execute(
+            text("""
+                select id::text, reference, reason, message, channel, status,
+                       due_at, responded_at, completed_at, created_at, updated_at
+                from followup_tasks
+                where org_id = :org_id and dossier_id = :dossier_id
+                  and archived_at is null
+                order by coalesce(updated_at, created_at) desc
+                limit 20
+            """),
+            {"org_id": org_id, "dossier_id": dossier_id},
+        ).fetchall()
 
     dossier["messages"] = [_safe(dict(row._mapping)) for row in messages]
     dossier["events"] = [_safe(dict(row._mapping)) for row in events]
     dossier["notifications"] = [_safe(dict(row._mapping)) for row in notifications]
     dossier["shipments"] = [_safe(dict(row._mapping)) for row in shipments]
     dossier["clients"] = [_safe(dict(row._mapping)) for row in clients]
+    dossier["followups"] = [_safe(dict(row._mapping)) for row in followups]
     return dossier
 
 
@@ -643,17 +662,33 @@ def _hydrate_references(conn, org_id: str, payload: dict) -> dict:
 
 
 def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
-    client_id = payload.get("client_id")
+    client_ids = list(dict.fromkeys([
+        client_id for client_id in ([payload.get("client_id")] + list(payload.get("client_ids") or []))
+        if client_id
+    ]))
+    client_id = client_ids[0] if client_ids else None
     validate_dossier_financials(payload)
 
     with engine.begin() as conn:
-        if client_id and not _client_exists(conn, org_id, client_id):
-            raise ValueError("client_not_found")
+        if client_ids:
+            existing_clients = conn.execute(text("""
+                select id::text from clients
+                where org_id = :org_id and deleted_at is null
+                  and id = any(cast(:client_ids as uuid[]))
+            """), {"org_id": org_id, "client_ids": client_ids}).fetchall()
+            if len(existing_clients) != len(client_ids):
+                raise ValueError("client_not_found")
+        assigned_to = payload.get("assigned_to") or None
+        if assigned_to and not conn.execute(text("""
+            select 1 from organization_memberships
+            where org_id = :org_id and clerk_user_id = :user_id and status = 'ACTIVE'
+        """), {"org_id": org_id, "user_id": assigned_to}).scalar():
+            raise ValueError("invalid_dossier_assignee")
         payload = _hydrate_references(conn, org_id, payload)
         row = conn.execute(
             text("""
                 insert into dossiers (
-                    org_id, client_id, dossier_reference, case_type, status_global, intake_status,
+                    org_id, client_id, title, description, dossier_reference, case_type, status_global, intake_status,
                     validation_status, primary_channel, origin_country, origin_city,
                     destination_country, destination_city, goods_type,
                     estimated_weight_kg, estimated_volume_cbm, shipping_mode,
@@ -661,10 +696,10 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     final_total, final_currency, payment_status, client_full_name,
                     supplier_payment_amount, supplier_payment_currency, workspace_id, route_id,
                     shipping_service_id, origin_warehouse_id, destination_office_id, pricing_snapshot_id,
-                    idempotency_key, created_by, updated_by
+                    idempotency_key, created_by, updated_by, assigned_to, assigned_at, assigned_by
                 )
                 values (
-                    :org_id, :client_id, :dossier_reference, :case_type, :status_global, :intake_status,
+                    :org_id, :client_id, :title, :description, :dossier_reference, :case_type, :status_global, :intake_status,
                     :validation_status, :primary_channel, :origin_country, :origin_city,
                     :destination_country, :destination_city, :goods_type,
                     :estimated_weight_kg, :estimated_volume_cbm, :shipping_mode,
@@ -672,7 +707,9 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                     :final_total, :final_currency, :payment_status, :client_full_name,
                     :supplier_payment_amount, :supplier_payment_currency, :workspace_id, :route_id,
                     :shipping_service_id, :origin_warehouse_id, :destination_office_id, :pricing_snapshot_id,
-                    :idempotency_key, :user_id, :user_id
+                    :idempotency_key, :user_id, :user_id, :assigned_to,
+                    case when :assigned_to is not null then now() else null end,
+                    case when :assigned_to is not null then :user_id else null end
                 )
                 on conflict (org_id, idempotency_key)
                   where idempotency_key is not null
@@ -682,6 +719,8 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
             {
                 "org_id": org_id,
                 "client_id": client_id,
+                "title": (payload.get("title") or "").strip() or None,
+                "description": (payload.get("description") or "").strip() or None,
                 "dossier_reference": f"DOS-{datetime.now().year}-{uuid4().hex[:10].upper()}",
                 "case_type": payload.get("case_type") or "UNKNOWN",
                 "status_global": payload.get("status_global") or "LEAD",
@@ -714,6 +753,7 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
                 "pricing_snapshot_id": payload.get("pricing_snapshot_id"),
                 "idempotency_key": payload.get("idempotency_key"),
                 "user_id": user_id,
+                "assigned_to": assigned_to,
             },
         ).fetchone()
         if not row:
@@ -727,6 +767,26 @@ def create_dossier(org_id: str, user_id: str, payload: dict) -> dict:
             dossier_id = str(replayed[0])
             return get_dossier(org_id, dossier_id, include_archived=True) or {}
         dossier_id = str(row[0])
+        for attached_client_id in client_ids[1:]:
+            conn.execute(text("""
+                insert into dossier_clients(
+                  org_id, dossier_id, client_id, dossier_client_reference,
+                  idempotency_key, created_by, updated_by
+                )
+                select :org_id, :dossier_id, client.id, client.client_reference,
+                       :idempotency_key, :user_id, :user_id
+                from clients client
+                where client.org_id = :org_id and client.id = :client_id
+                on conflict (org_id, dossier_id, client_id)
+                  where archived_at is null
+                do nothing
+            """), {
+                "org_id": org_id,
+                "dossier_id": dossier_id,
+                "client_id": attached_client_id,
+                "idempotency_key": f"dossier-create:{dossier_id}:{attached_client_id}",
+                "user_id": user_id,
+            })
         conn.execute(
             text("""
                 insert into dossier_events (org_id, dossier_id, event_type, payload)
@@ -749,7 +809,7 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
         return None
 
     allowed = {
-        "client_id", "case_type", "status_global", "intake_status", "validation_status",
+        "client_id", "title", "description", "assigned_to", "case_type", "status_global", "intake_status", "validation_status",
         "primary_channel", "origin_country", "origin_city", "destination_country",
         "destination_city", "goods_type", "estimated_weight_kg", "estimated_volume_cbm",
         "shipping_mode", "tracking_id", "quoted_total", "quoted_currency", "pricing_status",
@@ -766,11 +826,21 @@ def update_dossier(org_id: str, dossier_id: str, user_id: str, payload: dict) ->
     with engine.begin() as conn:
         if data.get("client_id") and not _client_exists(conn, org_id, data["client_id"]):
             raise ValueError("client_not_found")
+        if data.get("assigned_to") and not conn.execute(text("""
+            select 1 from organization_memberships
+            where org_id = :org_id and clerk_user_id = :user_id and status = 'ACTIVE'
+        """), {"org_id": org_id, "user_id": data["assigned_to"]}).scalar():
+            raise ValueError("invalid_dossier_assignee")
         data = _hydrate_references(conn, org_id, data)
         result = conn.execute(
             text("""
                 update dossiers set
                     client_id = :client_id,
+                    title = :title,
+                    description = :description,
+                    assigned_to = :assigned_to,
+                    assigned_at = case when assigned_to is distinct from :assigned_to then now() else assigned_at end,
+                    assigned_by = case when assigned_to is distinct from :assigned_to then :user_id else assigned_by end,
                     case_type = :case_type,
                     status_global = :status_global,
                     intake_status = :intake_status,

@@ -69,7 +69,11 @@ router = APIRouter()
 
 class DossierPayload(BaseModel):
     client_id: str | None = None
+    client_ids: list[str] = Field(default_factory=list, max_length=100)
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=160)
+    title: str | None = Field(default=None, max_length=180)
+    description: str | None = Field(default=None, max_length=3000)
+    assigned_to: str | None = Field(default=None, max_length=200)
     workspace_id: str | None = None
     route_id: str | None = None
     shipping_service_id: str | None = None
@@ -102,6 +106,7 @@ class DossierPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_dossier(self):
+        self.client_ids = list(dict.fromkeys(client_id for client_id in self.client_ids if client_id))
         if self.case_type not in DOSSIER_CASE_TYPES:
             raise ValueError("invalid_case_type")
         if self.status_global not in DOSSIER_STATUSES:
@@ -120,6 +125,9 @@ class DossierPayload(BaseModel):
 class DossierPatchPayload(BaseModel):
     row_version: int = Field(ge=1)
     client_id: str | None = None
+    title: str | None = Field(default=None, max_length=180)
+    description: str | None = Field(default=None, max_length=3000)
+    assigned_to: str | None = Field(default=None, max_length=200)
     workspace_id: str | None = None
     route_id: str | None = None
     shipping_service_id: str | None = None
@@ -458,8 +466,8 @@ def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
     except ValueError as exc:
         if str(exc) == "client_not_found":
             raise HTTPException(status_code=404, detail="client_not_found") from exc
-        if str(exc) == "client_required":
-            raise HTTPException(status_code=422, detail="client_required") from exc
+        if str(exc) == "invalid_dossier_assignee":
+            raise HTTPException(status_code=422, detail="invalid_dossier_assignee") from exc
         if str(exc) in {
             "quoted_currency_required", "final_currency_required",
             "supplier_payment_currency_required",
@@ -473,8 +481,8 @@ def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
     "/dossiers/{dossier_id}",
     dependencies=[Depends(require_permission("dossiers.read"))],
 )
-def dossiers_show(dossier_id: str, tenant=Depends(get_current_tenant)):
-    dossier = get_dossier(tenant["org_id"], dossier_id)
+def dossiers_show(dossier_id: str, include_archived: bool = False, tenant=Depends(get_current_tenant)):
+    dossier = get_dossier(tenant["org_id"], dossier_id, include_archived=include_archived)
     if not dossier:
         raise HTTPException(status_code=404, detail="dossier_not_found")
     return {"status": "ok", "dossier": dossier, "data": dossier}
@@ -513,7 +521,7 @@ def dossier_collaboration_update(dossier_id: str, body: DossierCollaborationPayl
     return {"status": "ok", "dossier": dossier}
 
 
-@router.get("/dossiers/client-search", dependencies=[Depends(require_permission("dossiers.clients.read"))])
+@router.get("/dossiers/clients/search", dependencies=[Depends(require_permission("dossiers.clients.read"))])
 def dossiers_client_search(
     q: str = Query(min_length=2, max_length=120),
     dossier_id: str | None = None,
@@ -729,6 +737,8 @@ def dossiers_update(dossier_id: str, body: DossierPatchPayload, tenant=Depends(g
     except ValueError as exc:
         if str(exc) == "client_not_found":
             raise HTTPException(status_code=404, detail="client_not_found") from exc
+        if str(exc) == "invalid_dossier_assignee":
+            raise HTTPException(status_code=422, detail="invalid_dossier_assignee") from exc
         if str(exc) in {"stale_dossier_version", "invalid_dossier_status_transition"}:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         if str(exc) in {

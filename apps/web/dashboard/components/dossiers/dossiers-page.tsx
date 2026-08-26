@@ -1,23 +1,23 @@
 "use client";
 
 import axios from "axios";
-import { AlertCircle, Bell, ChevronLeft, ChevronRight, Download, FolderOpen, Users } from "lucide-react";
+import { AlertCircle, Bell, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
 import { OperationActionMenu, OperationButton, OperationMetric, OperationMetricGrid, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
 import { OperationContent, OperationMetrics, OperationSearch, OperationTable, OperationToolbar } from "@/components/ui/operation-primitives";
 import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { EmptyState, TableSkeleton } from "@/components/ui/page-state";
 import {
-  archiveDossier, createDossier, exportDossiers, getDossier, getDossierStats,
-  listArchivedDossiers, listDossiers, restoreDossier, searchDossierClients,
-  type DossierClientSearchResult, type DossierRecord, type DossierStats,
+  createDossier, exportDossiers, getDossierStats,
+  listArchivedDossiers, listDossierMembers, listDossiers, searchDossierClients,
+  type DossierClientSearchResult, type DossierMember, type DossierRecord, type DossierStats,
 } from "@/services/dossiers";
 
 type PilotView = "active" | "attention" | "recent" | "archived";
-type DetailView = "summary" | "clients";
 
 const EMPTY_STATS: DossierStats = {
   total: 0, active: 0, leads: 0, quoted: 0, waiting_packages: 0, in_transit: 0,
@@ -25,8 +25,10 @@ const EMPTY_STATS: DossierStats = {
   clients_requiring_attention: 0, dossiers_requiring_attention: 0, archived: 0,
 };
 const PAGE_SIZE = 30;
+const fieldClass = "h-10 w-full rounded-[7px] border border-[#d4d9df] bg-white px-3 text-[13px] text-[#30373e] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function DossiersPage() {
+  const router = useRouter();
   const [view, setView] = useState<PilotView>("active");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<DossierRecord[]>([]);
@@ -36,15 +38,13 @@ export function DossiersPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<DossierRecord | null>(null);
-  const [detailView, setDetailView] = useState<DetailView>("summary");
-  const [detailLoading, setDetailLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [clientQuery, setClientQuery] = useState("");
   const [clientMatches, setClientMatches] = useState<DossierClientSearchResult[]>([]);
-  const [selectedClient, setSelectedClient] = useState<DossierClientSearchResult | null>(null);
+  const [selectedClients, setSelectedClients] = useState<DossierClientSearchResult[]>([]);
+  const [members, setMembers] = useState<DossierMember[]>([]);
   const [clientSearching, setClientSearching] = useState(false);
 
   const load = useCallback(async (nextPage = 1) => {
@@ -83,7 +83,7 @@ export function DossiersPage() {
   useEffect(() => { refreshStats(); }, [refreshStats]);
 
   useEffect(() => {
-    if (!createOpen || selectedClient || clientQuery.trim().length < 2) {
+    if (!createOpen || clientQuery.trim().length < 2) {
       setClientMatches([]);
       setClientSearching(false);
       return;
@@ -91,24 +91,24 @@ export function DossiersPage() {
     setClientSearching(true);
     const timeout = window.setTimeout(() => {
       searchDossierClients(clientQuery.trim())
-        .then(setClientMatches).catch(() => setClientMatches([]))
+        .then((matches) => setClientMatches(matches.filter((match) => !selectedClients.some((client) => client.id === match.id))))
+        .catch(() => setClientMatches([]))
         .finally(() => setClientSearching(false));
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [clientQuery, createOpen, selectedClient]);
+  }, [clientQuery, createOpen, selectedClients]);
 
-  async function openDetail(dossier: DossierRecord) {
-    setSelected(dossier);
-    setDetailView("summary");
-    setDetailLoading(true);
-    try { setSelected(await getDossier(dossier.id)); } catch { setSelected(dossier); }
-    finally { setDetailLoading(false); }
-  }
+  useEffect(() => {
+    if (!createOpen) return;
+    listDossierMembers().then(setMembers).catch(() => setMembers([]));
+  }, [createOpen]);
+
+  function openDetail(dossier: DossierRecord) { router.push(`/app/dossiers/${dossier.id}`); }
 
   function openCreate() {
     setCreateError("");
     setClientQuery("");
-    setSelectedClient(null);
+    setSelectedClients([]);
     setClientMatches([]);
     setCreateOpen(true);
   }
@@ -117,35 +117,21 @@ export function DossiersPage() {
     event.preventDefault();
     setCreating(true);
     setCreateError("");
+    const form = new FormData(event.currentTarget);
     try {
       const dossier = await createDossier({
-        client_id: selectedClient?.id || null,
+        client_ids: selectedClients.map((client) => client.id),
         idempotency_key: `pilot-dossier:${crypto.randomUUID()}`,
+        title: clean(form.get("title")),
+        description: clean(form.get("description")),
+        assigned_to: clean(form.get("assigned_to")),
         primary_channel: "manual",
       });
       setCreateOpen(false);
       await Promise.all([load(1), refreshStats()]);
-      await openDetail(dossier);
+      router.push(`/app/dossiers/${dossier.id}`);
     } catch (cause) { setCreateError(apiError(cause)); }
     finally { setCreating(false); }
-  }
-
-  async function archiveSelected() {
-    if (!selected || !window.confirm("Archiver ce dossier ? Il restera consultable dans les archives.")) return;
-    try {
-      await archiveDossier(selected.id, selected.row_version);
-      setSelected(null);
-      await Promise.all([load(1), refreshStats()]);
-    } catch (cause) { setError(apiError(cause)); }
-  }
-
-  async function restoreSelected() {
-    if (!selected) return;
-    try {
-      await restoreDossier(selected.id, selected.row_version);
-      setSelected(null);
-      await Promise.all([load(1), refreshStats()]);
-    } catch (cause) { setError(apiError(cause)); }
   }
 
   async function handleExport() {
@@ -210,27 +196,20 @@ export function DossiersPage() {
     </OperationContent>
 
     <OperationDrawer
-      open={Boolean(selected)} close={() => setSelected(null)} title={selected?.dossier_reference || "Dossier"}
-      description={selected ? `${plural(selected.client_count || selected.clients?.length || 0, "client")} rattaché(s) à ce dossier` : undefined}
-      headerLeading={<div className="grid h-10 w-10 place-items-center rounded-[8px] bg-[#eaf8f1] text-[#087a46]"><FolderOpen size={19} /></div>}
-      headerMeta={selected && (selected.attention_count || 0) > 0 ? <OperationStatus label="Attention requise" tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}
-      headerActions={selected?.archived_at
-        ? <OperationDrawerAction icon="restore" onClick={restoreSelected}>Restaurer</OperationDrawerAction>
-        : <OperationDrawerAction icon="archive" intent="danger" onClick={archiveSelected}>Archiver</OperationDrawerAction>}
-      tabs={<OperationDrawerTabs items={[{ key: "summary", label: "Résumé" }, { key: "clients", label: "Clients", count: selected?.client_count || selected?.clients?.length || 0 }]} value={detailView} onChange={(next) => setDetailView(next as DetailView)} primaryCount={2} />}
-    >
-      {detailLoading || !selected ? <TableSkeleton rows={4} columns={2} /> : detailView === "clients" ? <ClientsPanel dossier={selected} /> : <SummaryPanel dossier={selected} />}
-    </OperationDrawer>
-
-    <OperationDrawer
       open={createOpen} close={() => !creating && setCreateOpen(false)} title="Nouveau dossier"
       description="Créez le dossier avec les informations déjà connues. Vous pourrez le compléter ensuite." width="max-w-[600px]"
       footer={<><OperationButton disabled={creating} onClick={() => setCreateOpen(false)}>Annuler</OperationButton><OperationButton variant="primary" type="submit" form="pilot-dossier-create" disabled={creating}>{creating ? "Création…" : "Créer le dossier"}</OperationButton></>}
     >
       <form id="pilot-dossier-create" onSubmit={submitCreate} className="grid gap-6">
-        <section><h3 className="text-[15px] font-semibold text-[#25292e]">Client initial <span className="font-normal text-[#7a848d]">— facultatif</span></h3>
-          <p className="mt-1 text-[13px] leading-5 text-[#68737d]">Recherchez un client déjà enregistré. Si le client n’est pas encore connu, créez le dossier sans lui et ajoutez-le plus tard.</p>
-          {selectedClient ? <SelectedClient client={selectedClient} change={() => { setSelectedClient(null); setClientQuery(""); }} /> : <ClientSearch query={clientQuery} setQuery={setClientQuery} searching={clientSearching} matches={clientMatches} select={setSelectedClient} />}
+        <section className="grid gap-4"><div><h3 className="text-[15px] font-semibold text-[#25292e]">Informations du dossier</h3><p className="mt-1 text-[13px] leading-5 text-[#68737d]">Renseignez uniquement ce que vous connaissez maintenant.</p></div>
+          <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Nom ou objet du dossier</span><input name="title" maxLength={180} placeholder="Ex. Suivi des commandes boutique Mardoche" className={fieldClass} /></label>
+          <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Contexte <span className="font-normal text-[#7a848d]">— facultatif</span></span><textarea name="description" maxLength={3000} rows={4} placeholder="Expliquez brièvement ce qui doit être suivi dans ce dossier." className={`${fieldClass} h-auto py-2.5`} /></label>
+          <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#414950]">Responsable <span className="font-normal text-[#7a848d]">— facultatif</span></span><select name="assigned_to" className={fieldClass}><option value="">Non attribué</option>{members.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}</select></label>
+        </section>
+        <section><h3 className="text-[15px] font-semibold text-[#25292e]">Clients concernés <span className="font-normal text-[#7a848d]">— facultatif</span></h3>
+          <p className="mt-1 text-[13px] leading-5 text-[#68737d]">Ajoutez un ou plusieurs clients existants. Vous pourrez aussi le faire plus tard.</p>
+          <SelectedClients clients={selectedClients} remove={(id) => setSelectedClients((current) => current.filter((client) => client.id !== id))} />
+          <ClientSearch query={clientQuery} setQuery={setClientQuery} searching={clientSearching} matches={clientMatches} select={(client) => { setSelectedClients((current) => [...current, client]); setClientQuery(""); }} />
         </section>
         <div className="rounded-[8px] border border-[#dfe4e7] bg-[#f8faf9] p-4 text-[13px] leading-5 text-[#59656f]">Le dossier recevra automatiquement une référence unique. Aucune information technique ne vous sera demandée.</div>
         {createError && <p className="rounded-[7px] bg-[#fff2f2] px-3 py-2.5 text-[13px] text-[#a62b25]">{createError}</p>}
@@ -243,7 +222,7 @@ function DossiersTable({ items, openDetail }: { items: DossierRecord[]; openDeta
   return <table className="w-full min-w-[850px] border-collapse text-left"><thead className="bg-[#f7f8f9] text-[12px] font-semibold text-[#606b75]"><tr className="border-b border-[#e2e6e9]">
     <th className="px-5 py-3">Dossier</th><th className="px-5 py-3">Clients</th><th className="px-5 py-3">Suivi</th><th className="px-5 py-3">Responsable</th><th className="px-5 py-3">Dernière modification</th><th className="w-14 px-4 py-3"><span className="sr-only">Ouvrir</span></th>
   </tr></thead><tbody className="divide-y divide-[#edf0f2] bg-white text-[13px]">{items.map((dossier) => <tr key={dossier.id} className="transition-colors hover:bg-[#fafbfb]">
-    <td className="px-5 py-3.5"><button type="button" onClick={() => openDetail(dossier)} className="text-left"><span className="block font-semibold text-[#25292e]">{dossier.dossier_reference}</span><span className="mt-0.5 block text-[12px] text-[#78828c]">Créé le {formatDate(dossier.created_at)}</span></button></td>
+    <td className="px-5 py-3.5"><button type="button" onClick={() => openDetail(dossier)} className="text-left"><span className="block font-semibold text-[#25292e]">{dossier.title || dossier.dossier_reference}</span><span className="mt-0.5 block text-[12px] text-[#78828c]">{dossier.title ? dossier.dossier_reference : `Créé le ${formatDate(dossier.created_at)}`}</span></button></td>
     <td className="px-5 py-3.5"><p className="font-medium text-[#343b42]">{dossier.client_count ? dossier.client_name || "Clients rattachés" : "Aucun client"}</p><p className="mt-0.5 text-[12px] text-[#78828c]">{plural(dossier.client_count || 0, "client")}</p></td>
     <td className="px-5 py-3.5">{dossier.attention_count > 0 ? <OperationStatus label={plural(dossier.attention_count, "attention")} tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}</td>
     <td className="px-5 py-3.5 text-[#4c5660]">{dossier.assigned_to || "Non attribué"}</td><td className="px-5 py-3.5 text-[#4c5660]">{formatRelative(dossier.updated_at || dossier.created_at)}</td>
@@ -251,29 +230,18 @@ function DossiersTable({ items, openDetail }: { items: DossierRecord[]; openDeta
   </tr>)}</tbody></table>;
 }
 
-function SelectedClient({ client, change }: { client: DossierClientSearchResult; change: () => void }) {
-  return <div className="mt-4 flex items-center justify-between rounded-[8px] border border-[#b8ddca] bg-[#f2fbf6] p-3.5"><div className="min-w-0"><p className="truncate text-[13px] font-semibold text-[#26312b]">{client.display_name}</p><p className="mt-0.5 text-[12px] text-[#617169]">{client.phone || client.whatsapp_phone || client.email || client.client_reference}</p></div><button type="button" className="text-[12px] font-semibold text-[#087a46]" onClick={change}>Changer</button></div>;
+function SelectedClients({ clients, remove }: { clients: DossierClientSearchResult[]; remove: (id: string) => void }) {
+  if (!clients.length) return null;
+  return <div className="mt-4 grid gap-2">{clients.map((client) => <div key={client.id} className="flex items-center justify-between rounded-[8px] border border-[#b8ddca] bg-[#f2fbf6] p-3.5"><div className="min-w-0"><p className="truncate text-[13px] font-semibold text-[#26312b]">{client.display_name}</p><p className="mt-0.5 text-[12px] text-[#617169]">{client.phone || client.whatsapp_phone || client.email || client.client_reference}</p></div><button type="button" className="text-[12px] font-semibold text-[#087a46]" onClick={() => remove(client.id)}>Retirer</button></div>)}</div>;
 }
 
 function ClientSearch({ query, setQuery, searching, matches, select }: { query: string; setQuery: (value: string) => void; searching: boolean; matches: DossierClientSearchResult[]; select: (client: DossierClientSearchResult) => void }) {
   return <div className="relative mt-4"><OperationSearch value={query} onChange={setQuery} placeholder="Nom, téléphone, WhatsApp ou email" />{(searching || matches.length > 0) && <div className="mt-2 overflow-hidden rounded-[8px] border border-[#dfe3e7] bg-white">{searching ? <p className="px-4 py-3 text-[13px] text-[#6f7983]">Recherche…</p> : matches.map((client) => <button key={client.id} type="button" onClick={() => select(client)} className="flex w-full items-center justify-between border-b border-[#edf0f2] px-4 py-3 text-left last:border-0 hover:bg-[#f7f9f8]"><span><span className="block text-[13px] font-semibold text-[#30373e]">{client.display_name}</span><span className="mt-0.5 block text-[12px] text-[#77818b]">{client.phone || client.whatsapp_phone || client.email || "Coordonnée non renseignée"}</span></span><ChevronRight size={16} className="text-[#77818b]" /></button>)}</div>}</div>;
 }
 
-function SummaryPanel({ dossier }: { dossier: DossierRecord }) {
-  return <div className="grid gap-6"><section className="grid gap-3 sm:grid-cols-2"><Info label="Référence" value={dossier.dossier_reference} /><Info label="Responsable" value={dossier.assigned_to || "Non attribué"} /><Info label="Clients rattachés" value={plural(dossier.client_count || dossier.clients?.length || 0, "client")} /><Info label="Dernière modification" value={formatDateTime(dossier.updated_at || dossier.created_at)} /></section>
-    {(dossier.attention_count || 0) > 0 && <section className="rounded-[8px] border border-[#f0d6a9] bg-[#fff9ed] p-4"><p className="text-[13px] font-semibold text-[#7d4b00]">Ce dossier demande votre attention</p><p className="mt-1 text-[13px] leading-5 text-[#805f2c]">{plural(dossier.attention_count, "client")} à vérifier dans ce dossier.</p></section>}
-    <section><h3 className="text-[15px] font-semibold text-[#25292e]">Clients principaux</h3><div className="mt-3 grid gap-2">{(dossier.clients || []).slice(0, 3).map((client) => <div key={client.relation_id} className="flex items-center gap-3 rounded-[8px] border border-[#e2e6e9] p-3.5"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#edf2f2] text-[#53606a]"><Users size={16} /></div><div className="min-w-0"><p className="truncate text-[13px] font-semibold">{client.display_name}</p><p className="mt-0.5 text-[12px] text-[#75808a]">{client.phone || client.whatsapp_phone || client.email || client.client_reference}</p></div></div>)}{!dossier.clients?.length && <p className="rounded-[8px] border border-dashed border-[#d8dde1] p-5 text-center text-[13px] text-[#717c86]">Aucun client n’est encore rattaché.</p>}</div></section>
-  </div>;
-}
-
-function ClientsPanel({ dossier }: { dossier: DossierRecord }) {
-  const clients = dossier.clients || [];
-  return clients.length ? <div className="grid gap-3">{clients.map((client) => <article key={client.relation_id} className="rounded-[9px] border border-[#e0e5e8] p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><h3 className="truncate text-[14px] font-semibold text-[#25292e]">{client.display_name}</h3><p className="mt-1 text-[12px] text-[#75808a]">{client.client_reference}</p></div>{client.attention_required ? <OperationStatus label="À traiter" tone="warning" /> : <OperationStatus label="Suivi normal" tone="success" />}</div><dl className="mt-4 grid gap-3 text-[13px] sm:grid-cols-2"><Info label="Contact" value={client.phone || client.whatsapp_phone || client.email || "Non renseigné"} /><Info label="Situation" value={client.situation || "Non renseignée"} /></dl>{client.attention_reason && <p className="mt-3 rounded-[7px] bg-[#fff7e8] px-3 py-2 text-[12px] leading-5 text-[#805a1d]">{client.attention_reason}</p>}</article>)}</div> : <EmptyState title="Aucun client rattaché" description="Vous pourrez rechercher un client existant ou en créer un depuis la fiche complète du dossier." />;
-}
-
-function Info({ label, value }: { label: string; value: string }) { return <div className="min-w-0"><dt className="text-[12px] font-medium text-[#77818b]">{label}</dt><dd className="mt-1 truncate text-[13px] font-medium text-[#30373e]">{value}</dd></div>; }
 function plural(value: number, label: string) { return `${value.toLocaleString("fr-FR")} ${label}${value > 1 ? "s" : ""}`; }
 function formatDate(value: string) { return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)); }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function formatRelative(value: string) { const diff = Date.now() - new Date(value).getTime(); const hours = Math.floor(diff / 3_600_000); if (hours < 1) return "Il y a moins d’une heure"; if (hours < 24) return `Il y a ${hours} h`; const days = Math.floor(hours / 24); if (days < 8) return `Il y a ${days} jour${days > 1 ? "s" : ""}`; return formatDateTime(value); }
 function apiError(cause: unknown) { if (!axios.isAxiosError(cause)) return "Une erreur inattendue est survenue."; if (!cause.response) return "Le serveur ne répond pas. Réessayez dans un instant."; const detail = cause.response.data?.detail; if (detail === "stale_dossier_version") return "Ce dossier a été modifié ailleurs. Actualisez la page."; if (detail === "client_not_found") return "Le client sélectionné n’existe plus."; return typeof detail === "string" ? detail : "L’opération n’a pas pu être terminée."; }
+function clean(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }

@@ -26,6 +26,8 @@ export type DossierRecord = {
   id: string;
   org_id: string;
   client_id: string | null;
+  title: string | null;
+  description: string | null;
   workspace_id?: string | null;
   route_id?: string | null;
   shipping_service_id?: string | null;
@@ -83,6 +85,21 @@ export type DossierRecord = {
   notifications?: DossierNotification[];
   shipments?: DossierShipment[];
   clients?: DossierClientRelation[];
+  followups?: DossierFollowup[];
+};
+
+export type DossierFollowup = {
+  id: string;
+  reference?: string | null;
+  reason?: string | null;
+  message: string;
+  channel?: string | null;
+  status: string;
+  due_at: string;
+  responded_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at?: string | null;
 };
 
 export type DossierClientRelation = {
@@ -137,6 +154,7 @@ export type DossierStats = {
 
 export type DossierPayload = Partial<Omit<DossierRecord, "id" | "org_id" | "dossier_reference" | "message_count" | "event_count" | "package_count" | "shipment_count" | "created_at" | "updated_at" | "messages" | "events" | "notifications" | "shipments">> & {
   client_id?: string | null;
+  client_ids?: string[];
   idempotency_key?: string;
   workspace_id?: string | null;
   route_id?: string | null;
@@ -269,8 +287,8 @@ export async function restoreDossier(id: string, rowVersion: number) {
   )).data.dossier;
 }
 
-export async function getDossier(id: string) {
-  return (await api.get<{ status: "ok"; dossier: DossierRecord }>(`/dossiers/${id}`)).data.dossier;
+export async function getDossier(id: string, includeArchived = false) {
+  return (await api.get<{ status: "ok"; dossier: DossierRecord }>(`/dossiers/${id}`, { params: { include_archived: includeArchived } })).data.dossier;
 }
 
 export async function createDossier(payload: DossierPayload) {
@@ -297,9 +315,50 @@ export async function listDossierClients(id: string, includeArchived = false) {
 
 export async function searchDossierClients(query: string, dossierId?: string) {
   return (await api.get<{ status: "ok"; items: DossierClientSearchResult[] }>(
-    "/dossiers/client-search",
+    "/dossiers/clients/search",
     { params: { q: query, dossier_id: dossierId } },
   )).data.items;
+}
+
+export async function attachClientToDossier(dossierId: string, clientId: string) {
+  return (await api.post<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients`,
+    { client_id: clientId, idempotency_key: `attach-client:${dossierId}:${clientId}` },
+  )).data.relation;
+}
+
+export type NewDossierClientPayload = {
+  name?: string | null;
+  company_name?: string | null;
+  phone?: string | null;
+  whatsapp_phone?: string | null;
+  email?: string | null;
+  situation?: string | null;
+  attention_required?: boolean;
+  attention_reason?: string | null;
+};
+
+export async function createClientInDossier(dossierId: string, payload: NewDossierClientPayload) {
+  return (await api.post<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients/new`,
+    { ...payload, idempotency_key: `create-client:${dossierId}:${crypto.randomUUID()}` },
+  )).data.relation;
+}
+
+export async function updateDossierClientRelation(
+  dossierId: string,
+  clientId: string,
+  payload: { row_version: number; situation?: string | null; attention_required?: boolean; attention_reason?: string | null; make_primary?: boolean },
+) {
+  return (await api.patch<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients/${clientId}`, payload,
+  )).data.relation;
+}
+
+export async function removeClientFromDossier(dossierId: string, clientId: string, rowVersion: number) {
+  return (await api.delete<{ status: "ok"; relation: DossierClientRelation }>(
+    `/dossiers/${dossierId}/clients/${clientId}`, { params: { row_version: rowVersion } },
+  )).data.relation;
 }
 
 export async function listDossierDocuments(id: string) {

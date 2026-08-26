@@ -37,3 +37,24 @@ export async function updateKnowledgeSuggestion(id:string,status:string,knowledg
 export async function deleteKnowledgeConnector(id:string){return(await api.delete(`/knowledge/connectors/${id}`)).data}
 export async function getKnowledgeLiveCatalog(){return(await api.get<Record<string,Array<Record<string,unknown>>>>("/knowledge/live/catalog")).data}
 export async function submitKnowledgeFeedback(response_log_id:string,rating:string,comment?:string){return(await api.post("/knowledge/feedback",{response_log_id,rating,comment})).data}
+
+export type PilotKnowledgeKind="CLIENT_ANSWER"|"COMPANY_INFORMATION"|"INTERNAL_INSTRUCTION";
+export type PilotKnowledgeStatus="DRAFT"|"PUBLISHED"|"ARCHIVED";
+export type PilotKnowledgeItem={
+ id:string;reference:string;subject:string;answer:string;kind:PilotKnowledgeKind;category:string;
+ client_visible:boolean;status:PilotKnowledgeStatus;internal_status:string;language:string;
+ review_due_at?:string|null;expires_at?:string|null;version:number;updated_by_name?:string|null;
+ updated_at:string;display_updated_at?:string;published_at?:string|null;has_pending_draft?:boolean;
+ draft_updated_at?:string|null;draft_updated_by_name?:string|null;usage_count?:number;
+ pending_draft?:{subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;updated_by_name?:string|null;updated_at:string}|null;
+ history?:Array<{event_type:string;actor_name?:string|null;created_at:string}>;
+};
+export type PilotKnowledgeStats={published:number;drafts:number;needs_review:number;available_to_ai:number;archived:number};
+export type PilotKnowledgePayload={subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;idempotency_key?:string};
+export async function listPilotKnowledge(params:Record<string,string|undefined>={}){return(await api.get<{items:PilotKnowledgeItem[];total:number}>("/knowledge/pilot",{params})).data}
+export async function getPilotKnowledgeStats(){return(await api.get<{stats:PilotKnowledgeStats}>("/knowledge/pilot/stats")).data.stats}
+export async function getPilotKnowledge(id:string){return(await api.get<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}`)).data.knowledge}
+export async function createPilotKnowledge(payload:PilotKnowledgePayload){return(await api.post<{knowledge:PilotKnowledgeItem}>("/knowledge/pilot",payload)).data.knowledge}
+export async function updatePilotKnowledge(id:string,payload:PilotKnowledgePayload&{expected_version:number}){return(await api.patch<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}`,payload)).data.knowledge}
+export async function publishPilotKnowledge(id:string,expected_version:number){return(await api.post<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}/publish`,{expected_version})).data.knowledge}
+export async function pilotKnowledgeAction(id:string,action:"unpublish"|"archive"|"restore",expected_version:number){return(await api.post<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}/${action}`,{expected_version})).data.knowledge}

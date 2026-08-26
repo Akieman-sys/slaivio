@@ -25,12 +25,12 @@ def test_knowledge_api_has_real_workflow_import_playground_and_permissions():
     assert "No fallback to unrelated documents" in (ROOT / "apps/api/app/ai/services/knowledge_retrieval.py").read_text(encoding="utf-8")
 
 
-def test_knowledge_dashboard_exposes_operational_views_without_fake_data():
+def test_knowledge_dashboard_exposes_the_simple_pilot_workflow():
     page = (ROOT / "apps/web/dashboard/components/knowledge/knowledge-page.tsx").read_text(encoding="utf-8")
     service = (ROOT / "apps/web/dashboard/services/knowledge.ts").read_text(encoding="utf-8")
-    for feature in ("Vue d’ensemble", "FAQ clients", "Procédures", "Tester mon IA", "Questions sans réponse", "Sources citées", "Contenu sensible", "Importer une source"):
+    for feature in ("Réponse client", "Information de l’entreprise", "Consigne interne", "Enregistrer en brouillon", "Enregistrer et publier", "Cette information peut-elle être communiquée aux clients ?"):
         assert feature in page
-    for endpoint in ("/knowledge/stats", "/knowledge/files", "/knowledge/playground", "/knowledge/analytics"):
+    for endpoint in ("/knowledge/pilot", "/knowledge/pilot/stats", "/publish"):
         assert endpoint in service
     assert "/app/knowledge" in (ROOT / "apps/web/dashboard/config/app-navigation.ts").read_text(encoding="utf-8")
 
@@ -89,19 +89,11 @@ def test_knowledge_completion_exposes_full_governance_mutations():
         assert f"def {operation}" in repository
 
 
-def test_knowledge_completion_ui_exposes_agency_workflows():
+def test_advanced_knowledge_capabilities_remain_in_backend_but_not_in_pilot_ui():
     page = (ROOT / "apps/web/dashboard/components/knowledge/knowledge-page.tsx").read_text(encoding="utf-8")
     service = (ROOT / "apps/web/dashboard/services/knowledge.ts").read_text(encoding="utf-8")
-    for feature in (
-        "Valider et mapper la source",
-        "Enregistrer une nouvelle version",
-        "Traduction créée en brouillon",
-        "Restaurer cette version",
-        "Relations métier",
-        "Vues enregistrées",
-        "Sources métier live",
-    ):
-        assert feature in page
+    for hidden_term in ("AI_SCOPE", "Valider et mapper la source", "Sources métier live", "Relations métier"):
+        assert hidden_term not in page
     for endpoint in (
         "/knowledge/views",
         "/knowledge/live/catalog",

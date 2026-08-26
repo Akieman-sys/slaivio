@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 from app.knowledge import repository as repo
+from app.knowledge import pilot_repository as pilot_repo
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
 from app.services.knowledge_security import scan_bytes
 from app.services.knowledge_ai import ocr_document
@@ -142,6 +143,25 @@ class SuggestionDecision(BaseModel):
     knowledge_id: str | None = None
 
 
+class PilotKnowledgePayload(BaseModel):
+    subject: str = Field(min_length=2, max_length=240)
+    answer: str = Field(min_length=2, max_length=10000)
+    kind: str = Field(pattern="^(CLIENT_ANSWER|COMPANY_INFORMATION|INTERNAL_INSTRUCTION)$")
+    category: str = Field(default="OTHER", pattern="^(GENERAL|SERVICES|HOURS_AND_ADDRESSES|PAYMENTS|DOSSIERS|SUPPORT|DOCUMENTS|OTHER)$")
+    client_visible: bool = True
+    language: str = Field(default="FR", pattern="^(FR|EN)$")
+    review_due_at: datetime | None = None
+    idempotency_key: str | None = Field(default=None, max_length=180)
+
+
+class PilotKnowledgeUpdate(PilotKnowledgePayload):
+    expected_version: int = Field(ge=1)
+
+
+class PilotKnowledgeAction(BaseModel):
+    expected_version: int = Field(ge=1)
+
+
 @router.get("")
 def index(q: str | None = None, status: str | None = None, category: str | None = None, knowledge_type: str | None = None, language: str | None = None, source_type: str | None = None, ai_scope: str | None = None, audience: str | None = None, workspace_id: str | None = None, expired: bool = False, limit: int = 50, offset: int = 0, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.read"))):
     return repo.listing(tenant["org_id"], locals())
@@ -250,6 +270,43 @@ def resolve_conflict(conflict_id: str, body: ConflictResolution, tenant=Depends(
 
 @router.post("/feedback")
 def create_feedback(body: Feedback, tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.read"))): return repo.feedback(tenant["org_id"], aid(tenant), body.model_dump())
+
+
+@router.get("/pilot", dependencies=[Depends(require_permission("pilot.knowledge.read"))])
+def pilot_index(view: str | None = None, q: str | None = None, category: str | None = None, tenant=Depends(get_current_tenant)):
+    return {"status": "ok", **pilot_repo.listing(tenant["org_id"], view=view, q=q, category=category)}
+
+
+@router.get("/pilot/stats", dependencies=[Depends(require_permission("pilot.knowledge.read"))])
+def pilot_stats(tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "stats": pilot_repo.stats(tenant["org_id"])}
+
+
+@router.post("/pilot", status_code=201, dependencies=[Depends(require_permission("pilot.knowledge.manage"))])
+def pilot_create(body: PilotKnowledgePayload, tenant=Depends(get_current_tenant)):
+    item, replayed = pilot_repo.create(tenant["org_id"], aid(tenant), aname(tenant), body.model_dump())
+    return {"status": "ok", "knowledge": item, "replayed": replayed}
+
+
+@router.get("/pilot/{entry_id}", dependencies=[Depends(require_permission("pilot.knowledge.read"))])
+def pilot_detail(entry_id: str, tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "knowledge": pilot_repo.detail(tenant["org_id"], entry_id)}
+
+
+@router.patch("/pilot/{entry_id}", dependencies=[Depends(require_permission("pilot.knowledge.manage"))])
+def pilot_update(entry_id: str, body: PilotKnowledgeUpdate, tenant=Depends(get_current_tenant)):
+    data = body.model_dump(); expected_version = data.pop("expected_version")
+    return {"status": "ok", "knowledge": pilot_repo.save_draft(tenant["org_id"], entry_id, aid(tenant), aname(tenant), expected_version, data)}
+
+
+@router.post("/pilot/{entry_id}/publish", dependencies=[Depends(require_permission("pilot.knowledge.publish"))])
+def pilot_publish(entry_id: str, body: PilotKnowledgeAction, tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "knowledge": pilot_repo.publish(tenant["org_id"], entry_id, aid(tenant), aname(tenant), body.expected_version)}
+
+
+@router.post("/pilot/{entry_id}/{action}", dependencies=[Depends(require_permission("pilot.knowledge.publish"))])
+def pilot_action(entry_id: str, action: str, body: PilotKnowledgeAction, tenant=Depends(get_current_tenant)):
+    return {"status": "ok", "knowledge": pilot_repo.change_state(tenant["org_id"], entry_id, aid(tenant), aname(tenant), action, body.expected_version)}
 
 
 @router.post("")

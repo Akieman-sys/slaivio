@@ -128,7 +128,7 @@ async def send_reply(
             )
 
             if body.draft_id:
-                mark_ai_draft_used(body.draft_id)
+                mark_ai_draft_used(body.draft_id, org_id)
 
             update_state(
                 org_id, phone, "OPEN", False,

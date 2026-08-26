@@ -173,6 +173,22 @@ async def process_normalized_whatsapp_message(
             },
         )
 
+    # Pilot V1 stops here. The historical Cargo intake engine below remains in
+    # the codebase for a future product profile, but it must not mutate Pilot
+    # dossiers or queue a second client reply. Meta's signed webhook invokes
+    # the controlled Pilot Inbox AI policy after this persistence step.
+    return {
+        "status": "stored",
+        "org_id": org_id,
+        "client_id": str(client_id),
+        "dossier_id": str(dossier_id) if dossier_id else None,
+        "cancelled_followups": cancelled_followups,
+        "linked_followup": bool(linked_followup),
+        "linked_broadcast": bool(linked_broadcast),
+        "shipment_id": None,
+        "normalized_message": normalized_message.model_dump(mode="json"),
+    }
+
     understanding = understand_message(normalized_message.text_body)
     intent = understanding["intent"]
 

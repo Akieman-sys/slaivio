@@ -1,6 +1,7 @@
 import json
+import asyncio
 
-from fastapi import APIRouter, Request, Response, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Request, Response, HTTPException
 from app.core.config import settings
 from app.api.webhook import process_normalized_whatsapp_message
 from app.services.meta_payload import (
@@ -47,6 +48,28 @@ from app.services.meta_webhook_security import validate_meta_signature
 router = APIRouter()
 
 
+async def _run_pilot_inbox_ai(org_id, phone, text, role, event_key):
+    try:
+        result = await asyncio.to_thread(
+            maybe_auto_reply_to_inbound_message,
+            org_id, phone, text, role, event_key,
+        )
+    except Exception:
+        logger.exception("pilot_inbox_ai_background_failure")
+        return
+    if result.get("status") == "sent":
+        await manager.broadcast_to_org(
+            org_id,
+            {
+                "event": "NEW_MESSAGE",
+                "org_id": org_id,
+                "phone": phone,
+                "message": result["message"].get("text_body"),
+                "direction": "outbound",
+            },
+        )
+
+
 @router.get("/webhook/meta/whatsapp")
 async def verify_meta_webhook(request: Request):
     params = request.query_params
@@ -68,7 +91,7 @@ async def verify_meta_webhook(request: Request):
 
 
 @router.post("/webhook/meta/whatsapp")
-async def meta_whatsapp_webhook(request: Request):
+async def meta_whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     raw_body = await request.body()
     if not validate_meta_signature(
         raw_body,
@@ -308,29 +331,19 @@ async def meta_whatsapp_webhook(request: Request):
             phone_number_id=phone_number_id,
         )
 
-    auto_reply_result = maybe_auto_reply_to_inbound_message(
-        org_id=org_id,
-        client_phone=normalized_message.from_phone,
-        inbound_text=normalized_message.text_body,
-        preferred_role=route["number_role"],
+    background_tasks.add_task(
+        _run_pilot_inbox_ai,
+        org_id,
+        normalized_message.from_phone,
+        normalized_message.text_body,
+        route["number_role"],
+        f"whatsapp:{normalized_message.dedupe_key}",
     )
 
-    if auto_reply_result.get("status") == "sent":
-        await manager.broadcast_to_org(
-            org_id,
-            {
-                "event": "NEW_MESSAGE",
-                "org_id": org_id,
-                "phone": normalized_message.from_phone,
-                "message": auto_reply_result["message"].get("text_body"),
-                "direction": "outbound",
-            }
-        )
-
     result["auto_reply"] = {
-        "status": auto_reply_result.get("status"),
-        "reason": auto_reply_result.get("reason"),
-        "decision": auto_reply_result.get("decision"),
+        "status": "queued",
+        "reason": "pilot_inbox_ai_background_task",
+        "decision": None,
     }
 
     return result

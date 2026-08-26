@@ -52,14 +52,14 @@ def test_failed_and_stale_executions_are_recoverable():
     assert "find_client_by_phone(org_id,workflow[\"client_phone\"])" in service
 
 
-def test_internal_and_whatsapp_share_the_conversation_boundary():
+def test_pilot_whatsapp_uses_its_controlled_inbox_boundary():
     orchestrator=(ROOT/"apps/api/app/ai/services/conversation_orchestrator.py").read_text(encoding="utf-8")
     api=(ROOT/"apps/api/app/api/ai_copilot.py").read_text(encoding="utf-8")
     whatsapp=(ROOT/"apps/api/app/ai/services/auto_reply_service.py").read_text(encoding="utf-8")
     assert "def handle_conversation(" in orchestrator
     assert "prepare_operator_message(" in orchestrator
     assert "handle_conversation(" in api
-    assert "handle_conversation(" in whatsapp
+    assert "process_pilot_inbound_ai(" in whatsapp
 
 
 def test_paused_workflow_can_be_resumed_from_the_conversation():

@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import text
 
 from app.db.database import engine
@@ -12,6 +14,12 @@ def create_ai_draft(
     decision: str | None = None,
     manager_id: str | None = None,
     manager_name: str | None = None,
+    source_message_id: str | None = None,
+    source_ids: list[str] | None = None,
+    confidence: float | None = None,
+    risk_level: str = "REVIEW",
+    review_reason: str | None = None,
+    context_snapshot: dict | None = None,
 ):
     with engine.connect() as conn:
         row = conn.execute(
@@ -24,7 +32,13 @@ def create_ai_draft(
                     decision,
                     draft_text,
                     manager_id,
-                    manager_name
+                    manager_name,
+                    source_message_id,
+                    source_ids,
+                    confidence,
+                    risk_level,
+                    review_reason,
+                    context_snapshot
                 )
                 values (
                     :org_id,
@@ -34,7 +48,13 @@ def create_ai_draft(
                     :decision,
                     :draft_text,
                     :manager_id,
-                    :manager_name
+                    :manager_name,
+                    cast(:source_message_id as uuid),
+                    cast(:source_ids as uuid[]),
+                    :confidence,
+                    :risk_level,
+                    :review_reason,
+                    cast(:context_snapshot as jsonb)
                 )
                 returning *
             """),
@@ -47,6 +67,12 @@ def create_ai_draft(
                 "draft_text": draft_text,
                 "manager_id": manager_id,
                 "manager_name": manager_name,
+                "source_message_id": source_message_id,
+                "source_ids": source_ids or [],
+                "confidence": confidence,
+                "risk_level": risk_level,
+                "review_reason": review_reason,
+                "context_snapshot": json.dumps(context_snapshot or {}, default=str),
             },
         ).fetchone()
 
@@ -54,7 +80,7 @@ def create_ai_draft(
         return dict(row._mapping)
 
 
-def mark_ai_draft_used(draft_id: str):
+def mark_ai_draft_used(draft_id: str, org_id: str):
     with engine.connect() as conn:
         row = conn.execute(
             text("""
@@ -63,10 +89,12 @@ def mark_ai_draft_used(draft_id: str):
                     status = 'USED',
                     updated_at = now()
                 where id = :draft_id
+                  and org_id = :org_id
                 returning *
             """),
             {
                 "draft_id": draft_id,
+                "org_id": org_id,
             },
         ).fetchone()
 
@@ -81,9 +109,13 @@ def list_ai_drafts(
     with engine.connect() as conn:
         rows = conn.execute(
             text("""
-                select *
-                from ai_draft_responses
-                where org_id = :org_id
+                select draft.*,
+                       coalesce(array(
+                         select entry.title from knowledge_entries entry
+                         where entry.org_id=draft.org_id and entry.id=any(draft.source_ids)
+                       ), '{}') source_titles
+                from ai_draft_responses draft
+                where draft.org_id = :org_id
                   and client_phone = :client_phone
                 order by created_at desc
                 limit 20

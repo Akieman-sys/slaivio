@@ -1,6 +1,39 @@
 import { api } from "@/services/api";
 
 export type InboxView = "waiting" | "open" | "closed";
+export type InboxAIMode = "SUGGESTION_ONLY" | "CONTROLLED_AUTO" | "PAUSED";
+export type InboxAISettings = {
+  enabled: boolean;
+  pilot_response_mode: InboxAIMode;
+  auto_reply_min_confidence: number;
+  pilot_require_published_knowledge: boolean;
+  updated_at: string;
+};
+export type InboxAISuggestion = {
+  status: "ok";
+  mode: InboxAIMode;
+  response_text: string;
+  confidence: number;
+  risk_level: "SAFE" | "REVIEW" | "SENSITIVE";
+  reason: string;
+  eligible_for_auto: boolean;
+  draft: { id: string; draft_text: string };
+  sources: Array<{ id: string; title: string; updated_at?: string | null }>;
+};
+export type StoredInboxAIDraft = {
+  id: string;
+  source_message_id?: string | null;
+  draft_text: string;
+  status: "DRAFT" | "USED";
+  intent?: string | null;
+  decision?: string | null;
+  confidence?: number | null;
+  risk_level: "SAFE" | "REVIEW" | "SENSITIVE";
+  review_reason?: string | null;
+  source_ids: string[];
+  source_titles: string[];
+  created_at: string;
+};
 export type InboxConversation = {
   phone: string;
   last_message_at: string;
@@ -91,6 +124,26 @@ export async function updateInboxState(phone: string, payload: { status: "OPEN" 
   return (await api.patch(`/inbox/conversations/${encodeURIComponent(phone)}/state`, payload)).data;
 }
 
-export async function sendInboxReply(phone: string, message: string) {
-  return (await api.post<{ status: "ok" | "failed"; message?: InboxMessage; error?: string }>(`/inbox/conversations/${encodeURIComponent(phone)}/reply`, { message, idempotency_key: crypto.randomUUID() })).data;
+export async function sendInboxReply(phone: string, message: string, draftId?: string) {
+  return (await api.post<{ status: "ok" | "failed"; message?: InboxMessage; error?: string }>(`/inbox/conversations/${encodeURIComponent(phone)}/reply`, { message, draft_id: draftId, idempotency_key: crypto.randomUUID() })).data;
+}
+
+export async function getInboxAISettings() {
+  return (await api.get<{ settings: InboxAISettings }>("/inbox/ai/settings")).data.settings;
+}
+
+export async function updateInboxAIMode(mode: InboxAIMode) {
+  return (await api.patch<{ settings: InboxAISettings }>("/inbox/ai/settings", { mode })).data.settings;
+}
+
+export async function generateInboxAISuggestion(phone: string) {
+  return (await api.post<InboxAISuggestion>(`/inbox/conversations/${encodeURIComponent(phone)}/ai-draft`, {})).data;
+}
+
+export async function listInboxAIDrafts(phone: string) {
+  return (await api.get<{ drafts: StoredInboxAIDraft[] }>(`/inbox/conversations/${encodeURIComponent(phone)}/ai-drafts`)).data.drafts;
+}
+
+export async function summarizeInboxConversation(phone: string) {
+  return (await api.post<{ status: "ok"; summary: string }>(`/inbox/conversations/${encodeURIComponent(phone)}/ai-summary`, {})).data;
 }

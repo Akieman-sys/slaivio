@@ -120,6 +120,9 @@ def _build_dossier_filters(
     validation_status: str | None,
     payment_status: str | None,
     client_id: str | None,
+    active_only: bool = False,
+    attention_required: bool = False,
+    updated_since_hours: int | None = None,
     archived: bool = False,
 ) -> tuple[str, dict]:
     filters = ["d.org_id = :org_id", "d.archived_at is not null" if archived else "d.archived_at is null"]
@@ -181,6 +184,19 @@ def _build_dossier_filters(
               and relation.archived_at is null
         )""")
         params["client_id"] = client_id
+    if active_only:
+        filters.append("d.status_global not in ('COMPLETED', 'CLOSED', 'CANCELLED')")
+    if attention_required:
+        filters.append("""exists (
+            select 1 from dossier_clients relation
+            where relation.org_id = d.org_id
+              and relation.dossier_id = d.id
+              and relation.archived_at is null
+              and relation.attention_required
+        )""")
+    if updated_since_hours is not None:
+        filters.append("coalesce(d.updated_at, d.created_at) >= now() - (:updated_since_hours * interval '1 hour')")
+        params["updated_since_hours"] = updated_since_hours
 
     return " and ".join(filters), params
 
@@ -195,6 +211,9 @@ def list_dossiers(
     validation_status: str | None = None,
     payment_status: str | None = None,
     client_id: str | None = None,
+    active_only: bool = False,
+    attention_required: bool = False,
+    updated_since_hours: int | None = None,
     page: int = 1,
     page_size: int = 30,
     sort: str = "updated_desc",
@@ -212,6 +231,9 @@ def list_dossiers(
         validation_status=validation_status,
         payment_status=payment_status,
         client_id=client_id,
+        active_only=active_only,
+        attention_required=attention_required,
+        updated_since_hours=updated_since_hours,
         archived=archived,
     )
     order_by = {
@@ -362,7 +384,10 @@ def dossier_stats(org_id: str) -> dict:
                       and attention_dossier.id = relation.dossier_id
                      where relation.org_id = :org_id and relation.archived_at is null
                        and relation.attention_required and attention_dossier.archived_at is null)
-                      dossiers_requiring_attention
+                      dossiers_requiring_attention,
+                    (select count(*)::int from dossiers archived_dossier
+                     where archived_dossier.org_id = :org_id
+                       and archived_dossier.archived_at is not null) archived
                 from dossiers
                 where org_id = :org_id and archived_at is null
             """),
@@ -381,6 +406,7 @@ def dossier_stats(org_id: str) -> dict:
         "client_memberships": 0,
         "clients_requiring_attention": 0,
         "dossiers_requiring_attention": 0,
+        "archived": 0,
     }
 
 

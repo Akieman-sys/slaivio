@@ -25,7 +25,7 @@ export type DossierPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type DossierRecord = {
   id: string;
   org_id: string;
-  client_id: string;
+  client_id: string | null;
   workspace_id?: string | null;
   route_id?: string | null;
   shipping_service_id?: string | null;
@@ -71,6 +71,8 @@ export type DossierRecord = {
   event_count: number;
   package_count: number;
   shipment_count: number;
+  client_count: number;
+  attention_count: number;
   created_at: string;
   updated_at: string | null;
   row_version: number;
@@ -80,6 +82,41 @@ export type DossierRecord = {
   events?: DossierEvent[];
   notifications?: DossierNotification[];
   shipments?: DossierShipment[];
+  clients?: DossierClientRelation[];
+};
+
+export type DossierClientRelation = {
+  relation_id: string;
+  client_id: string;
+  client_reference: string;
+  dossier_client_reference?: string | null;
+  display_name: string;
+  name?: string | null;
+  company_name?: string | null;
+  phone?: string | null;
+  whatsapp_phone?: string | null;
+  email?: string | null;
+  customer_type?: string | null;
+  relationship_role?: string | null;
+  situation?: string | null;
+  status_in_dossier?: string | null;
+  attention_required: boolean;
+  attention_reason?: string | null;
+  last_updated_at: string;
+  row_version: number;
+  archived_at?: string | null;
+};
+
+export type DossierClientSearchResult = {
+  id: string;
+  client_reference: string;
+  display_name: string;
+  phone?: string | null;
+  whatsapp_phone?: string | null;
+  email?: string | null;
+  customer_type?: string | null;
+  lifecycle_status?: string | null;
+  already_attached?: boolean;
 };
 
 export type DossierStats = {
@@ -92,10 +129,15 @@ export type DossierStats = {
   delivered: number;
   payment_pending: number;
   total_value: number;
+  client_memberships: number;
+  clients_requiring_attention: number;
+  dossiers_requiring_attention: number;
+  archived: number;
 };
 
 export type DossierPayload = Partial<Omit<DossierRecord, "id" | "org_id" | "dossier_reference" | "message_count" | "event_count" | "package_count" | "shipment_count" | "created_at" | "updated_at" | "messages" | "events" | "notifications" | "shipments">> & {
-  client_id: string;
+  client_id?: string | null;
+  idempotency_key?: string;
   workspace_id?: string | null;
   route_id?: string | null;
   shipping_service_id?: string | null;
@@ -203,6 +245,9 @@ export async function listDossiers(params: {
   validation_status?: DossierValidationStatus | "";
   payment_status?: DossierPaymentStatus | "";
   client_id?: string;
+  active_only?: boolean;
+  attention_required?: boolean;
+  updated_since_hours?: number;
   page?: number;
   page_size?: number;
   sort?: string;
@@ -242,6 +287,19 @@ export async function getDossierStats() {
 
 export async function getDossierTimeline(id: string) {
   return (await api.get<{ status: "ok"; items: DossierTimelineEvent[] }>(`/dossiers/${id}/timeline`)).data.items;
+}
+
+export async function listDossierClients(id: string, includeArchived = false) {
+  return (await api.get<{ status: "ok"; items: DossierClientRelation[] }>(
+    `/dossiers/${id}/clients`, { params: { include_archived: includeArchived } },
+  )).data.items;
+}
+
+export async function searchDossierClients(query: string, dossierId?: string) {
+  return (await api.get<{ status: "ok"; items: DossierClientSearchResult[] }>(
+    "/dossiers/client-search",
+    { params: { q: query, dossier_id: dossierId } },
+  )).data.items;
 }
 
 export async function listDossierDocuments(id: string) {

@@ -4,6 +4,7 @@ from pydantic import BaseModel,Field
 from app.core.tenant_context import get_current_tenant
 from app.core.permissions import require_permission
 from app.db import followup_repository as repo
+from app.db import pilot_followup_repository as pilot_repo
 
 router=APIRouter(prefix='/followups',tags=['followups'])
 def actor(t):return str(t.get('user_id') or '')
@@ -19,6 +20,17 @@ class PromiseCreate(BaseModel):due_at:str;note:str|None=None
 class TemplateSave(BaseModel):name:str;category:str;channel:str='WHATSAPP';language:str='fr';body:str;meta_template_name:str|None=None;meta_status:str='DRAFT';consent_type:str='OPERATIONAL';variables:list[str]=[]
 class ViewSave(BaseModel):name:str;filters:dict[str,Any]={}
 class BulkMutation(BaseModel):ids:list[str]=Field(min_length=1,max_length=500);action:str=Field(pattern='^(PAUSE|RESUME|CANCEL|COMPLETE|ESCALATE)$')
+class PilotAudience(BaseModel):
+ client_ids:list[str]=Field(default_factory=list,max_length=500)
+ dossier_ids:list[str]=Field(default_factory=list,max_length=100)
+ excluded_client_ids:list[str]=Field(default_factory=list,max_length=500)
+class PilotDraftCreate(PilotAudience):
+ title:str=Field(min_length=2,max_length=160)
+ message:str=Field(min_length=2,max_length=2000)
+ idempotency_key:str|None=Field(default=None,max_length=180)
+class PilotConfirm(BaseModel):expected_version:int=Field(ge=1)
+class PilotSavedMessage(BaseModel):name:str=Field(min_length=2,max_length=100);body:str=Field(min_length=2,max_length=2000)
+class PilotMessageSuggestion(BaseModel):purpose:str=Field(min_length=2,max_length=500);current_message:str|None=Field(default=None,max_length=2000)
 
 @router.get('',dependencies=[Depends(require_permission('followups.read'))])
 def index(q:str|None=None,status:str|None=None,followup_type:str|None=None,channel:str|None=None,priority:str|None=None,responsible_id:str|None=None,date_scope:str|None=None,page:int=Query(1,ge=1),page_size:int=Query(40,ge=1,le=100),tenant=Depends(get_current_tenant)):return {'status':'ok',**repo.followup_dashboard(tenant['org_id'],q=q,status=status,followup_type=followup_type,channel=channel,priority=priority,responsible_id=responsible_id,date_scope=date_scope,page=page,page_size=page_size)}
@@ -49,6 +61,43 @@ def settings(body:dict[str,Any],tenant=Depends(get_current_tenant)):return {'sta
 def bulk(body:BulkMutation,tenant=Depends(get_current_tenant)):return {'status':'ok','items':repo.bulk_action(tenant['org_id'],actor(tenant),body.ids,body.action)}
 @router.get('/export/all',dependencies=[Depends(require_permission('followups.read'))])
 def export_all(status:str|None=None,followup_type:str|None=None,tenant=Depends(get_current_tenant)):return {'status':'ok','items':repo.export_all(tenant['org_id'],{'status':status,'followup_type':followup_type})}
+
+@router.get('/pilot',dependencies=[Depends(require_permission('pilot.followups.read'))])
+def pilot_index(view:str|None=None,q:str|None=None,tenant=Depends(get_current_tenant)):
+ return {'status':'ok',**pilot_repo.list_batches(tenant['org_id'],view=view,q=q)}
+@router.get('/pilot/options',dependencies=[Depends(require_permission('pilot.followups.read'))])
+def pilot_options(q:str|None=Query(default=None,max_length=120),tenant=Depends(get_current_tenant)):
+ return {'status':'ok',**pilot_repo.options(tenant['org_id'],q=q)}
+@router.post('/pilot/preview',dependencies=[Depends(require_permission('pilot.followups.manage'))])
+def pilot_preview(body:PilotAudience,tenant=Depends(get_current_tenant)):
+ return {'status':'ok',**pilot_repo.preview(tenant['org_id'],body.client_ids,body.dossier_ids,body.excluded_client_ids)}
+@router.post('/pilot/drafts',status_code=201,dependencies=[Depends(require_permission('pilot.followups.manage'))])
+def pilot_draft_create(body:PilotDraftCreate,tenant=Depends(get_current_tenant)):
+ batch,replayed=pilot_repo.save_draft(tenant['org_id'],actor(tenant),body.model_dump())
+ return {'status':'ok','batch':batch,'replayed':replayed}
+@router.post('/pilot/{batch_id}/confirm',dependencies=[Depends(require_permission('pilot.followups.manage'))])
+def pilot_confirm(batch_id:str,body:PilotConfirm,tenant=Depends(get_current_tenant)):
+ try: batch=pilot_repo.confirm(tenant['org_id'],batch_id,actor(tenant),body.expected_version)
+ except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+ if not batch:raise HTTPException(409,'followup_draft_was_modified_or_confirmed')
+ return {'status':'ok','batch':batch}
+@router.post('/pilot/{batch_id}/send',dependencies=[Depends(require_permission('pilot.followups.send'))])
+def pilot_send(batch_id:str,tenant=Depends(get_current_tenant)):
+ try: result=pilot_repo.send(tenant['org_id'],batch_id,actor(tenant))
+ except ValueError as exc: raise HTTPException(409,str(exc)) from exc
+ if not result:raise HTTPException(404,'pilot_followup_not_found')
+ return {'status':'ok','result':result}
+@router.get('/pilot/{batch_id}',dependencies=[Depends(require_permission('pilot.followups.read'))])
+def pilot_detail(batch_id:str,tenant=Depends(get_current_tenant)):
+ batch=pilot_repo.detail(tenant['org_id'],batch_id)
+ if not batch:raise HTTPException(404,'pilot_followup_not_found')
+ return {'status':'ok','batch':batch}
+@router.post('/pilot/saved-messages',status_code=201,dependencies=[Depends(require_permission('pilot.followups.manage'))])
+def pilot_message_save(body:PilotSavedMessage,tenant=Depends(get_current_tenant)):
+ return {'status':'ok','message':pilot_repo.save_message(tenant['org_id'],actor(tenant),body.name,body.body)}
+@router.post('/pilot/suggest-message',dependencies=[Depends(require_permission('pilot.followups.manage'))])
+def pilot_message_suggest(body:PilotMessageSuggestion,tenant=Depends(get_current_tenant)):
+ return {'status':'ok',**pilot_repo.suggest_message(tenant['org_id'],body.purpose,body.current_message)}
 @router.get('/{item_id}',dependencies=[Depends(require_permission('followups.read'))])
 def detail(item_id:str,tenant=Depends(get_current_tenant)):
  item=repo.followup_detail(tenant['org_id'],item_id)

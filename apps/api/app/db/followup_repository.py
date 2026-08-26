@@ -234,7 +234,9 @@ def create_manual_followup(org_id,actor,data):
     reference=f"FUP-{__import__('datetime').datetime.now():%Y}-{uuid4().hex[:8].upper()}";idem=data.pop('idempotency_key',None) or f'manual:{uuid4()}'
     with engine.begin() as c:
         row=c.execute(text("""insert into followup_tasks(org_id,workspace_id,client_id,dossier_id,followup_type,reference,subject_type,subject_id,subject_reference,reason,channel,message,due_at,priority,responsible_id,responsible_name,amount_context,currency,consent_type,status,idempotency_key,condition_snapshot)
-         values(:o,cast(:workspace_id as uuid),cast(:client_id as uuid),cast(:dossier_id as uuid),:followup_type,:reference,:subject_type,cast(:subject_id as uuid),:subject_reference,:reason,:channel,:message,:due_at,:priority,:responsible_id,:responsible_name,:amount_context,:currency,:consent_type,'SCHEDULED',:idem,cast(:snapshot as jsonb)) returning *"""),{"o":org_id,"reference":reference,"idem":idem,"snapshot":json.dumps(data.get('condition_snapshot') or {}),**data}).mappings().one();_event(c,org_id,row['id'],'CREATED',actor,dict(row));return dict(row)
+         values(:o,cast(:workspace_id as uuid),cast(:client_id as uuid),cast(:dossier_id as uuid),:followup_type,:reference,:subject_type,cast(:subject_id as uuid),:subject_reference,:reason,:channel,:message,:due_at,:priority,:responsible_id,:responsible_name,:amount_context,:currency,:consent_type,'SCHEDULED',:idem,cast(:snapshot as jsonb))
+         on conflict(org_id,idempotency_key) where idempotency_key is not null
+         do update set idempotency_key=excluded.idempotency_key returning *"""),{"o":org_id,"reference":reference,"idem":idem,"snapshot":json.dumps(data.get('condition_snapshot') or {}),**data}).mappings().one();_event(c,org_id,row['id'],'CREATED',actor,dict(row));return dict(row)
 
 def mutate_followup(org_id,item_id,actor,action,version,due_at=None,reason=None,responsible_id=None,responsible_name=None):
     transitions={'PAUSE':'PAUSED','RESUME':'SCHEDULED','CANCEL':'CANCELLED','COMPLETE':'COMPLETED','ESCALATE':'ESCALATED','RESPOND':'RESPONDED'}
@@ -324,6 +326,10 @@ def link_whatsapp_response(org_id,client_id,dossier_id,message_id,body):
         c.execute(text("insert into followup_responses(org_id,followup_id,channel,message_id,body,classification,confidence,requires_review) values(:o,:f,'WHATSAPP',:m,:body,:class,1,:review) on conflict(org_id,message_id) do nothing"),{'o':org_id,'f':item['id'],'m':message_id,'body':body or '', 'class':classification,'review':requires})
         status='ESCALATED' if requires else 'RESPONDED'
         c.execute(text("update followup_tasks set status=:s,responded_at=now(),response_classification=:class,escalated_at=case when :s='ESCALATED' then now() else escalated_at end,row_version=row_version+1,updated_at=now() where id=:id"),{'s':status,'class':classification,'id':item['id']})
+        if item.get('pilot_recipient_id'):
+            c.execute(text("""update pilot_followup_recipients
+              set status='RESPONDED',replied_at=now(),updated_at=now()
+              where org_id=:o and id=:recipient"""),{'o':org_id,'recipient':item['pilot_recipient_id']})
         if classification=='UNSUBSCRIBE':c.execute(text("insert into followup_stop_list(org_id,client_id,channel,reason,created_by) values(:o,:client,'WHATSAPP','CLIENT_REQUEST','webhook') on conflict do nothing"),{'o':org_id,'client':client_id})
         _event(c,org_id,item['id'],'WHATSAPP_RESPONSE',None,{'classification':classification,'requires_review':requires});return {'followup_id':str(item['id']),'classification':classification,'requires_review':requires}
 

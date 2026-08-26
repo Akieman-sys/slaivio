@@ -62,6 +62,17 @@ def test_production_accepts_a_complete_secure_contract() -> None:
     assert settings.is_deployed is True
 
 
+def test_legacy_meta_configuration_id_remains_compatible() -> None:
+    settings = settings_factory(
+        _env_file=None,
+        app_env="test",
+        database_url="postgresql+psycopg2://user:pass@localhost:5432/test",
+        **{"META_CONFIGURATION_ID": "legacy-render-config-id"},
+    )
+
+    assert settings.meta_embedded_signup_config_id == "legacy-render-config-id"
+
+
 def test_production_rejects_an_invalid_quarantine_key() -> None:
     with pytest.raises(ValidationError, match="valid Fernet key"):
         settings_factory(

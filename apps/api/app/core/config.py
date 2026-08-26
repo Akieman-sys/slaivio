@@ -1,6 +1,6 @@
 from typing import Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from cryptography.fernet import Fernet
 
@@ -47,7 +47,14 @@ class Settings(BaseSettings):
     meta_wa_api_version: str = "v22.0"
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
-    meta_embedded_signup_config_id: str | None = None
+    meta_embedded_signup_config_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "meta_embedded_signup_config_id",
+            "META_EMBEDDED_SIGNUP_CONFIG_ID",
+            "META_CONFIGURATION_ID",
+        ),
+    )
     meta_credentials_encryption_key: str | None = None
     meta_redirect_uri: str | None = None
     meta_oauth_frontend_redirect_uri: str | None = None

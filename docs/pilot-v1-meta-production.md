@@ -21,12 +21,12 @@ Conserver le **Configuration ID** obtenu. Ce n’est pas le WABA ID d’une agen
 Dans la configuration WhatsApp de l’application Meta :
 
 - URL de callback : `https://<API-PUBLIQUE>/webhook/meta/whatsapp`
-- jeton de vérification : la même valeur que `META_WA_VERIFY_TOKEN` sur Railway ;
+- jeton de vérification : la même valeur que `META_WA_VERIFY_TOKEN` sur Render ;
 - champ minimal : `messages`.
 
 Après la connexion d’une agence, le backend abonne automatiquement l’application au WABA choisi. Le contrôle de préparation ne considère WhatsApp comme prêt que si le numéro, le compte et l’abonnement webhook sont tous actifs.
 
-## 3. Variables du service API Railway
+## 3. Variables du service API Render
 
 ```text
 APP_ENV=production
@@ -39,6 +39,8 @@ META_CREDENTIALS_ENCRYPTION_KEY=<CLE-FERNET-DEDIEE-AUX-JETONS-META>
 META_WA_VERIFY_TOKEN=<SECRET-ALEATOIRE-AU-MOINS-24-CARACTERES>
 META_WA_API_VERSION=v22.0
 ```
+
+Les déploiements existants qui utilisent `META_CONFIGURATION_ID` restent compatibles. Le nom officiel pour les nouvelles installations est `META_EMBEDDED_SIGNUP_CONFIG_ID` ; il ne faut pas définir les deux avec des valeurs différentes.
 
 `META_WA_ACCESS_TOKEN` n’est pas nécessaire pour une agence connectée avec Embedded Signup. Il reste seulement un secours pour les anciennes connexions techniques.
 

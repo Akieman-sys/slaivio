@@ -49,7 +49,7 @@ from app.db.dossier_alert_repository import (
     refresh_dossier_alerts,
 )
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
-from app.clients.repository import CLIENT_SOURCES, CLIENT_STATUSES, CLIENT_TYPES
+from app.clients.repository import CLIENT_STATUSES, CLIENT_TYPES
 from app.db.dossier_client_repository import (
     DuplicateDossierClientError,
     archive_dossier_client,
@@ -223,28 +223,21 @@ class DossierClientRelationPayload(BaseModel):
 
 class DossierClientCreatePayload(DossierClientRelationPayload):
     name: str | None = Field(default=None, max_length=180)
-    display_name: str | None = Field(default=None, max_length=180)
-    company_name: str | None = Field(default=None, max_length=180)
     phone: str | None = Field(default=None, max_length=40)
-    whatsapp_phone: str | None = Field(default=None, max_length=40)
     email: str | None = Field(default=None, max_length=200)
     customer_type: str = "individual"
     lifecycle_status: str = "lead"
-    source: str = "manual"
-    preferred_language: str = Field(default="FR", min_length=2, max_length=10)
 
     @model_validator(mode="after")
     def validate_client(self):
-        if not any((self.name, self.display_name, self.company_name)):
+        if not (self.name or "").strip():
             raise ValueError("client_identity_required")
-        if not any((self.phone, self.whatsapp_phone, self.email)):
+        if not (self.phone or "").strip():
             raise ValueError("client_contact_required")
         if self.customer_type not in CLIENT_TYPES:
             raise ValueError("invalid_customer_type")
         if self.lifecycle_status not in CLIENT_STATUSES:
             raise ValueError("invalid_lifecycle_status")
-        if self.source not in CLIENT_SOURCES:
-            raise ValueError("invalid_client_source")
         return self
 
 

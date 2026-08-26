@@ -51,3 +51,13 @@ def test_client_management_stays_inside_the_pilot_dossier():
     assert "Déplacer vers un autre dossier" in page
     assert "UUID" not in page
 
+
+def test_client_creation_uses_only_the_fields_confirmed_by_the_dg():
+    page = read("apps/web/dashboard/components/dossiers/dossier-detail-page.tsx")
+    form = page.split("function NewClientForm", 1)[1].split("function EditClientForm", 1)[0]
+
+    for field in ('name="name"', 'name="phone"', 'name="email"', 'name="customer_type"', 'name="lifecycle_status"'):
+        assert field in form
+    for unconfirmed_field in ('name="company_name"', 'name="whatsapp_phone"', 'name="preferred_language"', 'name="situation"'):
+        assert unconfirmed_field not in form
+    assert "Email — facultatif" in form

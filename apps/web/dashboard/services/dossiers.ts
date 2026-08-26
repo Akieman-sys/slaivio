@@ -335,16 +335,10 @@ export async function attachClientToDossier(dossierId: string, clientId: string)
 
 export type NewDossierClientPayload = {
   name?: string | null;
-  company_name?: string | null;
   phone?: string | null;
-  whatsapp_phone?: string | null;
   email?: string | null;
   customer_type?: string | null;
   lifecycle_status?: string | null;
-  preferred_language?: string | null;
-  situation?: string | null;
-  attention_required?: boolean;
-  attention_reason?: string | null;
 };
 
 export async function createClientInDossier(dossierId: string, payload: NewDossierClientPayload) {

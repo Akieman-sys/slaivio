@@ -7,6 +7,9 @@ from cryptography.fernet import Fernet
 
 Environment = Literal["development", "test", "staging", "production"]
 RuntimeRole = Literal["api", "cron", "worker"]
+WhatsAppProvider = Literal["meta", "wazzap", "mock"]
+
+
 class Settings(BaseSettings):
     app_env: Environment = "development"
     app_runtime: RuntimeRole = "api"
@@ -42,6 +45,7 @@ class Settings(BaseSettings):
 
     manager_api_key: str = "change-me-dev-key"
 
+    whatsapp_provider: WhatsAppProvider = "meta"
     meta_wa_access_token: str | None = None
     meta_wa_verify_token: str = "slaivo_verify_token_secret"
     meta_wa_api_version: str = "v22.0"
@@ -58,6 +62,13 @@ class Settings(BaseSettings):
     meta_credentials_encryption_key: str | None = None
     meta_redirect_uri: str | None = None
     meta_oauth_frontend_redirect_uri: str | None = None
+    wazzap_api_base_url: str = "https://api21.wazzap.ai/api/wazzap"
+    wazzap_api_key: str | None = None
+    wazzap_agent_id: str | None = None
+    wazzap_organization_id: str | None = None
+    wazzap_webhook_secret: str | None = None
+    wazzap_phone_number: str | None = None
+    wazzap_verified_name: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -106,22 +117,34 @@ class Settings(BaseSettings):
                 Fernet(self.platform_quarantine_encryption_key.encode("ascii"))
             except (ValueError, UnicodeEncodeError):
                 errors.append("PLATFORM_QUARANTINE_ENCRYPTION_KEY must be a valid Fernet key")
-        if self.meta_wa_verify_token == "slaivo_verify_token_secret" or len(
-            self.meta_wa_verify_token
-        ) < 24:
-            errors.append("META_WA_VERIFY_TOKEN must be a generated secret")
         if not (self.clerk_issuer_url or self.clerk_jwks_url):
             errors.append("CLERK_ISSUER_URL or CLERK_JWKS_URL is required")
         if not self.clerk_webhook_secret:
             errors.append("CLERK_WEBHOOK_SECRET is required")
         if not self.public_base_url or not self.public_base_url.startswith("https://"):
             errors.append("PUBLIC_BASE_URL must be an HTTPS URL")
-        if not self.meta_app_secret:
-            errors.append("META_APP_SECRET is required")
-        if not self.meta_app_id:
-            errors.append("META_APP_ID is required")
-        if not self.meta_embedded_signup_config_id:
-            errors.append("META_EMBEDDED_SIGNUP_CONFIG_ID is required")
+        if self.whatsapp_provider == "meta":
+            if self.meta_wa_verify_token == "slaivo_verify_token_secret" or len(
+                self.meta_wa_verify_token
+            ) < 24:
+                errors.append("META_WA_VERIFY_TOKEN must be a generated secret")
+            if not self.meta_app_secret:
+                errors.append("META_APP_SECRET is required")
+            if not self.meta_app_id:
+                errors.append("META_APP_ID is required")
+            if not self.meta_embedded_signup_config_id:
+                errors.append("META_EMBEDDED_SIGNUP_CONFIG_ID is required")
+        elif self.whatsapp_provider == "wazzap":
+            if not self.wazzap_api_key:
+                errors.append("WAZZAP_API_KEY is required")
+            if not self.wazzap_agent_id:
+                errors.append("WAZZAP_AGENT_ID is required")
+            if not self.wazzap_webhook_secret:
+                errors.append("WAZZAP_WEBHOOK_SECRET is required")
+            if not self.wazzap_phone_number:
+                errors.append("WAZZAP_PHONE_NUMBER is required")
+        else:
+            errors.append("WHATSAPP_PROVIDER=mock is forbidden in deployed environments")
         if not self.meta_credentials_encryption_key:
             errors.append("META_CREDENTIALS_ENCRYPTION_KEY is required")
         else:

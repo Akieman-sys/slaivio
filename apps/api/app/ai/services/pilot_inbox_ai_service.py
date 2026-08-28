@@ -253,10 +253,11 @@ def process_pilot_inbound_ai(
         return {**prepared, "status": "failed", "reason": "no_whatsapp_sender_available"}
 
     number = route["number"]
+    provider_name = str(number.get("provider") or "meta").upper()
     outbound = create_outbound_message(
         org_id=org_id, to_phone=client_phone,
         from_phone=number.get("display_phone_number"), text_body=prepared["response_text"],
-        provider="META", provider_phone_number_id=number.get("phone_number_id"),
+        provider=provider_name, provider_phone_number_id=number.get("phone_number_id"),
         whatsapp_number_id=str(number["id"]) if number.get("id") else None,
         waba_id=number.get("waba_id"), number_role=number.get("number_role"),
         send_status="PENDING", dedupe_key=f"pilot-ai:{org_id}:{event_key}",

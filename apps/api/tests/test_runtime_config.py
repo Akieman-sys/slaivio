@@ -37,6 +37,8 @@ def test_production_api_keeps_full_security_contract():
         "followup_recovery.py",
         "knowledge_maintenance.py",
         "tracking_alerts.py",
+        "wazzap_smoke_test.py",
+        "wazzap_webhooks.py",
     ],
 )
 def test_cron_entrypoint_sets_runtime_before_application_imports(entrypoint: str):

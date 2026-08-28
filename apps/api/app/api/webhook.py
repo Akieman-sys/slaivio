@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi import HTTPException
 from app.models.message import NormalizedMessage
-from app.services.deduplication import is_duplicate, mark_as_seen
 from app.services.understanding_orchestrator import understand_message
 from app.services.reply_generator import generate_reply
 from app.services.business_action_engine import decide_business_action
@@ -91,15 +90,6 @@ async def process_normalized_whatsapp_message(
     if not org_id:
         raise ValueError("A verified organization is required before processing a message")
 
-    if is_duplicate(normalized_message.dedupe_key):
-        return {
-            "status": "duplicate",
-            "message": "Message already processed",
-            "dedupe_key": normalized_message.dedupe_key,
-        }
-
-    mark_as_seen(normalized_message.dedupe_key)
-
     client_id = get_or_create_client(
         org_id=org_id,
         phone=normalized_message.from_phone,
@@ -110,7 +100,7 @@ async def process_normalized_whatsapp_message(
         client_id=client_id,
     )
 
-    create_message(
+    created_message = create_message(
         org_id=org_id,
         dossier_id=str(dossier_id),
         client_id=str(client_id),
@@ -130,6 +120,15 @@ async def process_normalized_whatsapp_message(
         number_role=number_role,
     )
 
+    # PostgreSQL is the durable idempotency authority. In-memory deduplication
+    # can lose messages after a process restart or suppress a valid retry when
+    # persistence fails midway through processing.
+    if not created_message:
+        return {
+            "status": "duplicate",
+            "message": "Message already processed",
+            "dedupe_key": normalized_message.dedupe_key,
+        }
 
     insert_raw_message(
         org_id=org_id,
@@ -179,6 +178,7 @@ async def process_normalized_whatsapp_message(
     # the controlled Pilot Inbox AI policy after this persistence step.
     return {
         "status": "stored",
+        "message_id": str(created_message["id"]),
         "org_id": org_id,
         "client_id": str(client_id),
         "dossier_id": str(dossier_id) if dossier_id else None,

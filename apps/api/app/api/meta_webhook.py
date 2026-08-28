@@ -1,5 +1,4 @@
 import json
-import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response, HTTPException
 from app.core.config import settings
@@ -29,9 +28,7 @@ from app.db.whatsapp_delivery_repository import (
 )
 from app.core.websocket_manager import manager
 from app.core.logger import logger
-from app.ai.services.auto_reply_service import (
-    maybe_auto_reply_to_inbound_message,
-)
+from app.services.pilot_inbound_ai_dispatch import run_pilot_inbox_ai
 
 from app.db.webhook_idempotency_repository import (
     claim_event,
@@ -46,28 +43,6 @@ from app.services.meta_webhook_security import validate_meta_signature
 
 
 router = APIRouter()
-
-
-async def _run_pilot_inbox_ai(org_id, phone, text, role, event_key):
-    try:
-        result = await asyncio.to_thread(
-            maybe_auto_reply_to_inbound_message,
-            org_id, phone, text, role, event_key,
-        )
-    except Exception:
-        logger.exception("pilot_inbox_ai_background_failure")
-        return
-    if result.get("status") == "sent":
-        await manager.broadcast_to_org(
-            org_id,
-            {
-                "event": "NEW_MESSAGE",
-                "org_id": org_id,
-                "phone": phone,
-                "message": result["message"].get("text_body"),
-                "direction": "outbound",
-            },
-        )
 
 
 @router.get("/webhook/meta/whatsapp")
@@ -307,6 +282,10 @@ async def meta_whatsapp_webhook(request: Request, background_tasks: BackgroundTa
         number_role=route["number_role"],
     )
 
+    if result.get("status") == "duplicate":
+        logger.info("meta_webhook_duplicate_message:%s", event_key)
+        return result
+
     await manager.broadcast_to_org(
         org_id,
         {
@@ -332,7 +311,7 @@ async def meta_whatsapp_webhook(request: Request, background_tasks: BackgroundTa
         )
 
     background_tasks.add_task(
-        _run_pilot_inbox_ai,
+        run_pilot_inbox_ai,
         org_id,
         normalized_message.from_phone,
         normalized_message.text_body,

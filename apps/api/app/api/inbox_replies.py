@@ -58,13 +58,14 @@ async def send_reply(
 
     number = route["number"]
     whatsapp_number_id = number.get("id")
+    provider_name = str(number.get("provider") or "meta").upper()
 
     outbound_message = create_outbound_message(
         org_id=org_id,
         to_phone=phone,
         from_phone=number.get("display_phone_number"),
         text_body=message_text,
-        provider="META",
+        provider=provider_name,
         provider_phone_number_id=number.get("phone_number_id"),
         whatsapp_number_id=(
             str(whatsapp_number_id)

@@ -31,4 +31,12 @@ def reveal_access_token(row: dict | None) -> dict | None:
             result["access_token_encrypted"].encode("ascii")
         ).decode("utf-8")
     result.pop("access_token_encrypted", None)
+    if not result.get("webhook_secret") and result.get("webhook_secret_encrypted"):
+        cipher = _cipher()
+        if not cipher:
+            raise ValueError("META_CREDENTIALS_ENCRYPTION_KEY is missing")
+        result["webhook_secret"] = cipher.decrypt(
+            result["webhook_secret_encrypted"].encode("ascii")
+        ).decode("utf-8")
+    result.pop("webhook_secret_encrypted", None)
     return result

@@ -10,17 +10,20 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         self,
         org_id: str | None = None,
         preferred_role: str | None = None,
+        number: dict | None = None,
     ):
         self.api_version = settings.meta_wa_api_version
         route = resolve_outbound_number(
             org_id=org_id,
             preferred_role=preferred_role,
-        ) if org_id else {
+        ) if org_id and number is None else {
             "resolved": False,
         }
 
-        if route["resolved"]:
-            number = route["number"]
+        if route["resolved"] or number is not None:
+            number = number or route["number"]
+            if str(number.get("provider", "meta")).lower() != "meta":
+                raise ValueError("Configured WhatsApp number is not a Meta number")
             self.phone_number_id = number["phone_number_id"]
             self.access_token = number.get("access_token") or settings.meta_wa_access_token
 

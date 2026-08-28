@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import text
 
 from app.db.database import engine
@@ -22,11 +24,15 @@ def upsert_whatsapp_number(
     messaging_limit_tier: str | None = None,
     is_default: bool = False,
     access_token: str | None = None,
+    provider_organization_id: str | None = None,
+    webhook_secret: str | None = None,
+    provider_metadata: dict | None = None,
 ):
     if not phone_number_id:
         raise ValueError("phone_number_id is required")
 
     plain_token, encrypted_token = token_for_storage(access_token)
+    _, encrypted_webhook_secret = token_for_storage(webhook_secret)
     with engine.connect() as conn:
         if is_default:
             conn.execute(
@@ -59,6 +65,9 @@ def upsert_whatsapp_number(
                     is_default,
                     access_token,
                     access_token_encrypted,
+                    provider_organization_id,
+                    webhook_secret_encrypted,
+                    provider_metadata,
                     connected_at,
                     last_sync_at
                 )
@@ -81,12 +90,16 @@ def upsert_whatsapp_number(
                     :is_default,
                     :access_token,
                     :access_token_encrypted,
+                    :provider_organization_id,
+                    :webhook_secret_encrypted,
+                    cast(:provider_metadata as jsonb),
                     now(),
                     now()
                 )
                 on conflict (org_id, phone_number_id)
                 do update set
                     whatsapp_account_id = excluded.whatsapp_account_id,
+                    provider = excluded.provider,
                     business_id = excluded.business_id,
                     waba_id = excluded.waba_id,
                     display_phone_number = excluded.display_phone_number,
@@ -101,6 +114,9 @@ def upsert_whatsapp_number(
                     is_default = excluded.is_default,
                     access_token = excluded.access_token,
                     access_token_encrypted = excluded.access_token_encrypted,
+                    provider_organization_id = excluded.provider_organization_id,
+                    webhook_secret_encrypted = excluded.webhook_secret_encrypted,
+                    provider_metadata = excluded.provider_metadata,
                     last_sync_at = now(),
                     updated_at = now()
                 returning *
@@ -124,6 +140,9 @@ def upsert_whatsapp_number(
                 "is_default": is_default,
                 "access_token": plain_token,
                 "access_token_encrypted": encrypted_token,
+                "provider_organization_id": provider_organization_id,
+                "webhook_secret_encrypted": encrypted_webhook_secret,
+                "provider_metadata": json.dumps(provider_metadata or {}),
             },
         ).fetchone()
 

@@ -7,6 +7,7 @@ from app.core.permissions import require_permission
 from app.core.tenant_context import get_current_tenant
 from app.organization_admin import repository as repo
 from app.organization_admin import pilot_repository as pilot_repo
+from app.services.wazzap_activation_service import activate_wazzap_number
 
 router=APIRouter(prefix='/organization/admin',tags=['organization-admin'])
 def actor(m):return m.get('user_id') or m.get('id')
@@ -38,6 +39,11 @@ class NumberingSave(BaseModel):
 class DataRequest(BaseModel):request_type:str=Field(pattern=r'^(EXPORT|ARCHIVE_WORKSPACE|DELETE_WORKSPACE|DELETE_ORGANIZATION)$');scope:dict[str,Any]={};confirmation:str|None=None
 class ApiKeyCreate(BaseModel):name:str=Field(min_length=2,max_length=80);scopes:list[str]=Field(min_length=1,max_length=30);expires_at:str|None=None
 class PilotWhatsappNumber(BaseModel):number_id:str=Field(min_length=1,max_length=80)
+class PilotWazzapActivation(BaseModel):
+    phone_number:str=Field(min_length=7,max_length=30)
+    verified_name:str|None=Field(default=None,max_length=120)
+    default_language:str=Field(default='fr',pattern=r'^[a-z]{2}(?:-[A-Z]{2})?$')
+    default_timezone:str=Field(default='Africa/Kinshasa',min_length=3,max_length=80)
 class PilotKnowledgeDefaults(BaseModel):
     default_language:Literal['FR','EN']='FR'
     default_review_days:int=Field(ge=7,le=730)
@@ -50,6 +56,14 @@ def get_pilot_settings(tenant=Depends(get_current_tenant)):
 @router.patch('/pilot/whatsapp-number',dependencies=[Depends(require_permission('pilot.settings.manage'))])
 def patch_pilot_whatsapp_number(body:PilotWhatsappNumber,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
     return {'status':'ok','number':pilot_repo.select_whatsapp_number(tenant['org_id'],actor(manager),body.number_id)}
+
+@router.post('/pilot/wazzap/activate',dependencies=[Depends(require_permission('pilot.settings.manage'))])
+def post_pilot_wazzap_activation(body:PilotWazzapActivation,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    number=activate_wazzap_number(
+        tenant['org_id'],actor(manager),body.phone_number,body.verified_name,
+        body.default_language,body.default_timezone,
+    )
+    return {'status':'ok','number':number}
 
 @router.patch('/pilot/knowledge',dependencies=[Depends(require_permission('pilot.settings.manage'))])
 def patch_pilot_knowledge(body:PilotKnowledgeDefaults,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):

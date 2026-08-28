@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.db.database import engine
 from app.organization_admin import repository as administration
+from app.services.wazzap_activation_service import public_wazzap_configuration
 
 
 def _dict(row):
@@ -43,7 +44,7 @@ def overview(org_id: str) -> dict:
           order by case document_type when 'CLIENT' then 0 else 1 end
         """), {"org_id": org_id}).fetchall()]
         numbers = [dict(row._mapping) for row in conn.execute(text("""
-          select id::text,display_phone_number,verified_name,connection_status,
+          select id::text,provider,display_phone_number,verified_name,connection_status,
                  quality_rating,is_default,last_sync_at
           from organization_whatsapp_numbers
           where org_id=:org_id and is_active=true
@@ -74,6 +75,7 @@ def overview(org_id: str) -> dict:
         "responsible": responsible,
         "numbering": numbering,
         "whatsapp_numbers": numbers,
+        "whatsapp_configuration": public_wazzap_configuration(),
         "ai": ai,
         "knowledge": knowledge,
     }
@@ -114,12 +116,16 @@ def readiness(org_id: str) -> dict:
                and nullif(btrim(numbering.prefix_format), '') is not null) identifiers_ready,
             exists(
               select 1 from organization_whatsapp_numbers number
-              join organization_whatsapp_accounts account
+              left join organization_whatsapp_accounts account
                 on account.id=number.whatsapp_account_id and account.org_id=number.org_id
               where number.org_id=:org_id and number.is_active=true and number.is_default=true
                 and number.connection_status='CONNECTED'
-                and account.connection_status='CONNECTED'
-                and account.webhook_subscription_status='SUBSCRIBED'
+                and (
+                  (upper(number.provider)='WAZZAP' and nullif(btrim(number.phone_number_id),'') is not null)
+                  or (upper(number.provider)='META'
+                    and account.connection_status='CONNECTED'
+                    and account.webhook_subscription_status='SUBSCRIBED')
+                )
             ) whatsapp_ready,
             coalesce((select settings.pilot_response_mode from ai_settings settings
                       where settings.org_id=:org_id), 'PAUSED') ai_mode,
@@ -216,7 +222,7 @@ def record_readiness_review(org_id: str, actor_id: str) -> dict:
 def select_whatsapp_number(org_id: str, actor_id: str, number_id: str) -> dict:
     with engine.begin() as conn:
         selected = conn.execute(text("""
-          select id,display_phone_number,verified_name,connection_status,is_default
+          select id,provider,display_phone_number,verified_name,connection_status,is_default
           from organization_whatsapp_numbers
           where org_id=:org_id and id=:number_id and is_active=true
           for update
@@ -234,7 +240,7 @@ def select_whatsapp_number(org_id: str, actor_id: str, number_id: str) -> dict:
               update organization_whatsapp_numbers
               set is_default=true,number_role='SUPPORT',updated_at=now()
               where org_id=:org_id and id=:number_id
-              returning id::text,display_phone_number,verified_name,connection_status,
+              returning id::text,provider,display_phone_number,verified_name,connection_status,
                         quality_rating,is_default,last_sync_at
             """), {"org_id": org_id, "number_id": number_id}).mappings().one()
             administration._audit(

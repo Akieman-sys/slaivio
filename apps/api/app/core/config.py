@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     wazzap_agent_id: str | None = None
     wazzap_organization_id: str | None = None
     wazzap_webhook_secret: str | None = None
+    wazzap_webhook_skip_signature_check: bool = False
     wazzap_phone_number: str | None = None
     wazzap_verified_name: str | None = None
 

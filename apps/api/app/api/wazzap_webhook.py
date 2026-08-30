@@ -52,12 +52,17 @@ async def wazzap_whatsapp_webhook(
     route = resolve_inbound_route(agent_id) if agent_id else {"resolved": False}
     secret = _resolve_signature_secret(route, agent_id)
 
-    if not validate_wazzap_signature(
+    if not settings.wazzap_webhook_skip_signature_check and not validate_wazzap_signature(
         raw_body,
         request.headers.get("X-Wazzap-Signature"),
         secret,
     ):
         raise HTTPException(status_code=403, detail="invalid_wazzap_signature")
+
+    if settings.wazzap_webhook_skip_signature_check:
+        # Temporary test mode: allow Wazzap webhook traffic without HMAC validation.
+        # Re-enable before production use.
+        pass
 
     if event_type == "webhook.test":
         return {"status": "ok", "type": event_type}

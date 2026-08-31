@@ -7,7 +7,7 @@ from cryptography.fernet import Fernet
 
 Environment = Literal["development", "test", "staging", "production"]
 RuntimeRole = Literal["api", "cron", "worker"]
-WhatsAppProvider = Literal["meta", "wazzap", "mock"]
+WhatsAppProvider = Literal["meta", "wazzap", "qr_linked_device", "mock"]
 
 
 class Settings(BaseSettings):
@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     wazzap_webhook_skip_signature_check: bool = False
     wazzap_phone_number: str | None = None
     wazzap_verified_name: str | None = None
+    whatsapp_qr_gateway_url: str | None = None
+    whatsapp_qr_gateway_shared_secret: str | None = None
+    whatsapp_qr_pilot_max_organizations: int = Field(default=10, ge=1, le=100)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -144,6 +147,13 @@ class Settings(BaseSettings):
                 errors.append("WAZZAP_WEBHOOK_SECRET is required")
             if not self.wazzap_phone_number:
                 errors.append("WAZZAP_PHONE_NUMBER is required")
+        elif self.whatsapp_provider == "qr_linked_device":
+            if not self.whatsapp_qr_gateway_url:
+                errors.append("WHATSAPP_QR_GATEWAY_URL is required")
+            if not self.whatsapp_qr_gateway_shared_secret or len(
+                self.whatsapp_qr_gateway_shared_secret
+            ) < 32:
+                errors.append("WHATSAPP_QR_GATEWAY_SHARED_SECRET must contain at least 32 characters")
         else:
             errors.append("WHATSAPP_PROVIDER=mock is forbidden in deployed environments")
         if not self.meta_credentials_encryption_key:

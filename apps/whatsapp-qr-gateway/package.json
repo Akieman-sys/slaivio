@@ -1,0 +1,19 @@
+{
+  "name": "slaivio-whatsapp-qr-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/crypto.test.js && node test/signature.test.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "6.7.24",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "pino": "^9.9.4",
+    "qrcode": "^1.5.4"
+  }
+}

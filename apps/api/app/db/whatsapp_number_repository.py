@@ -117,6 +117,7 @@ def upsert_whatsapp_number(
                     provider_organization_id = excluded.provider_organization_id,
                     webhook_secret_encrypted = excluded.webhook_secret_encrypted,
                     provider_metadata = excluded.provider_metadata,
+                    is_active = true,
                     last_sync_at = now(),
                     updated_at = now()
                 returning *

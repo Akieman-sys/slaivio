@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Check, Loader2, MessageCircle, RefreshCcw, UserRound } from "lucide-react";
+import { Bot, Check, Loader2, MessageCircle, RefreshCcw, ShieldCheck, Smartphone, UserRound, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
@@ -13,11 +14,15 @@ import { getMetaEmbeddedSignupConfig, launchMetaEmbeddedSignup, onboardMetaWhats
 import {
   getPilotSettings,
   activatePilotWazzap,
+  disconnectPilotWhatsappQR,
+  getPilotWhatsappQRStatus,
   savePilotNumbering,
   savePilotKnowledgeDefaults,
   selectPilotWhatsappNumber,
+  startPilotWhatsappQR,
   updateOrganization,
   type PilotSettingsData,
+  type PilotQRConnection,
 } from "@/services/organization-admin";
 
 const sections = [
@@ -171,10 +176,26 @@ function CommunicationSettings({data,run}:{data:PilotSettingsData;run:(action:()
   const [wazzapPhone,setWazzapPhone]=useState(data.whatsapp_configuration.suggested_phone_number||"");
   const [wazzapName,setWazzapName]=useState(data.whatsapp_configuration.suggested_verified_name||data.organization.organization_name||"");
   const isWazzap=data.whatsapp_configuration.provider==="WAZZAP";
+  const [qrOpen,setQROpen]=useState(false);
+  const [qrTerms,setQRTerms]=useState(false);
+  const [qrConnection,setQRConnection]=useState<PilotQRConnection|null>(null);
+  const [qrBusy,setQRBusy]=useState(false);
+  const [qrError,setQRError]=useState("");
+  const qrPollingStatus=qrConnection?.status;
   useEffect(()=>{
     setWazzapPhone(data.whatsapp_configuration.suggested_phone_number||"");
     setWazzapName(data.whatsapp_configuration.suggested_verified_name||data.organization.organization_name||"");
   },[data.whatsapp_configuration,data.organization.organization_name]);
+  useEffect(()=>{
+    if(!qrOpen||!qrPollingStatus||qrPollingStatus==="CONNECTED")return;
+    const timer=window.setInterval(async()=>{
+      try{const next=await getPilotWhatsappQRStatus();setQRConnection(next);if(next?.status==="CONNECTED")void run(async()=>undefined,"WhatsApp est connecté à la Boîte de réception SLAIVIO.");}catch{/* Le prochain passage réessaiera sans fermer le QR. */}
+    },2500);
+    return()=>window.clearInterval(timer);
+  },[qrOpen,qrPollingStatus,run]);
+  async function openQR(){setQROpen(true);setQRError("");try{setQRConnection(await getPilotWhatsappQRStatus());}catch{setQRConnection(null);}}
+  async function generateQR(){setQRBusy(true);setQRError("");try{setQRConnection(await startPilotWhatsappQR(qrTerms));}catch(exception){const detail=(exception as {response?:{data?:{detail?:string}}})?.response?.data?.detail;setQRError(detail==="pilot_whatsapp_qr_gateway_unavailable"?"Le service de connexion rapide n’est pas encore déployé.":detail==="pilot_whatsapp_qr_cohort_full"?"La cohorte pilote est complète. Cette entreprise pourra être ajoutée après libération d’une place ou validation Meta.":"Le QR code n’a pas pu être généré. Réessayez.");}finally{setQRBusy(false);}}
+  async function disconnectQR(){const id=qrConnection?.connection_id||qrConnection?.id;if(!id)return;setQRBusy(true);try{await disconnectPilotWhatsappQR(id);setQRConnection(null);setQROpen(false);await run(async()=>undefined,"L’appareil WhatsApp a été déconnecté et ses accès révoqués.");}finally{setQRBusy(false);}}
   async function connectWhatsapp() {
     setConnecting(true);setConnectionError("");
     try {
@@ -208,11 +229,22 @@ function CommunicationSettings({data,run}:{data:PilotSettingsData;run:(action:()
       {isWazzap?<form onSubmit={event=>{event.preventDefault();void activateWazzap();}} className="grid gap-4"><div className="flex items-start gap-4"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#e7f6ef] text-[#11764a]"><MessageCircle size={21}/></span><div><p className="text-[13px] font-semibold text-[#303940]">Canal WhatsApp de test</p><p className="mt-1 text-[12px] leading-5 text-[#717c85]">L’IA du fournisseur est désactivée : seule l’IA contrôlée de SLAIVIO peut préparer ou envoyer une réponse.</p></div></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Numéro WhatsApp" hint="Format international avec indicatif pays."><input required value={wazzapPhone} onChange={event=>setWazzapPhone(event.target.value)} className={inputClass} placeholder="+243…"/></Field><Field label="Nom visible"><input value={wazzapName} onChange={event=>setWazzapName(event.target.value)} className={inputClass} placeholder={data.organization.organization_name}/></Field></div><PermissionGuard permission="pilot.settings.manage"><div className="flex justify-end border-t border-[#e7eaec] pt-4"><OperationButton type="submit" variant="primary" disabled={connecting||!data.whatsapp_configuration.activation_available||!wazzapPhone}>{connecting?<Loader2 size={15} className="animate-spin"/>:<MessageCircle size={15}/>} {connecting?"Activation en cours…":data.whatsapp_numbers.some(number=>number.provider==="WAZZAP")?"Mettre à jour le numéro":"Activer le numéro"}</OperationButton></div></PermissionGuard></form>:<div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid h-11 w-11 place-items-center rounded-full bg-[#e7f6ef] text-[#11764a]"><MessageCircle size={21}/></span><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#303940]">Portefeuille Meta Business</p><p className="mt-1 text-[12px] leading-5 text-[#717c85]">Connectez-vous à Meta, sélectionnez l’entreprise et autorisez le numéro utilisé pour le support client.</p></div><PermissionGuard permission="pilot.settings.manage"><OperationButton variant="primary" onClick={()=>void connectWhatsapp()} disabled={connecting}>{connecting?<Loader2 size={15} className="animate-spin"/>:<MessageCircle size={15}/>} {connecting?"Connexion en cours…":data.whatsapp_numbers.length?"Connecter un autre numéro":"Connecter WhatsApp"}</OperationButton></PermissionGuard></div>}
       {connectionError&&<div className="mt-4 rounded-[8px] border border-[#efd0cc] bg-[#fff6f5] px-4 py-3 text-[12px] text-[#9d352d]">{connectionError}</div>}
     </SettingsCard>
+    {data.whatsapp_configuration.qr_linked_device_available&&<SettingsCard title="Connexion rapide pour le pilote" description="Une solution temporaire pour tester SLAIVIO avec le numéro actuel de l’entreprise, en attendant la validation Meta officielle."><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#eef2f4] text-[#43515b]"><Smartphone size={20}/></span><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#303940]">Lier un appareil par QR code</p><p className="mt-1 text-[12px] leading-5 text-[#717c85]">Ce mode non officiel est réservé au pilote limité. Il peut être interrompu par WhatsApp et ne doit pas servir aux campagnes massives.</p></div><PermissionGuard permission="pilot.whatsapp_qr.connect"><OperationButton onClick={()=>void openQR()}><Smartphone size={15}/>Configurer le pilote</OperationButton></PermissionGuard></div></SettingsCard>}
     <SettingsCard title="Numéro principal" description="Le numéro choisi sera réellement utilisé pour les réponses et les relances.">
       {data.whatsapp_numbers.length?<div className="grid gap-2">{data.whatsapp_numbers.map(number=>{const connected=number.connection_status==="CONNECTED";return <button key={number.id} type="button" disabled={!connected} onClick={()=>!number.is_default&&run(()=>selectPilotWhatsappNumber(number.id),"Le numéro WhatsApp principal a été modifié.")} className={`flex items-center gap-3 rounded-[8px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${number.is_default?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#148b59]"><MessageCircle size={19}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-[14px] text-[#303941]">{number.verified_name||"Compte WhatsApp Business"}</strong><span className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-[#6f7982]"><span>{number.display_phone_number||"Numéro en cours de synchronisation"}</span><span className="rounded bg-[#edf0f1] px-1.5 py-0.5 text-[10px] font-semibold text-[#657079]">{number.provider}</span></span></span>{number.is_default?<span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#117148]"><Check size={14}/>Utilisé</span>:<OperationStatus label={connected?"Disponible":"Non connecté"} tone={connected?"info":"neutral"}/>}</button>})}</div>:<div className="rounded-[8px] bg-[#f6f7f7] px-4 py-5 text-[13px] leading-5 text-[#68737c]">Aucun numéro n’est encore connecté. Utilisez le bouton ci-dessus.</div>}
     </SettingsCard>
     <SettingsCard title="Mode de réponse de l’IA" description="Le choix s’applique réellement et immédiatement à la Boîte de réception."><div className="grid gap-2">{(Object.keys(modeContent) as InboxAIMode[]).map(mode=><button key={mode} type="button" onClick={()=>mode!==data.ai.pilot_response_mode&&run(()=>updateInboxAIMode(mode),"Le mode de réponse de l’IA a été modifié.")} className={`flex gap-3 rounded-[8px] border p-4 text-left transition ${mode===data.ai.pilot_response_mode?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${mode===data.ai.pilot_response_mode?"bg-[#d7f1e4] text-[#087848]":"bg-[#f1f3f4] text-[#66717a]"}`}><Bot size={16}/></span><span className="min-w-0 flex-1"><strong className="text-[14px] text-[#303941]">{modeContent[mode].title}</strong><span className="mt-1 block text-[12px] leading-5 text-[#727d86]">{modeContent[mode].description}</span></span>{mode===data.ai.pilot_response_mode&&<Check size={16} className="mt-2 text-[#0b8e51]"/>}</button>)}</div></SettingsCard>
-  </div></>;
+  </div>{qrOpen&&<QRConnectionDialog connection={qrConnection} accepted={qrTerms} setAccepted={setQRTerms} busy={qrBusy} error={qrError} close={()=>!qrBusy&&setQROpen(false)} generate={()=>void generateQR()} disconnect={()=>void disconnectQR()}/>}</>;
+}
+
+function QRConnectionDialog({connection,accepted,setAccepted,busy,error,close,generate,disconnect}:{connection:PilotQRConnection|null;accepted:boolean;setAccepted:(value:boolean)=>void;busy:boolean;error:string;close:()=>void;generate:()=>void;disconnect:()=>void}) {
+  const connected=connection?.status==="CONNECTED";
+  const qr=connection?.qr_data_url;
+  const waiting=connection?.status==="CONNECTING"||connection?.status==="CREATED";
+  return <div className="fixed inset-0 z-[95] grid place-items-center bg-[#17212b]/45 p-4 backdrop-blur-[1px]" role="dialog" aria-modal="true" aria-label="Connexion WhatsApp par QR code" onMouseDown={event=>event.currentTarget===event.target&&close()}><section className="w-full max-w-[520px] overflow-hidden rounded-[12px] border border-[#d9dee1] bg-white shadow-2xl"><header className="flex items-start gap-3 border-b border-[#e5e8ea] px-5 py-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e9f6ef] text-[#10814f]"><Smartphone size={19}/></span><div className="min-w-0 flex-1"><h3 className="text-[16px] font-semibold text-[#29323a]">Connecter le WhatsApp de l’entreprise</h3><p className="mt-1 text-[12px] leading-5 text-[#717c85]">WhatsApp → Appareils connectés → Connecter un appareil</p></div><button type="button" onClick={close} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-[6px] text-[#66717a] hover:bg-[#f0f2f3]"><X size={17}/></button></header><div className="p-5">
+    {connected?<div className="grid justify-items-center gap-4 py-3 text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-[#e6f7ee] text-[#078349]"><Check size={30}/></span><div><p className="text-[16px] font-semibold text-[#28323a]">WhatsApp est connecté</p><p className="mt-1 text-[13px] text-[#6c7780]">{connection.display_phone_number||"Le numéro lié est prêt à recevoir les messages."}</p></div><OperationButton onClick={disconnect} disabled={busy}>Déconnecter cet appareil</OperationButton></div>:qr?<div className="grid justify-items-center gap-4"><Image unoptimized src={qr} width={280} height={280} alt="QR code WhatsApp à scanner" className="h-[280px] w-[280px] rounded-[10px] border border-[#e0e4e6] bg-white p-2"/><div className="text-center"><p className="text-[13px] font-semibold text-[#344049]">Scannez ce code avec le téléphone de l’entreprise</p><p className="mt-1 text-[12px] text-[#77828a]">Le code se renouvelle automatiquement. Ne le partagez jamais.</p></div>{connection.status==="DISCONNECTED"&&<OperationButton onClick={generate}>Générer un nouveau code</OperationButton>}</div>:waiting?<div className="grid justify-items-center gap-3 py-12 text-center"><Loader2 size={30} className="animate-spin text-[#0b8c50]"/><p className="text-[14px] font-semibold text-[#334049]">Préparation du QR code…</p><p className="text-[12px] text-[#77828a]">Cette étape prend généralement quelques secondes.</p></div>:<div className="grid gap-4"><div className="rounded-[8px] border border-[#eadfbd] bg-[#fffbef] p-4 text-[12px] leading-5 text-[#6d5a22]"><strong className="mb-1 flex items-center gap-2 text-[13px]"><ShieldCheck size={16}/>Information importante</strong>Cette connexion utilise temporairement le mode « appareil lié ». Ce n’est pas l’API officielle Meta. L’entreprise accepte ce risque pour le pilote et pourra migrer vers Meta sans perdre ses dossiers ni ses conversations.</div><label className="flex items-start gap-3 text-[13px] leading-5 text-[#46525b]"><input type="checkbox" checked={accepted} onChange={event=>setAccepted(event.target.checked)} className="mt-1 h-4 w-4 accent-[#0b8c50]"/><span>Je confirme être autorisé à connecter ce numéro et j’accepte l’utilisation temporaire de ce mode pilote.</span></label><OperationButton variant="primary" onClick={generate} disabled={!accepted||busy}>{busy?<Loader2 size={15} className="animate-spin"/>:<Smartphone size={15}/>}Afficher le QR code</OperationButton></div>}
+    {error&&<p className="mt-4 rounded-[8px] border border-[#efd0cc] bg-[#fff6f5] px-4 py-3 text-[12px] text-[#9d352d]">{error}</p>}
+  </div></section></div>;
 }
 
 function KnowledgeSettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {

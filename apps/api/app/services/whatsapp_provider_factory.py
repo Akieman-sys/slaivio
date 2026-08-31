@@ -2,6 +2,7 @@ from app.core.config import settings
 from app.services.meta_whatsapp_provider import MetaWhatsAppProvider
 from app.services.whatsapp_routing_service import resolve_outbound_number
 from app.services.wazzap_whatsapp_provider import WazzapWhatsAppProvider
+from app.services.qr_linked_device_whatsapp_provider import QRLinkedDeviceWhatsAppProvider
 
 
 def get_whatsapp_provider(
@@ -27,6 +28,12 @@ def get_whatsapp_provider(
         )
     if provider == "meta":
         return MetaWhatsAppProvider(
+            org_id=org_id,
+            preferred_role=preferred_role,
+            number=number,
+        )
+    if provider == "qr_linked_device":
+        return QRLinkedDeviceWhatsAppProvider(
             org_id=org_id,
             preferred_role=preferred_role,
             number=number,

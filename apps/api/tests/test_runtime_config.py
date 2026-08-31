@@ -1,4 +1,5 @@
 import pytest
+from cryptography.fernet import Fernet
 from pydantic import ValidationError
 from pathlib import Path
 
@@ -26,6 +27,24 @@ def test_production_api_keeps_full_security_contract():
         )
     message = str(exc.value)
     assert "PUBLIC_BASE_URL must be an HTTPS URL" in message
+
+
+def test_production_api_accepts_isolated_qr_gateway_contract():
+    config = Settings(
+        _env_file=None,
+        app_env="production",
+        app_runtime="api",
+        database_url="postgresql+psycopg2://user:pass@db.example.test:5432/postgres",
+        public_base_url="https://api.example.test",
+        clerk_issuer_url="https://clerk.example.test",
+        clerk_webhook_secret="whsec_test",
+        platform_quarantine_encryption_key=Fernet.generate_key().decode(),
+        meta_credentials_encryption_key=Fernet.generate_key().decode(),
+        whatsapp_provider="qr_linked_device",
+        whatsapp_qr_gateway_url="https://qr.example.test",
+        whatsapp_qr_gateway_shared_secret="s" * 32,
+    )
+    assert config.whatsapp_provider == "qr_linked_device"
 
 
 @pytest.mark.parametrize(

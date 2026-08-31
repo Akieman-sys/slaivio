@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.db.database import engine
 from app.organization_admin import repository as administration
 from app.services.wazzap_activation_service import public_wazzap_configuration
+from app.core.config import settings
 
 
 def _dict(row):
@@ -75,7 +76,14 @@ def overview(org_id: str) -> dict:
         "responsible": responsible,
         "numbering": numbering,
         "whatsapp_numbers": numbers,
-        "whatsapp_configuration": public_wazzap_configuration(),
+        "whatsapp_configuration": {
+            **public_wazzap_configuration(),
+            "qr_linked_device_available": bool(
+                settings.whatsapp_qr_gateway_url
+                and settings.whatsapp_qr_gateway_shared_secret
+                and len(settings.whatsapp_qr_gateway_shared_secret) >= 32
+            ),
+        },
         "ai": ai,
         "knowledge": knowledge,
     }
@@ -121,7 +129,7 @@ def readiness(org_id: str) -> dict:
               where number.org_id=:org_id and number.is_active=true and number.is_default=true
                 and number.connection_status='CONNECTED'
                 and (
-                  (upper(number.provider)='WAZZAP' and nullif(btrim(number.phone_number_id),'') is not null)
+                  (upper(number.provider) in ('WAZZAP','QR_LINKED_DEVICE') and nullif(btrim(number.phone_number_id),'') is not null)
                   or (upper(number.provider)='META'
                     and account.connection_status='CONNECTED'
                     and account.webhook_subscription_status='SUBSCRIBED')

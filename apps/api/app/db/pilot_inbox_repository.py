@@ -42,7 +42,16 @@ def list_conversations(
 ):
     conditions = ["conversation.org_id = :org_id"]
     params = {"org_id": org_id, "limit": page_size, "offset": (page - 1) * page_size}
-    if view == "waiting":
+    if view == "unread":
+        conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
+        conditions.append("coalesce(assignment.unread_count, 0) > 0")
+    elif view == "attention":
+        conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
+        conditions.append("coalesce(assignment.requires_attention, false)")
+    elif view == "ai":
+        conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
+        conditions.append("coalesce(assignment.ai_mode_override, ai.pilot_response_mode, 'SUGGESTION_ONLY') = 'CONTROLLED_AUTO'")
+    elif view == "waiting":
         conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
         conditions.append("(coalesce(assignment.unread_count, 0) > 0 or coalesce(assignment.requires_attention, false) or (assignment.id is null and conversation.last_direction = 'inbound'))")
     elif view == "closed":
@@ -97,6 +106,8 @@ def list_conversations(
           coalesce(assignment.queue_name, 'UNASSIGNED') queue_name,
           coalesce(assignment.priority, 'NORMAL') priority,
           assignment.row_version,
+          assignment.ai_mode_override,
+          coalesce(assignment.ai_mode_override, ai.pilot_response_mode, 'SUGGESTION_ONLY') effective_ai_mode,
           client.id client_id,
           client.client_reference,
           coalesce(
@@ -112,6 +123,7 @@ def list_conversations(
         from conversation
         left join conversation_assignments assignment
           on assignment.org_id = conversation.org_id and assignment.client_phone = conversation.phone
+        left join ai_settings ai on ai.org_id = conversation.org_id
         left join lateral (
           select candidate.* from clients candidate
           where candidate.org_id = conversation.org_id
@@ -171,7 +183,7 @@ def conversation_detail(org_id: str, phone: str, before=None, message_limit: int
         """), {"org_id": org_id, "phone": phone}).mappings().first()
         assignment = conn.execute(text("""
           select client_id, dossier_id, status, unread_count, requires_attention,
-                 waiting_since, last_read_at, row_version
+                 waiting_since, last_read_at, row_version, ai_mode_override
           from conversation_assignments
           where org_id = :org_id and client_phone = :phone
         """), {"org_id": org_id, "phone": phone}).mappings().first()
@@ -271,3 +283,37 @@ def update_state(org_id: str, phone: str, status: str, requires_attention: bool,
           returning *
         """), {"org_id": org_id, "phone": phone, "status": status, "attention": requires_attention, "actor_id": actor_id}).mappings().one()
         return dict(row)
+
+
+def update_ai_mode(org_id: str, phone: str, mode: str | None, actor_id: str):
+    with engine.begin() as conn:
+        exists = conn.execute(text("""
+          select 1 from messages
+          where org_id=:org_id and (from_phone=:phone or to_phone=:phone)
+          limit 1
+        """), {"org_id": org_id, "phone": phone}).first()
+        if not exists:
+            raise ValueError("conversation_not_found")
+        row = conn.execute(text("""
+          insert into conversation_assignments(
+            org_id, client_phone, status, queue_name, ai_mode_override, updated_by
+          ) values(:org_id, :phone, 'OPEN', 'PILOT', :mode, :actor_id)
+          on conflict(org_id, client_phone) do update set
+            ai_mode_override=excluded.ai_mode_override,
+            updated_by=excluded.updated_by
+          returning *
+        """), {
+            "org_id": org_id, "phone": phone, "mode": mode, "actor_id": actor_id,
+        }).mappings().one()
+        return dict(row)
+
+
+def effective_ai_mode(org_id: str, phone: str) -> str | None:
+    with engine.connect() as conn:
+        return conn.execute(text("""
+          select coalesce(assignment.ai_mode_override, settings.pilot_response_mode)
+          from ai_settings settings
+          left join conversation_assignments assignment
+            on assignment.org_id=settings.org_id and assignment.client_phone=:phone
+          where settings.org_id=:org_id
+        """), {"org_id": org_id, "phone": phone}).scalar()

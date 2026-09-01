@@ -80,13 +80,15 @@ def test_pilot_inbox_ui_is_a_real_whatsapp_workspace():
     service = read("apps/web/dashboard/services/inbox.ts")
 
     for label in (
-        "À répondre",
-        "En cours",
-        "Terminées",
-        "Rechercher une conversation",
-        "Client",
-        "Dossier lié",
+        "Toutes",
+        "Non lues",
         "À reprendre",
+        "IA active",
+        "Nom, téléphone ou identifiant",
+        "Client",
+        "Dossier associé",
+        "Réponse automatique",
+        "Réponse manuelle",
         "Écrire une réponse au nom de l’entreprise",
         "fenêtre de réponse WhatsApp de 24 heures",
         "Afficher les messages précédents",
@@ -98,10 +100,28 @@ def test_pilot_inbox_ui_is_a_real_whatsapp_workspace():
     assert "updateInboxContext" in page
     assert "sendInboxReply" in page
     assert "setInterval" in page
+    assert "nearBottom" in page
+    assert "nouveau" in page and "message" in page
+    assert "updateInboxConversationAIMode" in page
     assert "encodeURIComponent(phone)" in service
     assert "has_older_messages" in service
     assert "assigned_manager" not in page
     assert "UUID" not in page
+
+
+def test_inbox_workspace_migration_and_ai_override_are_real():
+    sql = read("infra/sql/106_pilot_inbox_workspace.sql")
+    repository = read("apps/api/app/db/pilot_inbox_repository.py")
+    api = read("apps/api/app/api/inbox.py")
+    ai = read("apps/api/app/ai/services/pilot_inbox_ai_service.py")
+
+    assert "ai_mode_override" in sql
+    assert "('CONTROLLED_AUTO','PAUSED')" in sql
+    assert "effective_ai_mode" in repository
+    assert "coalesce(assignment.ai_mode_override" in repository
+    assert '/inbox/conversations/{phone}/ai-mode' in api
+    assert 'require_permission("inbox.ai.manage")' in api
+    assert "effective_ai_mode(org_id, client_phone)" in ai
 
 
 def test_inbox_endpoints_enforce_backend_permissions():

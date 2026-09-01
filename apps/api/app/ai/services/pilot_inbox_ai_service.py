@@ -15,7 +15,7 @@ from app.db.outbound_message_repository import (
     mark_outbound_message_failed,
     mark_outbound_message_sent,
 )
-from app.db.pilot_inbox_repository import update_state
+from app.db.pilot_inbox_repository import effective_ai_mode, update_state
 from app.knowledge.repository import search as search_knowledge
 from app.services.whatsapp_outbound_resolver import resolve_outbound_whatsapp_sender
 from app.services.whatsapp_provider_factory import get_whatsapp_provider
@@ -210,7 +210,7 @@ def process_pilot_inbound_ai(
             "idempotent_replay": True,
         }
     settings = get_pilot_ai_settings(org_id)
-    mode = settings.get("pilot_response_mode") or "SUGGESTION_ONLY"
+    mode = effective_ai_mode(org_id, client_phone) or settings.get("pilot_response_mode") or "SUGGESTION_ONLY"
     context = conversation_ai_context(org_id, client_phone) or {}
     if mode == "PAUSED" or not settings.get("enabled", True):
         log_ai_run(

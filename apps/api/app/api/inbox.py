@@ -11,6 +11,7 @@ from app.db.pilot_inbox_repository import (
     mark_read,
     set_context,
     update_state,
+    update_ai_mode,
 )
 
 
@@ -28,6 +29,10 @@ class ConversationStateRequest(BaseModel):
     requires_attention: bool = False
 
 
+class ConversationAIModeRequest(BaseModel):
+    mode: str = "INHERIT"
+
+
 def _actor(tenant: dict) -> str:
     return str(tenant.get("user_id") or "system")
 
@@ -40,7 +45,7 @@ def _translate_error(exc: ValueError):
 
 @router.get("/inbox/conversations", dependencies=[Depends(require_permission("inbox.read"))])
 def list_conversations(
-    view: str = Query(default="all", pattern="^(all|waiting|open|closed)$"),
+    view: str = Query(default="all", pattern="^(all|unread|attention|ai|waiting|open|closed)$"),
     q: str | None = Query(default=None, max_length=120),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=40, ge=1, le=100),
@@ -100,6 +105,21 @@ def change_conversation_state(phone: str, body: ConversationStateRequest, tenant
     assignment = update_state(
         tenant["org_id"], phone, status, body.requires_attention, _actor(tenant),
     )
+    return {"status": "ok", "assignment": assignment}
+
+
+@router.patch("/inbox/conversations/{phone}/ai-mode", dependencies=[Depends(require_permission("inbox.ai.manage"))])
+def change_conversation_ai_mode(phone: str, body: ConversationAIModeRequest, tenant=Depends(get_current_tenant)):
+    requested = body.mode.upper()
+    modes = {"INHERIT": None, "CONTROLLED_AUTO": "CONTROLLED_AUTO", "PAUSED": "PAUSED"}
+    if requested not in modes:
+        raise HTTPException(status_code=400, detail="invalid_conversation_ai_mode")
+    try:
+        assignment = update_ai_mode(
+            tenant["org_id"], phone, modes[requested], _actor(tenant),
+        )
+    except ValueError as exc:
+        _translate_error(exc)
     return {"status": "ok", "assignment": assignment}
 
 

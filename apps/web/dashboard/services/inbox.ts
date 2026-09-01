@@ -1,6 +1,6 @@
 import { api } from "@/services/api";
 
-export type InboxView = "waiting" | "open" | "closed";
+export type InboxView = "all" | "unread" | "attention" | "ai";
 export type InboxAIMode = "SUGGESTION_ONLY" | "CONTROLLED_AUTO" | "PAUSED";
 export type InboxAISettings = {
   enabled: boolean;
@@ -55,6 +55,8 @@ export type InboxConversation = {
   dossier_reference?: string | null;
   dossier_title?: string | null;
   can_reply: boolean;
+  ai_mode_override?: "CONTROLLED_AUTO" | "PAUSED" | null;
+  effective_ai_mode: InboxAIMode;
 };
 
 export type InboxMessage = {
@@ -93,6 +95,7 @@ export type InboxAssignment = {
   unread_count: number;
   requires_attention: boolean;
   row_version: number;
+  ai_mode_override?: "CONTROLLED_AUTO" | "PAUSED" | null;
 };
 
 export type InboxDetail = {
@@ -122,6 +125,10 @@ export async function updateInboxContext(phone: string, payload: { client_id: st
 
 export async function updateInboxState(phone: string, payload: { status: "OPEN" | "CLOSED"; requires_attention: boolean }) {
   return (await api.patch(`/inbox/conversations/${encodeURIComponent(phone)}/state`, payload)).data;
+}
+
+export async function updateInboxConversationAIMode(phone: string, mode: "INHERIT" | "CONTROLLED_AUTO" | "PAUSED") {
+  return (await api.patch(`/inbox/conversations/${encodeURIComponent(phone)}/ai-mode`, { mode })).data;
 }
 
 export async function sendInboxReply(phone: string, message: string, draftId?: string) {

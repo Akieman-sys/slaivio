@@ -1,18 +1,84 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-slaivio-sans);
+  --font-mono: var(--font-slaivio-mono);
 }
 
 :root {
-  --background: #f7f8f8;
-  --foreground: #111827;
-  --panel: #ffffff;
-  --panel-muted: #f3f4f6;
-  --border-soft: #e5e7eb;
-  --muted: #6b7280;
-  --brand: #111827;
+  /* SLAIVIO Pilot V1 — official design contract. */
+  --font-slaivio-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-slaivio-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --sl-color-canvas: #f7f8f8;
+  --sl-color-surface: #ffffff;
+  --sl-color-surface-subtle: #f5f7f6;
+  --sl-color-surface-hover: #eef3f0;
+  --sl-color-border: #dfe4e1;
+  --sl-color-border-strong: #cbd3cf;
+  --sl-color-text: #17201c;
+  --sl-color-text-secondary: #56615c;
+  --sl-color-text-muted: #75807b;
+  --sl-color-brand: #087a46;
+  --sl-color-brand-hover: #06673b;
+  --sl-color-brand-active: #05532f;
+  --sl-color-brand-soft: #e8f6ef;
+  --sl-color-focus: #087a46;
+  --sl-color-danger: #b42318;
+  --sl-color-danger-soft: #fef3f2;
+  --sl-color-warning: #8b5400;
+  --sl-color-warning-soft: #fff8e6;
+  --sl-color-success: #067647;
+  --sl-color-success-soft: #ecfdf3;
+
+  --sl-space-1: 4px;
+  --sl-space-2: 8px;
+  --sl-space-3: 12px;
+  --sl-space-4: 16px;
+  --sl-space-5: 20px;
+  --sl-space-6: 24px;
+  --sl-space-8: 32px;
+  --sl-space-10: 40px;
+  --sl-space-12: 48px;
+  --sl-space-16: 64px;
+
+  --sl-text-page-title: 24px;
+  --sl-text-panel-title: 20px;
+  --sl-text-section: 16px;
+  --sl-text-card-title: 15px;
+  --sl-text-body: 14px;
+  --sl-text-meta: 13px;
+  --sl-text-badge: 12px;
+  --sl-leading-tight: 1.25;
+  --sl-leading-body: 1.5;
+  --sl-weight-regular: 400;
+  --sl-weight-medium: 500;
+  --sl-weight-semibold: 600;
+  --sl-weight-bold: 700;
+
+  --sl-control-height: 40px;
+  --sl-control-height-compact: 32px;
+  --sl-control-height-large: 44px;
+  --sl-radius-control: 6px;
+  --sl-radius-surface: 8px;
+  --sl-radius-card: 12px;
+  --sl-radius-modal: 12px;
+  --sl-radius-pill: 999px;
+  --sl-shadow-popover: 0 16px 42px rgba(15, 23, 42, 0.14);
+  --sl-shadow-drawer: -24px 0 56px rgba(15, 23, 42, 0.16);
+  --sl-content-max: 1536px;
+  --sl-form-max: 720px;
+  --sl-motion-fast: 120ms;
+  --sl-motion-standard: 180ms;
+
+  /* Compatibility aliases: old surfaces inherit the official contract. */
+  --background: var(--sl-color-canvas);
+  --foreground: var(--sl-color-text);
+  --panel: var(--sl-color-surface);
+  --panel-muted: var(--sl-color-surface-subtle);
+  --border-soft: var(--sl-color-border);
+  --muted: var(--sl-color-text-secondary);
+  --brand: var(--sl-color-text);
   --brand-soft: #dcfce7;
   --accent: #10b981;
   --success: #059669;
@@ -32,23 +98,24 @@
   --app-text-muted: #69727c;
   --app-green: #12c76f;
   --app-green-dark: #087a46;
-  --pilot-canvas: #f6f7f8;
-  --pilot-surface: #ffffff;
-  --pilot-surface-subtle: #f8f9fa;
-  --pilot-border: #dfe3e7;
-  --pilot-border-subtle: #eceff2;
-  --pilot-text: #25292e;
-  --pilot-text-secondary: #626d78;
-  --pilot-text-muted: #7a848e;
-  --pilot-primary: #087a46;
-  --pilot-primary-hover: #06673b;
-  --pilot-primary-soft: #e8f6ef;
-  --pilot-danger: #b42318;
-  --pilot-warning: #8b5400;
-  --pilot-radius-control: 6px;
-  --pilot-radius-surface: 8px;
-  --pilot-shadow-popover: 0 16px 42px rgba(15, 23, 42, 0.16);
-  --pilot-shadow-drawer: -24px 0 56px rgba(15, 23, 42, 0.18);
+  --pilot-canvas: var(--sl-color-canvas);
+  --pilot-surface: var(--sl-color-surface);
+  --pilot-surface-subtle: var(--sl-color-surface-subtle);
+  --pilot-border: var(--sl-color-border);
+  --pilot-border-subtle: #edf0ee;
+  --pilot-text: var(--sl-color-text);
+  --pilot-text-secondary: var(--sl-color-text-secondary);
+  --pilot-text-muted: var(--sl-color-text-muted);
+  --pilot-primary: var(--sl-color-brand);
+  --pilot-primary-hover: var(--sl-color-brand-hover);
+  --pilot-primary-soft: var(--sl-color-brand-soft);
+  --pilot-danger: var(--sl-color-danger);
+  --pilot-warning: var(--sl-color-warning);
+  --pilot-radius-control: var(--sl-radius-control);
+  --pilot-radius-surface: var(--sl-radius-surface);
+  --pilot-radius-card: var(--sl-radius-card);
+  --pilot-shadow-popover: var(--sl-shadow-popover);
+  --pilot-shadow-drawer: var(--sl-shadow-drawer);
 }
 
 * {
@@ -65,7 +132,7 @@ body {
   color: var(--foreground);
   min-width: 0;
   overflow-x: clip;
-  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-slaivio-sans);
   font-weight: 400;
   line-height: 1.45;
   font-optical-sizing: auto;
@@ -89,7 +156,7 @@ textarea {
 
 strong,
 b {
-  font-weight: 650;
+  font-weight: var(--sl-weight-semibold);
 }
 
 ::selection {
@@ -540,26 +607,25 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 /* Operational design system — Expéditions is the visual reference. */
 .slaivio-operations {
-  --operation-text-title: 22px;
-  --operation-text-metric: 24px;
-  --operation-text-body: 13px;
-  --operation-text-tab: 14px;
-  --operation-text-label: 13px;
-  --operation-text-caption: 12px;
-  --operation-weight-regular: 400;
-  --operation-weight-medium: 520;
-  --operation-weight-semibold: 620;
-  --operation-weight-bold: 680;
-  color: #25292e;
+  --operation-text-title: var(--sl-text-page-title);
+  --operation-text-metric: var(--sl-text-page-title);
+  --operation-text-body: var(--sl-text-body);
+  --operation-text-tab: var(--sl-text-body);
+  --operation-text-label: var(--sl-text-body);
+  --operation-text-caption: var(--sl-text-badge);
+  --operation-weight-regular: var(--sl-weight-regular);
+  --operation-weight-medium: var(--sl-weight-medium);
+  --operation-weight-semibold: var(--sl-weight-semibold);
+  --operation-weight-bold: var(--sl-weight-bold);
+  color: var(--sl-color-text);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Application chrome uses the same Geist family and a restrained Jira-like
-   hierarchy: compact group labels, readable navigation items and no 10px UI. */
+/* Application chrome and product surfaces use one typography family. */
 .slaivio-app-shell {
-  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  font-size: 13px;
-  line-height: 1.45;
+  font-family: var(--font-slaivio-sans);
+  font-size: var(--sl-text-body);
+  line-height: var(--sl-leading-body);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
@@ -569,9 +635,9 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .slaivio-pilot {
   background: var(--pilot-canvas);
   color: var(--pilot-text);
-  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
+  font-family: var(--font-slaivio-sans);
+  font-size: var(--sl-text-body);
+  line-height: var(--sl-leading-body);
   letter-spacing: -0.005em;
 }
 
@@ -593,7 +659,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 .slaivio-pilot .slaivio-sidebar [data-ui="sidebar-group-label"] {
   color: #46515c;
   font-size: 13px !important;
-  font-weight: 620;
+  font-weight: var(--sl-weight-semibold);
   letter-spacing: 0;
   line-height: 20px;
   text-transform: none;
@@ -603,13 +669,13 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   min-height: 40px;
   border-radius: var(--pilot-radius-control);
   font-size: 14px !important;
-  font-weight: 460;
+  font-weight: var(--sl-weight-medium);
 }
 
 .slaivio-pilot .slaivio-sidebar [data-ui="sidebar-link"][data-active="true"] {
   background: var(--pilot-primary-soft);
   color: #075d38;
-  font-weight: 620;
+  font-weight: var(--sl-weight-semibold);
 }
 
 .slaivio-pilot [data-ui="operation-page-header"] > div:first-child {
@@ -619,24 +685,24 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .slaivio-pilot [data-ui="operation-page-header"] h1 {
   color: var(--pilot-text);
-  font-size: 22px !important;
-  font-weight: 680;
+  font-size: var(--sl-text-page-title) !important;
+  font-weight: var(--sl-weight-bold);
   letter-spacing: -0.02em;
   line-height: 28px;
 }
 
 .slaivio-pilot [data-ui="operation-page-header"] p {
   color: var(--pilot-text-secondary);
-  font-size: 13px !important;
-  line-height: 20px;
+  font-size: var(--sl-text-body) !important;
+  line-height: var(--sl-leading-body);
 }
 
 .slaivio-pilot [data-ui="operation-button"],
 .slaivio-pilot [data-ui="operation-drawer-action"] {
-  min-height: 36px;
+  min-height: var(--sl-control-height);
   border-radius: var(--pilot-radius-control) !important;
-  font-size: 13px !important;
-  font-weight: 620;
+  font-size: var(--sl-text-body) !important;
+  font-weight: var(--sl-weight-semibold);
   letter-spacing: 0;
   box-shadow: none;
 }
@@ -652,14 +718,14 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 
 .slaivio-pilot [data-ui="operation-tab"] {
   color: var(--pilot-text-secondary);
-  font-size: 14px !important;
-  font-weight: 520;
+  font-size: var(--sl-text-body) !important;
+  font-weight: var(--sl-weight-medium);
 }
 
 .slaivio-pilot [data-ui="operation-tab"][aria-current="page"] {
   border-color: var(--pilot-primary);
   color: var(--pilot-primary);
-  font-weight: 620;
+  font-weight: var(--sl-weight-semibold);
 }
 
 .slaivio-pilot [data-ui="metric-grid"],
@@ -676,7 +742,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .slaivio-pilot [data-ui="operation-search"] {
-  height: 38px;
+  height: var(--sl-control-height);
   border-color: #cfd5db;
   border-radius: var(--pilot-radius-control);
 }
@@ -691,12 +757,12 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   background: var(--pilot-surface-subtle);
   color: #58636e;
   font-size: 12px;
-  font-weight: 620;
+  font-weight: var(--sl-weight-semibold);
 }
 
 .slaivio-pilot [data-ui="operation-table"] table tbody {
   color: #343b42;
-  font-size: 13px;
+  font-size: var(--sl-text-body);
 }
 
 .slaivio-pilot [data-ui="operation-table"] table tr {
@@ -704,8 +770,19 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .slaivio-pilot :is(button, a, input, select, textarea, summary):focus-visible {
-  outline: 2px solid rgba(8, 122, 70, 0.7);
+  outline: 2px solid var(--sl-color-focus);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slaivio-app-shell *,
+  .slaivio-app-shell *::before,
+  .slaivio-app-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .slaivio-pilot :is(button, input, select, textarea):disabled {
@@ -865,7 +942,7 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 [data-ui="operation-drawer"] {
-  font-family: var(--font-geist-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-slaivio-sans);
   color: #25292e;
   font-size: 13px;
   line-height: 18px;

@@ -1,15 +1,14 @@
 export const clerkAppearance = {
   variables: {
-    colorPrimary: "#625df5",
+    colorPrimary: "#087a46",
     colorBackground: "#ffffff",
     colorInputBackground: "#ffffff",
-    colorInputText: "#333333",
-    colorText: "#333333",
-    colorTextSecondary: "#666666",
-    colorNeutral: "#333333",
+    colorInputText: "#17201c",
+    colorText: "#17201c",
+    colorTextSecondary: "#56615c",
+    colorNeutral: "#17201c",
     borderRadius: "0.375rem",
-    fontFamily:
-      "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    fontFamily: '"Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif',
   },
   elements: {
     rootBox: "w-full",
@@ -18,18 +17,18 @@ export const clerkAppearance = {
     headerTitle: "hidden",
     headerSubtitle: "hidden",
     socialButtonsBlockButton:
-      "rounded-[4px] border border-[#d1d1ce] bg-white text-[#333] font-medium hover:bg-[#f4f4f2]",
-    dividerLine: "bg-[#d9d9d6]",
-    dividerText: "text-[#666]",
-    formFieldLabel: "text-[#333] font-medium text-sm",
+      "h-10 rounded-md border border-[#dfe4e1] bg-white text-[#17201c] text-sm font-semibold shadow-none hover:bg-[#f5f7f6]",
+    dividerLine: "bg-[#dfe4e1]",
+    dividerText: "text-[#56615c] text-[13px]",
+    formFieldLabel: "text-[#17201c] font-medium text-sm",
     formFieldInput:
-      "rounded-[4px] border-[#d1d1ce] bg-white px-3 py-2 text-sm shadow-none focus:border-[#625df5] focus:ring-2 focus:ring-[#625df5]/20",
+      "h-10 rounded-md border-[#cbd3cf] bg-white px-3 text-sm shadow-none focus:border-[#087a46] focus:ring-2 focus:ring-[#087a46]/15",
     formButtonPrimary:
-      "rounded-[4px] bg-[#625df5] font-semibold text-white shadow-none hover:bg-[#514ce8]",
-    footerActionText: "text-[#666]",
-    footerActionLink: "text-[#514ce8] font-medium hover:text-[#343078]",
-    identityPreviewEditButton: "text-[#514ce8]",
+      "h-10 rounded-md bg-[#087a46] text-sm font-semibold text-white shadow-none hover:bg-[#06673b]",
+    footerActionText: "text-[#56615c]",
+    footerActionLink: "text-[#087a46] font-semibold hover:text-[#05532f]",
+    identityPreviewEditButton: "text-[#087a46]",
     otpCodeFieldInput:
-      "rounded-[4px] border-[#d1d1ce] focus:border-[#625df5] focus:ring-[#625df5]/20",
+      "h-10 rounded-md border-[#cbd3cf] focus:border-[#087a46] focus:ring-[#087a46]/15",
   },
 };

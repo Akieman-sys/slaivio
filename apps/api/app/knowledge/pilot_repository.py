@@ -123,6 +123,12 @@ def detail(org_id: str, entry_id: str) -> dict:
         if not row:
             raise HTTPException(404, "pilot_knowledge_not_found")
         item = _dict(row)
+        source_file = None
+        if item.get("source_file_id"):
+            source_file = _dict(conn.execute(text("""
+              select id::text,file_name,mime_type,size_bytes,extraction_status,confidence,created_at
+              from knowledge_files where org_id=:org_id and id=:source_file_id
+            """), {"org_id": org_id, "source_file_id": item["source_file_id"]}).fetchone())
         draft = _dict(conn.execute(text("select * from pilot_knowledge_drafts where org_id=:org_id and knowledge_id=:entry_id"), {"org_id": org_id, "entry_id": entry_id}).fetchone())
         history = [_dict(value) for value in conn.execute(text("""
           select event_type,actor_name,created_at from knowledge_audit_events
@@ -135,14 +141,27 @@ def detail(org_id: str, entry_id: str) -> dict:
         "internal_status": item["status"], "language": item["language"], "review_due_at": item.get("review_due_at"),
         "version": item["version"], "updated_by_name": item.get("updated_by_name"), "updated_at": item["updated_at"],
         "published_at": item.get("published_at"), "pending_draft": draft, "history": history,
+        "source_file": source_file,
     }
 
 
 def create(org_id: str, actor_id: str, actor_name: str, data: dict) -> tuple[dict, bool]:
     values = _mapped(data); _validate(values)
     idempotency_key = data.get("idempotency_key")
+    source_file_id = str(data["source_file_id"]) if data.get("source_file_id") else None
     replayed = False
     with engine.begin() as conn:
+        if source_file_id:
+            source = conn.execute(text("""
+              select id,scan_status,extraction_status,prompt_injection_detected
+              from knowledge_files where org_id=:org_id and id=:source_file_id for update
+            """), {"org_id": org_id, "source_file_id": source_file_id}).mappings().first()
+            if not source:
+                raise HTTPException(404, "pilot_knowledge_source_not_found")
+            if source["scan_status"] != "CLEAN" or source["prompt_injection_detected"]:
+                raise HTTPException(409, "pilot_knowledge_source_security_review_required")
+            if source["extraction_status"] not in {"EXTRACTED", "NEEDS_REVIEW"}:
+                raise HTTPException(409, "pilot_knowledge_source_not_ready")
         if idempotency_key:
             existing = conn.execute(text("select id from knowledge_entries where org_id=:org_id and pilot_idempotency_key=:key"), {"org_id": org_id, "key": idempotency_key}).scalar()
             if existing:
@@ -155,16 +174,20 @@ def create(org_id: str, actor_id: str, actor_name: str, data: dict) -> tuple[dic
             row = conn.execute(text("""
               insert into knowledge_entries(
                 org_id,reference,title,knowledge_type,category,content,structured_data,question_variants,tags,
-                language,audiences,ai_scope,source_type,status,sensitive,review_due_at,pilot_kind,
+                language,audiences,ai_scope,source_type,source_entity_type,source_entity_id,source_file_id,status,sensitive,review_due_at,pilot_kind,
                 pilot_client_visible,pilot_idempotency_key,created_by,created_by_name,updated_by,updated_by_name
               ) values(
                 :org_id,:reference,:title,:knowledge_type,:category,:content,'{}'::jsonb,'{}'::text[],'{}'::text[],
-                :language,:audiences,:ai_scope,'MANUAL','DRAFT',false,:review_due_at,:pilot_kind,
+                :language,:audiences,:ai_scope,:source_type,:source_entity_type,:source_entity_id,:source_file_id,'DRAFT',false,:review_due_at,:pilot_kind,
                 :pilot_client_visible,:idempotency_key,:actor_id,:actor_name,:actor_id,:actor_name
               ) on conflict(org_id,pilot_idempotency_key)
                 where pilot_idempotency_key is not null
               do nothing returning *
-            """), {"org_id": org_id, "reference": reference, "idempotency_key": idempotency_key, "actor_id": actor_id, "actor_name": actor_name, **values}).fetchone()
+            """), {"org_id": org_id, "reference": reference, "idempotency_key": idempotency_key,
+                    "source_type": "IMPORT" if source_file_id else "MANUAL",
+                    "source_entity_type": "KNOWLEDGE_FILE" if source_file_id else None,
+                    "source_entity_id": source_file_id, "source_file_id": source_file_id,
+                    "actor_id": actor_id, "actor_name": actor_name, **values}).fetchone()
             if row is None:
                 entry_id = str(conn.execute(text("select id from knowledge_entries where org_id=:org_id and pilot_idempotency_key=:key"), {"org_id": org_id, "key": idempotency_key}).scalar_one())
                 replayed = True
@@ -174,6 +197,11 @@ def create(org_id: str, actor_id: str, actor_name: str, data: dict) -> tuple[dic
                 core._audit(conn, org_id, item["id"], "CREATED", actor_id, actor_name, new=item)
                 core._replace_chunks(conn, item)
                 entry_id = str(item["id"])
+                if source_file_id:
+                    conn.execute(text("""
+                      update knowledge_files set import_status='IMPORTED',updated_at=now()
+                      where org_id=:org_id and id=:source_file_id
+                    """), {"org_id": org_id, "source_file_id": source_file_id})
     return detail(org_id, entry_id), replayed
 
 

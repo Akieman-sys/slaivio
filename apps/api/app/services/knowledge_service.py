@@ -27,7 +27,7 @@ def find_best_knowledge_answer(
 
     return {
         "found": True,
-        "answer": best_item["content"],
+        "answer": best_item.get("matched_content") or best_item["content"],
         "items": items,
         "best_item": best_item,
     }

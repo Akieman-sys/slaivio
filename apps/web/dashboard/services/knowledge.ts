@@ -46,11 +46,12 @@ export type PilotKnowledgeItem={
  review_due_at?:string|null;expires_at?:string|null;version:number;updated_by_name?:string|null;
  updated_at:string;display_updated_at?:string;published_at?:string|null;has_pending_draft?:boolean;
  draft_updated_at?:string|null;draft_updated_by_name?:string|null;usage_count?:number;
+ source_file?:Pick<KnowledgeFile,"id"|"file_name"|"mime_type"|"size_bytes"|"extraction_status"|"confidence"|"created_at">|null;
  pending_draft?:{subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;updated_by_name?:string|null;updated_at:string}|null;
  history?:Array<{event_type:string;actor_name?:string|null;created_at:string}>;
 };
 export type PilotKnowledgeStats={published:number;drafts:number;needs_review:number;available_to_ai:number;archived:number;default_language:"FR"|"EN";pilot_default_review_days:number};
-export type PilotKnowledgePayload={subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;idempotency_key?:string};
+export type PilotKnowledgePayload={subject:string;answer:string;kind:PilotKnowledgeKind;category:string;client_visible:boolean;language:string;review_due_at?:string|null;idempotency_key?:string;source_file_id?:string};
 export async function listPilotKnowledge(params:Record<string,string|undefined>={}){return(await api.get<{items:PilotKnowledgeItem[];total:number}>("/knowledge/pilot",{params})).data}
 export async function getPilotKnowledgeStats(){return(await api.get<{stats:PilotKnowledgeStats}>("/knowledge/pilot/stats")).data.stats}
 export async function getPilotKnowledge(id:string){return(await api.get<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}`)).data.knowledge}
@@ -58,3 +59,4 @@ export async function createPilotKnowledge(payload:PilotKnowledgePayload){return
 export async function updatePilotKnowledge(id:string,payload:PilotKnowledgePayload&{expected_version:number}){return(await api.patch<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}`,payload)).data.knowledge}
 export async function publishPilotKnowledge(id:string,expected_version:number){return(await api.post<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}/publish`,{expected_version})).data.knowledge}
 export async function pilotKnowledgeAction(id:string,action:"unpublish"|"archive"|"restore",expected_version:number){return(await api.post<{knowledge:PilotKnowledgeItem}>(`/knowledge/pilot/${id}/${action}`,{expected_version})).data.knowledge}
+export async function uploadPilotKnowledgeFile(file:File){const form=new FormData();form.append("file",file);return(await api.post<{file:KnowledgeFile}>("/knowledge/pilot/files",form)).data.file}

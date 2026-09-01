@@ -156,12 +156,27 @@ def search(org_id, query, channel, language="FR", workspace_id=None, limit=8):
     params={"o":org_id,"q":query,"lang":language.upper(),"w":workspace_id,"limit":min(limit,20),"aud":audience}
     sql=f"""select e.id,e.reference,e.title,e.category,e.content,e.source_type,e.source_entity_type,e.source_entity_id,e.updated_at,ts_rank(to_tsvector('simple',coalesce(e.title,'')||' '||coalesce(e.content,'')),websearch_to_tsquery('simple',:q)) rank from knowledge_entries e where e.org_id=:o and e.status='PUBLISHED' and e.ai_scope in {scope} and e.sensitive=false and e.language=:lang and (e.workspace_id is null or e.workspace_id=:w) and (e.effective_at is null or e.effective_at<=now()) and (e.expires_at is null or e.expires_at>now()) and (e.review_due_at is null or e.review_due_at>now()) and (:aud is null or :aud=any(e.audiences)) and (to_tsvector('simple',coalesce(e.title,'')||' '||coalesce(e.content,'')) @@ websearch_to_tsquery('simple',:q) or exists(select 1 from unnest(e.tags||e.question_variants) term where term ilike '%'||:q||'%')) order by case e.source_type when 'ROUTE' then 1 when 'SERVICE' then 2 when 'PRICING' then 3 when 'WAREHOUSE' then 4 else 5 end,rank desc,e.updated_at desc limit :limit"""
     lexical=[]
-    with engine.connect() as conn: lexical=[_dict(r) for r in conn.execute(text(sql),params).fetchall()]
+    with engine.connect() as conn:
+        lexical=[_dict(r) for r in conn.execute(text(sql),params).fetchall()]
+        # Long imported documents are answered from the most relevant chunk,
+        # never by sending the complete source document back to WhatsApp.
+        for item in lexical:
+            matched = conn.execute(text("""
+              select content from knowledge_chunks
+              where org_id=:o and knowledge_id=:knowledge_id
+                and to_tsvector('simple',content) @@ websearch_to_tsquery('simple',:q)
+              order by ts_rank(to_tsvector('simple',content),websearch_to_tsquery('simple',:q)) desc,
+                chunk_index
+              limit 1
+            """), {"o": org_id, "knowledge_id": item["id"], "q": query}).scalar()
+            item["matched_content"] = matched or item["content"]
     try: vector=embed_texts([query])[0]
     except RuntimeError:return lexical
     vector_literal="["+",".join(str(float(x)) for x in vector)+"]"
     with engine.connect() as conn:
         semantic=[_dict(r) for r in conn.execute(text(f"select e.id,e.reference,e.title,e.category,e.content,e.source_type,e.source_entity_type,e.source_entity_id,e.updated_at,1-(e.embedding<=>cast(:embedding as vector)) rank from knowledge_entries e where e.org_id=:o and e.status='PUBLISHED' and e.ai_scope in {scope} and e.sensitive=false and e.language=:lang and e.embedding is not null and (e.workspace_id is null or e.workspace_id=:w) and (e.effective_at is null or e.effective_at<=now()) and (e.expires_at is null or e.expires_at>now()) and (e.review_due_at is null or e.review_due_at>now()) and (:aud is null or :aud=any(e.audiences)) order by e.embedding<=>cast(:embedding as vector) limit :limit"),{**params,"embedding":vector_literal}).fetchall()]
+    for item in semantic:
+        item["matched_content"] = item["content"]
     merged={str(x["id"]):x for x in semantic};merged.update({str(x["id"]):x for x in lexical});return sorted(merged.values(),key=lambda x:float(x.get("rank") or 0),reverse=True)[:limit]
 
 

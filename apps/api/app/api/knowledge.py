@@ -6,7 +6,7 @@ import io
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 from xml.etree import ElementTree
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -145,13 +145,14 @@ class SuggestionDecision(BaseModel):
 
 class PilotKnowledgePayload(BaseModel):
     subject: str = Field(min_length=2, max_length=240)
-    answer: str = Field(min_length=2, max_length=10000)
+    answer: str = Field(min_length=2, max_length=250000)
     kind: str = Field(pattern="^(CLIENT_ANSWER|COMPANY_INFORMATION|INTERNAL_INSTRUCTION)$")
     category: str = Field(default="OTHER", pattern="^(GENERAL|SERVICES|HOURS_AND_ADDRESSES|PAYMENTS|DOSSIERS|SUPPORT|DOCUMENTS|OTHER)$")
     client_visible: bool = True
     language: str = Field(default="FR", pattern="^(FR|EN)$")
     review_due_at: datetime | None = None
     idempotency_key: str | None = Field(default=None, max_length=180)
+    source_file_id: UUID | None = None
 
 
 class PilotKnowledgeUpdate(PilotKnowledgePayload):
@@ -229,7 +230,11 @@ def list_files(tenant=Depends(get_current_tenant), _=Depends(require_permission(
 
 @router.post("/files")
 async def upload_file(workspace_id: str | None = Form(None), file: UploadFile = File(...), tenant=Depends(get_current_tenant), _=Depends(require_permission("knowledge.create"))):
-    content = await file.read(); mime = (file.content_type or "").lower()
+    return await _store_knowledge_file(file, tenant, workspace_id)
+
+
+async def _store_knowledge_file(file: UploadFile, tenant: dict, workspace_id: str | None = None):
+    content = await file.read(); mime = (file.content_type or "").split(";", 1)[0].lower()
     if mime not in MIMES or not content or len(content) > MAX_FILE_SIZE: raise HTTPException(422, "invalid_knowledge_file")
     suffix = Path(file.filename or "file").suffix.lower()
     try: scan=scan_bytes(content)
@@ -280,6 +285,12 @@ def pilot_index(view: str | None = None, q: str | None = None, category: str | N
 @router.get("/pilot/stats", dependencies=[Depends(require_permission("pilot.knowledge.read"))])
 def pilot_stats(tenant=Depends(get_current_tenant)):
     return {"status": "ok", "stats": pilot_repo.stats(tenant["org_id"])}
+
+
+@router.post("/pilot/files", status_code=201, dependencies=[Depends(require_permission("pilot.knowledge.manage"))])
+async def pilot_upload_file(file: UploadFile = File(...), tenant=Depends(get_current_tenant)):
+    """Store and extract a Pilot source without making it available to the AI."""
+    return {"status": "ok", "file": await _store_knowledge_file(file, tenant)}
 
 
 @router.post("/pilot", status_code=201, dependencies=[Depends(require_permission("pilot.knowledge.manage"))])

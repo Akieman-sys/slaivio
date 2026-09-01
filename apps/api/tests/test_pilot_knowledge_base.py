@@ -67,3 +67,32 @@ def test_publishing_maps_the_human_choice_to_the_existing_knowledge_engine():
     assert '"BOTH" if visible else "INTERNAL"' in repository
     assert "status='PUBLISHED'" in repository
     assert "delete from pilot_knowledge_drafts" in repository
+
+
+def test_pilot_accepts_reviewed_files_without_bypassing_publication():
+    api = read("apps/api/app/api/knowledge.py")
+    repository = read("apps/api/app/knowledge/pilot_repository.py")
+    page = read("apps/web/dashboard/components/knowledge/knowledge-page.tsx")
+    service = read("apps/web/dashboard/services/knowledge.ts")
+    assert '"/pilot/files"' in api
+    assert 'require_permission("pilot.knowledge.manage")' in api
+    for control in ("scan_bytes", "MAX_FILE_SIZE", "ocr_document", "source_file_id"):
+        assert control in api + repository
+    for guard in (
+        "pilot_knowledge_source_not_found",
+        "pilot_knowledge_source_security_review_required",
+        "pilot_knowledge_source_not_ready",
+    ):
+        assert guard in repository
+    assert "status='PUBLISHED'" not in repository.split("def create(", 1)[1].split("def save_draft", 1)[0]
+    for label in ("Écrire un texte", "Importer une image", "Importer un document", "Texte détecté à vérifier"):
+        assert label in page
+    assert "/knowledge/pilot/files" in service
+
+
+def test_whatsapp_uses_a_relevant_chunk_from_imported_documents():
+    repository = read("apps/api/app/knowledge/repository.py")
+    service = read("apps/api/app/services/knowledge_service.py")
+    assert "select content from knowledge_chunks" in repository
+    assert 'item["matched_content"]' in repository
+    assert 'best_item.get("matched_content")' in service

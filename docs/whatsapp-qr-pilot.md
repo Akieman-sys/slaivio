@@ -44,6 +44,19 @@ Références du moteur utilisé :
 6. Redéployer l’API et le dashboard. `WHATSAPP_PROVIDER` peut rester `meta` :
    le routage choisit le fournisseur enregistré pour chaque agence.
 
+### Exploitation continue
+
+- le gateway doit utiliser une instance Render toujours active, sans mise en
+  veille automatique ; un service endormi ne peut pas recevoir de message ;
+- configurer le contrôle de santé Render sur `/health` ; ce contrôle vérifie
+  aussi l’accès à PostgreSQL ;
+- les coupures temporaires déclenchent une reconnexion progressive, plafonnée
+  à une minute entre deux tentatives ;
+- les sessions persistées sont réconciliées toutes les cinq minutes, notamment
+  après un redémarrage ou une indisponibilité temporaire de la base ;
+- une déconnexion explicitement demandée depuis le téléphone ou depuis
+  SLAIVIO révoque volontairement la session et exige un nouveau QR code.
+
 Le gateway ne journalise ni QR, ni contenu des messages, ni clés. Les clés
 Baileys sont chiffrées individuellement en AES-256-GCM dans PostgreSQL. Les
 appels API ↔ gateway sont signés HMAC avec une durée de validité de cinq minutes.

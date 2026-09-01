@@ -44,6 +44,15 @@ export function PilotOfflineProvider({ scopeKey, children }: { scopeKey: string;
 
   const syncNow = useCallback(async () => {
     if (!navigator.onLine || syncingRef.current) return;
+    // Background checks stay invisible when there is no queued work. Showing
+    // the synchronization banner for an empty queue shifted every page by
+    // 40px twice a minute and made the application look as if it refreshed.
+    const operations = await listPilotOperations(scopeKey);
+    const hasPendingWork = operations.some((item) => item.state === "PENDING" || item.state === "SYNCING");
+    if (!hasPendingWork) {
+      await refresh();
+      return;
+    }
     syncingRef.current = true;
     setSyncing(true);
     try {

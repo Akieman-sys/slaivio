@@ -12,46 +12,113 @@ const logger = pino({ level: process.env.LOG_LEVEL || "info", redact: ["qr", "me
 const eventKey = (connectionId, type, suffix = crypto.randomUUID()) => `qr:${connectionId}:${type}:${suffix}`;
 const phoneFromJid = jid => `+${String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "")}`;
 const textFromMessage = message => message?.conversation || message?.extendedTextMessage?.text || message?.imageMessage?.caption || message?.videoMessage?.caption || message?.documentMessage?.caption || null;
+const reconnectDelay = attempt => Math.min(60_000, 2_000 * (2 ** Math.min(attempt, 5)));
 
 async function notify(session, eventType, payload = {}, suffix) {
   await emitCallback({ org_id: session.orgId, connection_id: session.id, event_type: eventType,
     event_key: eventKey(session.id, eventType, suffix), payload });
 }
 
+async function safeNotify(session, eventType, payload = {}, suffix) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try { await notify(session, eventType, payload, suffix); return true; }
+    catch (error) {
+      logger.error({ error: error.message, connectionId: session.id, eventType, attempt: attempt + 1 }, "callback_failed");
+      if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 1_000 * (2 ** attempt)));
+    }
+  }
+  return false;
+}
+
+function clearReconnect(session) {
+  if (session.reconnectTimer) clearTimeout(session.reconnectTimer);
+  session.reconnectTimer = null;
+}
+
+function clearConnectionWatchdog(session) {
+  if (session.connectionWatchdog) clearTimeout(session.connectionWatchdog);
+  session.connectionWatchdog = null;
+}
+
+function scheduleReconnect(session) {
+  if (session.intentionalLogout || session.reconnectTimer) return;
+  const attempt = session.reconnectAttempts || 0;
+  const delay = reconnectDelay(attempt);
+  session.reconnectAttempts = attempt + 1;
+  session.reconnectTimer = setTimeout(() => {
+    session.reconnectTimer = null;
+    startSession(session.id, session.orgId).catch(error => {
+      logger.error({ error: error.message, connectionId: session.id }, "reconnect_failed");
+      scheduleReconnect(session);
+    });
+  }, delay);
+  logger.info({ connectionId: session.id, delay, attempt: attempt + 1 }, "reconnect_scheduled");
+}
+
 export async function startSession(id, orgId) {
   const current = sessions.get(id);
   if (current?.starting || ["CONNECTED", "QR_READY", "CONNECTING"].includes(current?.status)) return publicState(current);
-  const session = current || { id, orgId, status: "CONNECTING", qrDataUrl: null, qrExpiresAt: null, socket: null };
+  const session = current || { id, orgId, status: "CONNECTING", qrDataUrl: null, qrExpiresAt: null,
+    socket: null, reconnectAttempts: 0, reconnectTimer: null, connectionWatchdog: null, intentionalLogout: false };
   session.orgId = orgId;
   session.starting = true;
+  session.status = "CONNECTING";
+  session.intentionalLogout = false;
   sessions.set(id, session);
-  const auth = await createPostgresAuthState(id);
-  const socket = makeWASocket({ auth: auth.state, printQRInTerminal: false, markOnlineOnConnect: false,
-    syncFullHistory: false, generateHighQualityLinkPreview: false, logger: logger.child({ connectionId: id }),
-    browser: ["SLAIVIO", "Chrome", "1.0.0"] });
+  let auth;
+  let socket;
+  try {
+    auth = await createPostgresAuthState(id);
+    socket = makeWASocket({ auth: auth.state, printQRInTerminal: false, markOnlineOnConnect: false,
+      syncFullHistory: false, generateHighQualityLinkPreview: false, logger: logger.child({ connectionId: id }),
+      browser: ["SLAIVIO", "Chrome", "1.0.0"] });
+  } catch (error) {
+    session.starting = false;
+    session.status = "DISCONNECTED";
+    scheduleReconnect(session);
+    throw error;
+  }
   session.socket = socket;
   session.auth = auth;
+  clearConnectionWatchdog(session);
+  session.connectionWatchdog = setTimeout(() => {
+    if (session.status !== "CONNECTING" || session.socket !== socket || session.intentionalLogout) return;
+    logger.warn({ connectionId: id }, "connection_timeout");
+    socket.end(new Error("connection_timeout"));
+  }, 45_000);
   socket.ev.on("creds.update", auth.saveCreds);
   socket.ev.on("connection.update", async update => {
     try {
       if (update.qr) {
+        clearConnectionWatchdog(session);
         session.status = "QR_READY";
         session.qrDataUrl = await QRCode.toDataURL(update.qr, { margin: 1, width: 320 });
         session.qrExpiresAt = new Date(Date.now() + 55_000).toISOString();
         await notify(session, "QR_READY", {}, String(Date.now()));
       }
       if (update.connection === "open") {
+        clearConnectionWatchdog(session);
+        clearReconnect(session);
+        session.reconnectAttempts = 0;
         session.status = "CONNECTED"; session.qrDataUrl = null; session.qrExpiresAt = null;
         const jid = jidNormalizedUser(socket.user?.id || "");
-        await notify(session, "CONNECTED", { linked_jid: jid, phone_number: phoneFromJid(jid), verified_name: socket.user?.name || "WhatsApp lié" }, `${jid}:${Date.now()}`);
+        await safeNotify(session, "CONNECTED", { linked_jid: jid, phone_number: phoneFromJid(jid), verified_name: socket.user?.name || "WhatsApp lié" }, `${jid}:${Date.now()}`);
       }
       if (update.connection === "close") {
+        clearConnectionWatchdog(session);
         const code = new Boom(update.lastDisconnect?.error).output.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         session.status = loggedOut ? "LOGGED_OUT" : "DISCONNECTED";
-        await notify(session, session.status, { reason_code: code }, String(Date.now()));
-        if (loggedOut) { await auth.clear(); sessions.delete(id); }
-        else setTimeout(() => startSession(id, orgId).catch(error => logger.error({ error: error.message, connectionId: id }, "reconnect_failed")), 3000);
+        // Reconnection must not depend on the API callback being available.
+        if (loggedOut || session.intentionalLogout) {
+          clearReconnect(session);
+          await safeNotify(session, "LOGGED_OUT", { reason_code: code }, String(Date.now()));
+          await auth.clear();
+          sessions.delete(id);
+        } else {
+          scheduleReconnect(session);
+          await safeNotify(session, "DISCONNECTED", { reason_code: code, reconnecting: true }, String(Date.now()));
+        }
       }
     } catch (error) { logger.error({ error: error.message, connectionId: id }, "connection_update_failed"); }
   });
@@ -101,6 +168,7 @@ export async function sendMessage(id, to, message) {
 
 export async function logoutSession(id) {
   const session = sessions.get(id);
+  if (session) { session.intentionalLogout = true; clearReconnect(session); clearConnectionWatchdog(session); }
   if (session?.socket) await session.socket.logout();
   if (session?.auth) await session.auth.clear();
   sessions.delete(id);

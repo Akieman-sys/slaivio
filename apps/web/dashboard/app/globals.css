@@ -1236,3 +1236,38 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   font-size: 13px;
   line-height: 20px;
 }
+
+/* Persistent dashboard appearance. Components keep their semantic status
+   colours while neutral surfaces are remapped for dark mode. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .slaivio-app-shell,
+html[data-theme="dark"] .slaivio-operations {
+  background: #11161b !important;
+  color: #e7ebee !important;
+}
+
+html[data-theme="dark"] .slaivio-sidebar,
+html[data-theme="dark"] .slaivio-topbar,
+html[data-theme="dark"] .slaivio-app-shell [class*="bg-white"],
+html[data-theme="dark"] .slaivio-operations [class*="bg-white"],
+html[data-theme="dark"] .operation-form-surface {
+  background-color: #182027 !important;
+  border-color: #303a42 !important;
+}
+
+html[data-theme="dark"] .slaivio-app-shell [class*="text-[#2"],
+html[data-theme="dark"] .slaivio-app-shell [class*="text-[#3"],
+html[data-theme="dark"] .slaivio-operations [class*="text-[#2"],
+html[data-theme="dark"] .slaivio-operations [class*="text-[#3"] {
+  color: #e7ebee !important;
+}
+
+html[data-theme="dark"] .slaivio-operations :is(input, select, textarea),
+html[data-theme="dark"] .operation-form-surface :is(input, select, textarea) {
+  background-color: #12191f !important;
+  border-color: #3b464f !important;
+  color: #edf1f3 !important;
+}

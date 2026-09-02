@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.auth import get_current_manager
-from app.tenant.services.tenant_service import get_tenant_context, switch_tenant
+from app.tenant.services.tenant_service import create_tenant, get_tenant_context, switch_tenant
 
 
 router = APIRouter()
@@ -10,6 +10,10 @@ router = APIRouter()
 
 class SwitchTenantRequest(BaseModel):
     org_id: str
+
+
+class CreateTenantRequest(BaseModel):
+    organization_name: str
 
 
 @router.get("/tenant/context")
@@ -46,4 +50,17 @@ def switch_current_tenant(
         "status": "ok",
         "active_tenant": active_tenant,
     }
+
+
+@router.post("/tenant/organizations", status_code=201)
+def create_organization(
+    body: CreateTenantRequest,
+    manager=Depends(get_current_manager),
+):
+    try:
+        created = create_tenant(manager, body.organization_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {"status": "ok", **created}
 

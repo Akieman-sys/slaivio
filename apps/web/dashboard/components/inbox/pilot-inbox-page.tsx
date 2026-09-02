@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { Archive, ArrowLeft, ArrowRight, Bot, CheckCheck, ChevronDown, CircleAlert, ExternalLink, Info, MessageCircle, MoreHorizontal, Paperclip, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, ArrowRight, WandSparkles as Bot, CheckCheck, ChevronDown, CircleAlert, ExternalLink, Info, MessageCircle, MoreHorizontal, Paperclip, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 

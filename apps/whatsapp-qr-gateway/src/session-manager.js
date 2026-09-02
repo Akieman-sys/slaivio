@@ -126,12 +126,24 @@ export async function startSession(id, orgId) {
     if (type !== "notify") return;
     for (const item of messages) {
       try {
-        if (!item.message || item.key.fromMe || item.key.remoteJid === "status@broadcast" || item.key.remoteJid?.endsWith("@g.us")) continue;
-        const sourceJid = jidNormalizedUser(item.key.remoteJidAlt || item.key.remoteJid || "");
+        if (!item.message || item.key.fromMe || item.key.remoteJid === "status@broadcast") continue;
+        const preferences = await pool.query(
+          `select coalesce(number.auto_mark_read,false) auto_mark_read,
+                  coalesce(number.group_replies_enabled,false) group_replies_enabled
+           from whatsapp_qr_connections connection
+           left join organization_whatsapp_numbers number on number.id=connection.whatsapp_number_id
+           where connection.id=$1`, [session.id],
+        );
+        const preference = preferences.rows[0] || {};
+        const isGroup = item.key.remoteJid?.endsWith("@g.us");
+        if (isGroup && !preference.group_replies_enabled) continue;
+        const sourceJid = jidNormalizedUser(isGroup ? item.key.participant : (item.key.remoteJidAlt || item.key.remoteJid || ""));
         const text = textFromMessage(item.message);
         const messageType = Object.keys(item.message)[0]?.replace("Message", "") || "unknown";
+        if (preference.auto_mark_read) await socket.readMessages([item.key]);
         await notify(session, "MESSAGE_RECEIVED", { provider_message_id: item.key.id, from_phone: phoneFromJid(sourceJid),
           to_phone: phoneFromJid(socket.user?.id), text_body: text, message_type: messageType,
+          group_jid: isGroup ? item.key.remoteJid : null,
           received_at: new Date(Number(item.messageTimestamp || Date.now() / 1000) * 1000).toISOString() }, item.key.id);
       } catch (error) { logger.error({ error: error.message, connectionId: id }, "message_callback_failed"); }
     }
@@ -164,6 +176,24 @@ export async function sendMessage(id, to, message) {
   const jid = `${String(to).replace(/\D/g, "")}@s.whatsapp.net`;
   const result = await session.socket.sendMessage(jid, { text: message });
   return { success: true, provider_message_id: result?.key?.id || null };
+}
+
+export async function createGroup(id, subject, participants) {
+  const session = sessions.get(id);
+  if (!session?.socket || session.status !== "CONNECTED") throw new Error("whatsapp_qr_session_not_connected");
+  const jids = [...new Set((participants || []).map(phone => `${String(phone).replace(/\D/g, "")}@s.whatsapp.net`))];
+  if (!String(subject || "").trim() || !jids.length) throw new Error("whatsapp_group_subject_and_participants_required");
+  const result = await session.socket.groupCreate(String(subject).trim().slice(0, 100), jids);
+  return { success: true, group_jid: result?.id || null, subject: result?.subject || subject };
+}
+
+export async function addGroupParticipants(id, groupJid, participants) {
+  const session = sessions.get(id);
+  if (!session?.socket || session.status !== "CONNECTED") throw new Error("whatsapp_qr_session_not_connected");
+  const jids = [...new Set((participants || []).map(phone => `${String(phone).replace(/\D/g, "")}@s.whatsapp.net`))];
+  if (!String(groupJid || "").endsWith("@g.us") || !jids.length) throw new Error("whatsapp_group_and_participants_required");
+  const result = await session.socket.groupParticipantsUpdate(groupJid, jids, "add");
+  return { success: true, results: result };
 }
 
 export async function logoutSession(id) {

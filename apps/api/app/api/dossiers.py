@@ -49,6 +49,7 @@ from app.db.dossier_alert_repository import (
     refresh_dossier_alerts,
 )
 from app.services.dossier_document_storage import create_document_download_url, upload_private_document
+from app.services.whatsapp_dossier_group_service import sync_dossier_whatsapp_group
 from app.db.dossier_client_repository import (
     DuplicateDossierClientError,
     archive_dossier_client,
@@ -488,7 +489,8 @@ def dossiers_create(body: DossierPayload, tenant=Depends(get_current_tenant)):
         }:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise
-    return {"status": "ok", "dossier": dossier}
+    group = sync_dossier_whatsapp_group(tenant["org_id"], dossier["id"])
+    return {"status": "ok", "dossier": dossier, "whatsapp_group": group}
 
 
 @router.get(
@@ -581,7 +583,8 @@ def dossier_client_attach(
         )
     except ValueError as exc:
         _raise_dossier_client_error(exc)
-    return {"status": "ok", "relation": relation, "replayed": replayed}
+    group = {"status": "unchanged"} if replayed else sync_dossier_whatsapp_group(tenant["org_id"], dossier_id)
+    return {"status": "ok", "relation": relation, "replayed": replayed, "whatsapp_group": group}
 
 
 @router.post(
@@ -614,8 +617,10 @@ def dossier_client_create(
         ) from exc
     except ValueError as exc:
         _raise_dossier_client_error(exc)
+    group = {"status": "unchanged"} if replayed else sync_dossier_whatsapp_group(tenant["org_id"], dossier_id)
     return {
         "status": "ok", "client": client, "relation": relation, "replayed": replayed,
+        "whatsapp_group": group,
     }
 
 

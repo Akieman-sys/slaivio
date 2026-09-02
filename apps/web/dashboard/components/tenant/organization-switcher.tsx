@@ -1,10 +1,11 @@
 "use client";
 
 import { Building2, Check, ChevronDown, Plus, X } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getTenantContext, switchTenant } from "@/services/tenant";
+import { OperationButton } from "@/components/ui/operation-controls";
+import { OperationDrawer } from "@/components/ui/operation-drawer";
+import { createTenant, getTenantContext, switchTenant } from "@/services/tenant";
 
 type Tenant = {
   org_id: string;
@@ -19,6 +20,9 @@ export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [organizationName, setOrganizationName] = useState("");
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -59,6 +63,25 @@ export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }
     } catch {
       setError("Changement impossible");
       setSwitching(false);
+    }
+  }
+
+  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = organizationName.trim();
+    if (name.length < 2) {
+      setError("Saisissez un nom d’organisation.");
+      return;
+    }
+    setCreating(true);
+    setError("");
+    try {
+      await createTenant(name);
+      window.sessionStorage.removeItem("slaivio:dashboard-home");
+      window.location.reload();
+    } catch {
+      setError("La création de l’organisation a échoué.");
+      setCreating(false);
     }
   }
 
@@ -106,11 +129,24 @@ export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }
             ))}
           </div>
           <div className="border-t border-[#eceeed] p-1.5">
-            <Link href="/onboarding/workspaces" className="flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[13px] text-[#59636c] hover:bg-[#f3f4f4]" onClick={() => setOpen(false)}><Plus size={15}/>Créer une organisation</Link>
+            <button type="button" className="flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[13px] text-[#59636c] hover:bg-[#f3f4f4]" onClick={() => { setOpen(false); setError(""); setCreateOpen(true); }}><Plus size={15}/>Créer une organisation</button>
           </div>
         </div>
       )}
       {error && <p className="mt-1 px-1 text-[11px] text-red-600">{error}</p>}
+      <OperationDrawer
+        open={createOpen}
+        close={() => { if (!creating) setCreateOpen(false); }}
+        title="Créer une organisation"
+        description="Créez un espace séparé avec ses propres clients, dossiers, messages et réglages."
+        footer={<><OperationButton type="button" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</OperationButton><OperationButton type="submit" form="create-organization-form" variant="primary" disabled={creating || organizationName.trim().length < 2}>{creating ? "Création…" : "Créer"}</OperationButton></>}
+      >
+        <form id="create-organization-form" onSubmit={handleCreate} className="grid gap-2">
+          <label htmlFor="organization-name" className="text-[13px] font-semibold text-[#414950]">Nom de l’organisation</label>
+          <input id="organization-name" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} maxLength={120} autoFocus placeholder="Ex. Slaivio France" className="h-10 rounded-[7px] border border-[#d4d9df] bg-white px-3 text-[13px] outline-none focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10" />
+          {error && <p className="text-[12px] text-red-600">{error}</p>}
+        </form>
+      </OperationDrawer>
     </div>
   );
 }

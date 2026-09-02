@@ -5,6 +5,7 @@ from app.tenant.repositories.tenant_repository import (
 )
 from app.organizations.services.membership_role_service import sync_membership_with_role
 from app.organizations.services.provisioning_service import provision_organization
+from uuid import uuid4
 
 
 def get_tenant_context(
@@ -81,4 +82,42 @@ def switch_tenant(
         org_id=org_id,
         clerk_org_id=selected.get("clerk_org_id"),
     )
+
+
+def create_tenant(manager: dict, organization_name: str):
+    """Create an additional organization owned by the authenticated user."""
+    user_id = str(manager.get("user_id") or manager.get("id") or "")
+    if not user_id:
+        raise ValueError("authenticated_user_id_required")
+
+    name = organization_name.strip()
+    if len(name) < 2:
+        raise ValueError("organization_name_required")
+
+    organization_key = f"org_{uuid4().hex}"
+    organization = provision_organization(
+        clerk_org_id=organization_key,
+        organization_name=name,
+    )
+    if not organization:
+        raise RuntimeError("organization_provisioning_failed")
+
+    sync_membership_with_role(
+        clerk_membership_id=f"membership_{uuid4().hex}",
+        clerk_user_id=user_id,
+        clerk_org_id=organization_key,
+        org_id=str(organization["id"]),
+        user_email=manager.get("email"),
+        user_display_name=(manager.get("full_name") or manager.get("name") or manager.get("email")),
+        default_role_code="OWNER",
+    )
+    active = set_active_tenant(
+        clerk_user_id=user_id,
+        org_id=str(organization["id"]),
+        clerk_org_id=organization_key,
+    )
+    return {
+        "organization": organization,
+        "active_tenant": get_active_tenant(user_id) or active,
+    }
 

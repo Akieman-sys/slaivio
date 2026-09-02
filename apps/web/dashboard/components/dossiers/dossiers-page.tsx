@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { AlertCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Download, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -277,7 +277,7 @@ function DossiersTable({ items, openDetail }: { items: DossierRecord[]; openDeta
 
 function SelectedClients({ clients, remove }: { clients: DossierClientSearchResult[]; remove: (id: string) => void }) {
   if (!clients.length) return null;
-  return <div className="mt-4 grid gap-2">{clients.map((client) => <div key={client.id} className="flex items-center justify-between rounded-[8px] border border-[#b8ddca] bg-[#f2fbf6] p-3.5"><div className="min-w-0"><p className="truncate text-[13px] font-semibold text-[#26312b]">{client.display_name}</p><p className="mt-0.5 text-[12px] text-[#617169]">{client.phone || client.whatsapp_phone || client.email || client.client_reference}</p></div><button type="button" className="text-[12px] font-semibold text-[#087a46]" onClick={() => remove(client.id)}>Retirer</button></div>)}</div>;
+  return <div className="mt-4 grid gap-2">{clients.map((client) => <div key={client.id} className="flex items-center justify-between rounded-[8px] border border-[#b8ddca] bg-[#f2fbf6] p-3.5"><div className="min-w-0"><p className="truncate text-[13px] font-semibold text-[#26312b]">{client.display_name}</p><p className="mt-0.5 text-[12px] text-[#617169]">{client.phone || client.whatsapp_phone || client.email || client.client_reference}</p></div><button type="button" className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] text-[#a62b25] hover:bg-[#fde8e7]" onClick={() => remove(client.id)} aria-label={`Retirer ${client.display_name}`} title="Retirer"><Trash2 size={15}/></button></div>)}</div>;
 }
 
 function ClientSearch({ query, setQuery, searching, matches, select }: { query: string; setQuery: (value: string) => void; searching: boolean; matches: DossierClientSearchResult[]; select: (client: DossierClientSearchResult) => void }) {

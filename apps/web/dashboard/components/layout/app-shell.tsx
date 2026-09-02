@@ -18,7 +18,7 @@ import {
   Menu,
   Megaphone,
   MessageSquareText,
-  Palette,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   TicketCheck,
   Trash2,
   UserRound,
@@ -46,8 +47,9 @@ import { SESSION_EXPIRED_EVENT } from "@/services/api";
 import { listNotifications, notificationAction, type CenterItem } from "@/services/notification-center";
 import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 import { PilotOfflineIndicator } from "@/components/offline/pilot-offline-indicator";
+import { dashboardLabel, setDashboardLocale, useDashboardLocale } from "@/components/i18n/dashboard-language";
 
-type FloatingPanel = "account" | "notifications" | "help" | null;
+type FloatingPanel = "account" | "notifications" | "help" | "language" | null;
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 const utilityRoutes: readonly AppRoute[] = [
@@ -58,6 +60,7 @@ const utilityRoutes: readonly AppRoute[] = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const locale = useDashboardLocale();
   const pilot = isPilotV1();
   const pathname = usePathname();
   const router = useRouter();
@@ -96,6 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       [route.label, ...route.keywords].some((term) => term.toLocaleLowerCase("fr").includes(normalized)),
     );
   }, [query, permissions, permissionsAvailable]);
+
+  useEffect(() => {
+    const theme = window.localStorage.getItem("slaivio.theme") || "light";
+    document.documentElement.dataset.theme = theme;
+  }, []);
 
   useEffect(() => {
     if (pilot) {
@@ -190,7 +198,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${pilot ? "lg:w-[80px]" : sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${pilot ? "px-4 lg:justify-center lg:px-0" : sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
-          <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
+          <Link href="/app" className={`flex items-center ${!pilot&&sidebarCollapsed?"lg:hidden":""}`} onClick={() => setMobileOpen(false)}>
             {pilot ? (
               <>
                 <span className="hidden lg:block"><SlaivioBrand compact iconOnly /></span>
@@ -201,7 +209,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
           </button>
-          {!pilot && <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:fixed lg:left-[44px] lg:top-[14px] lg:z-[60] lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
+          {!pilot && <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:mx-auto lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>}
         </div>
@@ -209,34 +217,34 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${pilot ? "px-3 lg:px-2" : sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
           {pilot ? (
             <div className="space-y-1">
-              <PilotRailLink href="/app" icon={<Home size={19} />} active={pathname === "/app"} label="Accueil" />
+              <PilotRailLink href="/app" icon={<Home size={19} />} active={pathname === "/app"} label={dashboardLabel(locale, "Accueil", "/app")} />
               {pilotPrimaryRoutes.map((route) => (
                 <PilotRailLink
                   key={route.href}
                   href={route.href}
                   icon={<route.icon size={19} />}
                   active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
-                  label={route.label}
+                  label={dashboardLabel(locale, route.label, route.href)}
                 />
               ))}
             </div>
           ) : <>
-            <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
+            <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label={dashboardLabel(locale, "Accueil", "/app")} collapsed={sidebarCollapsed} />
             {groupedRoutes.map((group) => group.collapsible === false && group.routes[0] ? (
             <div key={group.label} className="mt-1">
               <SidebarLink
                 href={group.routes[0].href}
                 icon={<group.icon size={18} />}
                 active={pathname === group.routes[0].href || pathname.startsWith(`${group.routes[0].href}/`)}
-                label={group.routes[0].label}
+                label={dashboardLabel(locale, group.routes[0].label, group.routes[0].href)}
                 collapsed={sidebarCollapsed}
               />
             </div>
           ) : (
             <section data-ui="sidebar-group" key={group.label} className={sidebarCollapsed ? "mt-1" : "mt-3"}>
-              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? group.label : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#53606c] hover:text-[#20252b] ${sidebarCollapsed ? "h-10 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-9 gap-2.5 px-2"}`}>
+              <button type="button" onClick={() => toggleGroup(group.label)} title={sidebarCollapsed ? dashboardLabel(locale, group.label) : undefined} aria-expanded={!sidebarCollapsed && openGroups[group.label] !== false} className={`flex w-full items-center text-[#53606c] hover:text-[#20252b] ${sidebarCollapsed ? "h-10 justify-center rounded-[6px] hover:bg-[#f0f2f3]" : "h-9 gap-2.5 px-2"}`}>
                 <group.icon size={16} strokeWidth={1.8} className="shrink-0 text-[#69747f]" />
-                {!sidebarCollapsed && <><span data-ui="sidebar-group-label" className="truncate text-[12px] font-[650] uppercase tracking-[0.045em]">{group.label}</span><ChevronDown size={14} className={`ml-auto text-[#8a939c] transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
+                {!sidebarCollapsed && <><span data-ui="sidebar-group-label" className="truncate text-[12px] font-[650] uppercase tracking-[0.045em]">{dashboardLabel(locale, group.label)}</span><ChevronDown size={14} className={`ml-auto text-[#8a939c] transition-transform ${openGroups[group.label] === false ? "-rotate-90" : ""}`} /></>}
               </button>
               <div className={`ml-[17px] space-y-1 border-l border-[#e2e6e9] pl-2.5 ${sidebarCollapsed || openGroups[group.label] === false ? "hidden" : ""}`}>
                 {group.routes.map((route) => (
@@ -245,7 +253,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     href={route.href}
                     icon={<route.icon size={16} />}
                     active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
-                    label={route.label}
+                    label={dashboardLabel(locale, route.label, route.href)}
                     collapsed={sidebarCollapsed}
                     nested
                   />
@@ -266,7 +274,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <>
               <div className="lg:hidden"><OrganizationSwitcher /></div>
               <div className="hidden space-y-1 lg:block">
-                <PilotRailButton label="Alertes" icon={<Bell size={19} />} active={floatingPanel === "notifications"} onClick={() => togglePanel("notifications")} />
+                <PilotRailButton label="FR / EN" icon={<Languages size={19} />} active={floatingPanel === "language"} onClick={() => togglePanel("language")} />
+                <PilotRailButton label={dashboardLabel(locale, "Alertes")} icon={<Bell size={19} />} active={floatingPanel === "notifications"} onClick={() => togglePanel("notifications")} />
                 <AccountTrigger rail onClick={() => togglePanel("account")} />
               </div>
             </>
@@ -293,7 +302,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-1.5">
             {!pilot && <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />}
             {!pilot && <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />}
-            <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
+            <HeaderButton label={dashboardLabel(locale, "Langue")} icon={<Languages size={16} />} onClick={() => togglePanel("language")} active={floatingPanel === "language"} showLabel />
+            <HeaderButton label={dashboardLabel(locale, "Notifications")} icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
             <AccountTrigger onClick={() => togglePanel("account")} />
           </div>
         </header>
@@ -301,6 +311,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
         {floatingPanel === "help" && <div className="fixed right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
         {floatingPanel === "notifications" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-[72px] lg:left-[88px] lg:right-auto lg:top-auto" : "right-[48px] top-[52px]"}`}><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "language" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-[134px] lg:left-[88px] lg:right-auto lg:top-auto" : "right-[82px] top-[52px]"}`}><LanguageMenu close={() => setFloatingPanel(null)}/></div>}
         {floatingPanel === "account" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-3 lg:left-[88px] lg:right-auto lg:top-auto" : "right-3 top-[52px]"}`}><AccountMenu close={() => setFloatingPanel(null)} /></div>}
 
         {pilot && <PilotOfflineIndicator />}
@@ -320,7 +331,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {results.map((route) => (
                 <button key={route.href} onClick={() => openRoute(route.href)} className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left text-sm hover:bg-[#f0f1f1] focus:bg-[#f0f1f1] focus:outline-none">
                   <route.icon size={16} className="text-[#606871]" />
-                  <span>{route.label}</span>
+                  <span>{dashboardLabel(locale, route.label, route.href)}</span>
                   <ChevronRight size={14} className="ml-auto text-[#9aa0a6]" />
                 </button>
               ))}
@@ -436,10 +447,19 @@ function FallbackAccountMenu({ close }: { close: () => void }) {
   return <AccountMenuContent close={close} name="Utilisateur Slaivio" email="Session locale" logout={() => { window.location.assign("/sign-in"); }} />;
 }
 
+function LanguageMenu({close}:{close:()=>void}){
+  const locale=useDashboardLocale();
+  function choose(next:"fr"|"en"){setDashboardLocale(next);close()}
+  return <div className="w-[230px] rounded-[8px] border border-[#d1d5d8] bg-white p-1.5 shadow-[0_16px_44px_rgba(15,23,42,.18)]"><p className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7a838b]">Langue du tableau de bord</p>{([['fr','🇫🇷','Français'],['en','🇬🇧','English']] as const).map(([key,flag,label])=><button key={key} type="button" onClick={()=>choose(key)} className="flex h-10 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[13px] hover:bg-[#f2f4f4]"><span aria-hidden="true">{flag}</span><span className="flex-1">{label}</span>{locale===key&&<CheckCheck size={15} className="text-[#16855f]"/>}</button>)}</div>
+}
+
 function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: () => void; name: string; email: string; imageUrl?: string | null; logout: () => void | Promise<unknown> }) {
   const { permissions, available } = usePermissions();
   const canOpenPlatform = !available || permissions.some((permission) => permission.startsWith("platform."));
   const pilot = isPilotV1();
+  const [theme,setTheme]=useState<"light"|"dark">("light");
+  useEffect(()=>{setTheme(document.documentElement.dataset.theme==="dark"?"dark":"light")},[]);
+  function toggleTheme(){const next=theme==="dark"?"light":"dark";setTheme(next);document.documentElement.dataset.theme=next;window.localStorage.setItem("slaivio.theme",next);}
 
   if (pilot) {
     return (
@@ -452,6 +472,7 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
         <div className="px-3 py-1"><OrganizationSwitcher menuPlacement="down" /></div>
         <MenuDivider />
         <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres" close={close} />
+        <button type="button" onClick={toggleTheme} className={menuClass}>{theme==="dark"?<Sun size={15}/>:<Moon size={15}/>} {theme==="dark"?"Mode clair":"Mode sombre"}</button>
         <MenuLink href="/app/support" icon={<CircleHelp size={15} />} label="Aide et support" close={close} />
         <MenuDivider />
         <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
@@ -475,7 +496,7 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
       <MenuLink href="/app/settings?section=roles" icon={<ShieldCheck size={15} />} label="Rôles et permissions" close={close} />
       <MenuLink href="/app/notifications?preferences=1" icon={<SlidersHorizontal size={15} />} label="Préférences de notifications" close={close} />
       <MenuLink href="/app/settings?section=general" icon={<Languages size={15} />} label="Langue et formats" close={close} />
-      <MenuDisabled icon={<Palette size={15} />} label="Apparence" status="Bientôt" />
+      <button type="button" onClick={toggleTheme} className={menuClass}>{theme==="dark"?<Sun size={15}/>:<Moon size={15}/>} {theme==="dark"?"Mode clair":"Mode sombre"}</button>
       <MenuDivider />
       <MenuLink href="/app/settings?section=integrations" icon={<Plug size={15} />} label="Intégrations" close={close} />
       <MenuLink href="/app/settings?section=billing" icon={<CreditCard size={15} />} label="Abonnement et facturation" close={close} />

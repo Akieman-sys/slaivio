@@ -57,6 +57,7 @@ def test_production_accepts_a_complete_secure_contract() -> None:
         meta_app_secret="meta-secret",
         meta_embedded_signup_config_id="9876543210",
         meta_credentials_encryption_key="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+        clamav_host="clamav",
     )
 
     assert settings.is_deployed is True

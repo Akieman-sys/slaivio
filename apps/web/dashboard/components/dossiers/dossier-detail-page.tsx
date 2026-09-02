@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { ArrowLeft, ChevronRight, History, MessageCircle, MoveRight, Plus, RotateCw, Users } from "lucide-react";
+import { ArrowLeft, ChevronRight, History, MessageCircle, MoveRight, Pencil, Plus, RotateCw, Users } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
@@ -227,7 +227,7 @@ export function DossierDetailPage({ dossierId }: { dossierId: string }) {
       description={dossier.title ? dossier.dossier_reference : "Dossier de suivi"}
       actions={<>
         <OperationButton onClick={() => router.push("/app/dossiers")}><ArrowLeft size={15} /> Tous les dossiers</OperationButton>
-        {!dossier.archived_at && <PermissionGuard permission="dossiers.update"><OperationButton onClick={() => { setFormError(""); setEditOpen(true); }}>Modifier</OperationButton></PermissionGuard>}
+        {!dossier.archived_at && <PermissionGuard permission="dossiers.update"><OperationButton aria-label="Modifier le dossier" title="Modifier" className="w-9 px-0" onClick={() => { setFormError(""); setEditOpen(true); }}><Pencil size={15}/></OperationButton></PermissionGuard>}
         <PermissionGuard permission="dossiers.archive"><OperationButton variant={dossier.archived_at ? "secondary" : "danger"} onClick={toggleArchive}>{dossier.archived_at ? "Restaurer" : "Archiver"}</OperationButton></PermissionGuard>
       </>}
     />

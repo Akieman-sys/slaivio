@@ -27,7 +27,8 @@ def overview(org_id: str) -> dict:
         )
         organization = _dict(conn.execute(text("""
           select id,coalesce(organization_name,name) organization_name,legal_name,
-                 country,city,address,phone,email,website,logo_url,row_version
+                 country,city,address,phone,email,website,logo_url,row_version,
+                 whatsapp_group_on_dossier_create
           from organizations where id=:org_id
         """), {"org_id": org_id}).fetchone())
         responsible = _dict(conn.execute(text("""
@@ -45,14 +46,15 @@ def overview(org_id: str) -> dict:
           order by case document_type when 'CLIENT' then 0 else 1 end
         """), {"org_id": org_id}).fetchall()]
         numbers = [dict(row._mapping) for row in conn.execute(text("""
-          select id::text,provider,display_phone_number,verified_name,connection_status,
-                 quality_rating,is_default,last_sync_at
+          select id::text,provider,phone_number_id,display_phone_number,verified_name,connection_status,
+                 quality_rating,is_default,last_sync_at,auto_mark_read,group_replies_enabled
           from organization_whatsapp_numbers
           where org_id=:org_id and is_active=true
           order by is_default desc,created_at desc
         """), {"org_id": org_id}).fetchall()]
         ai = _dict(conn.execute(text("""
-          select pilot_response_mode,pilot_require_published_knowledge,updated_at
+          select pilot_response_mode,pilot_require_published_knowledge,system_prompt,
+                 user_prompt_template,communication_style,prompt_row_version,updated_at
           from ai_settings where org_id=:org_id
         """), {"org_id": org_id}).fetchone())
         knowledge = _dict(conn.execute(text("""
@@ -257,6 +259,23 @@ def select_whatsapp_number(org_id: str, actor_id: str, number_id: str) -> dict:
             )
             return dict(row)
         return dict(selected)
+
+
+def save_whatsapp_preferences(org_id: str, actor_id: str, number_id: str, auto_mark_read: bool, group_replies_enabled: bool, group_on_dossier_create: bool) -> dict:
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+          update organization_whatsapp_numbers set auto_mark_read=:auto_mark_read,
+            group_replies_enabled=:group_replies_enabled,updated_at=now()
+          where org_id=:org_id and id=cast(:number_id as uuid) and is_active=true
+          returning id::text,phone_number_id,display_phone_number,connection_status,
+                    auto_mark_read,group_replies_enabled
+        """), {"org_id":org_id,"number_id":number_id,"auto_mark_read":auto_mark_read,
+                "group_replies_enabled":group_replies_enabled}).mappings().first()
+        if not row: raise HTTPException(404,"pilot_whatsapp_number_not_found")
+        conn.execute(text("update organizations set whatsapp_group_on_dossier_create=:enabled,updated_at=now() where id=:org_id"),
+                     {"org_id":org_id,"enabled":group_on_dossier_create})
+        administration._audit(conn,org_id,actor_id,"PILOT_WHATSAPP_PREFERENCES_UPDATED","whatsapp_number",number_id,None,dict(row))
+        return {**dict(row),"group_on_dossier_create":group_on_dossier_create}
 
 
 def save_knowledge_defaults(

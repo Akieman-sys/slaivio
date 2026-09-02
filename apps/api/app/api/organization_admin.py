@@ -39,6 +39,10 @@ class NumberingSave(BaseModel):
 class DataRequest(BaseModel):request_type:str=Field(pattern=r'^(EXPORT|ARCHIVE_WORKSPACE|DELETE_WORKSPACE|DELETE_ORGANIZATION)$');scope:dict[str,Any]={};confirmation:str|None=None
 class ApiKeyCreate(BaseModel):name:str=Field(min_length=2,max_length=80);scopes:list[str]=Field(min_length=1,max_length=30);expires_at:str|None=None
 class PilotWhatsappNumber(BaseModel):number_id:str=Field(min_length=1,max_length=80)
+class PilotWhatsappPreferences(BaseModel):
+    auto_mark_read:bool=False
+    group_replies_enabled:bool=False
+    group_on_dossier_create:bool=False
 class PilotWazzapActivation(BaseModel):
     phone_number:str=Field(min_length=7,max_length=30)
     verified_name:str|None=Field(default=None,max_length=120)
@@ -56,6 +60,10 @@ def get_pilot_settings(tenant=Depends(get_current_tenant)):
 @router.patch('/pilot/whatsapp-number',dependencies=[Depends(require_permission('pilot.settings.manage'))])
 def patch_pilot_whatsapp_number(body:PilotWhatsappNumber,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
     return {'status':'ok','number':pilot_repo.select_whatsapp_number(tenant['org_id'],actor(manager),body.number_id)}
+
+@router.patch('/pilot/whatsapp-number/{number_id}/preferences',dependencies=[Depends(require_permission('pilot.settings.manage'))])
+def patch_pilot_whatsapp_preferences(number_id:str,body:PilotWhatsappPreferences,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):
+    return {'status':'ok','number':pilot_repo.save_whatsapp_preferences(tenant['org_id'],actor(manager),number_id,body.auto_mark_read,body.group_replies_enabled,body.group_on_dossier_create)}
 
 @router.post('/pilot/wazzap/activate',dependencies=[Depends(require_permission('pilot.settings.manage'))])
 def post_pilot_wazzap_activation(body:PilotWazzapActivation,tenant=Depends(get_current_tenant),manager=Depends(get_current_manager)):

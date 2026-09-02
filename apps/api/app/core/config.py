@@ -127,6 +127,8 @@ class Settings(BaseSettings):
             errors.append("CLERK_WEBHOOK_SECRET is required")
         if not self.public_base_url or not self.public_base_url.startswith("https://"):
             errors.append("PUBLIC_BASE_URL must be an HTTPS URL")
+        if self.knowledge_antivirus_required and not self.clamav_host:
+            errors.append("CLAMAV_HOST is required when KNOWLEDGE_ANTIVIRUS_REQUIRED=true")
         if self.whatsapp_provider == "meta":
             if self.meta_wa_verify_token == "slaivo_verify_token_secret" or len(
                 self.meta_wa_verify_token

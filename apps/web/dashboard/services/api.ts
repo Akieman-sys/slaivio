@@ -9,6 +9,7 @@ type RetriableRequest = {
 let accessTokenProvider: AccessTokenProvider | null = null;
 export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
 export const API_MUTATION_FAILED_EVENT = "slaivio:api-mutation-failed";
+export const API_MUTATION_SUCCEEDED_EVENT = "slaivio:api-mutation-succeeded";
 
 const apiDetailMessages: Record<string, string> = {
   knowledge_antivirus_unavailable: "Le service de sécurité des fichiers est temporairement indisponible. Réessayez dans quelques instants.",
@@ -74,7 +75,18 @@ api.interceptors.request.use(async (config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (typeof window !== "undefined") {
+      const method = String(response.config.method || "get").toUpperCase();
+      if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+        const message = method === "POST" ? "Création ou action effectuée avec succès."
+          : method === "DELETE" ? "Suppression effectuée avec succès."
+            : "Modification enregistrée avec succès.";
+        window.dispatchEvent(new CustomEvent(API_MUTATION_SUCCEEDED_EVENT, { detail: { message } }));
+      }
+    }
+    return response;
+  },
   async (error: unknown) => {
     if (axios.isAxiosError(error) && !error.response && error.config) {
       const config = error.config as typeof error.config & RetriableRequest;

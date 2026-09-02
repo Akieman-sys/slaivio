@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Edit3, RotateCcw, X } from "lucide-react";
+import { Archive, Edit3, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { OperationTabMenu } from "@/components/ui/operation-controls";
 
@@ -71,11 +71,12 @@ export function OperationDrawerAction({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   intent?: "default" | "primary" | "danger";
-  icon?: "edit" | "archive" | "restore" | ReactNode;
+  icon?: "edit" | "archive" | "restore" | "delete" | ReactNode;
 }) {
-  const Icon = icon === "edit" ? Edit3 : icon === "archive" ? Archive : icon === "restore" ? RotateCcw : null;
   const textLabel = typeof children === "string" ? children : undefined;
-  const iconOnly = Boolean(icon && textLabel && ["Modifier", "Retirer", "Archiver", "Restaurer", "Supprimer"].includes(textLabel));
+  const resolvedIcon = icon || (intent === "danger" && textLabel && ["Retirer", "Supprimer"].some(label=>textLabel.startsWith(label)) ? "delete" : undefined);
+  const Icon = resolvedIcon === "edit" ? Edit3 : resolvedIcon === "archive" ? Archive : resolvedIcon === "restore" ? RotateCcw : resolvedIcon === "delete" ? Trash2 : null;
+  const iconOnly = Boolean(resolvedIcon && textLabel && ["Modifier", "Retirer", "Archiver", "Restaurer", "Supprimer"].some(label=>textLabel.startsWith(label)));
   const colors = intent === "primary"
     ? "border-[#0faf63] bg-[#12c76f] text-white hover:bg-[#0faf63]"
     : intent === "danger"
@@ -86,11 +87,11 @@ export function OperationDrawerAction({
       type="button"
       {...props}
       data-ui="operation-drawer-action"
-      aria-label={iconOnly ? textLabel : props["aria-label"]}
-      title={iconOnly ? textLabel : props.title}
+      aria-label={iconOnly ? props["aria-label"] || textLabel : props["aria-label"]}
+      title={iconOnly ? props.title || textLabel : props.title}
       className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border text-[13px] font-semibold shadow-[0_1px_1px_rgba(15,23,42,.03)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${iconOnly ? "w-9 px-0" : "px-3"} ${colors} ${className}`}
     >
-      {Icon ? <Icon size={15} aria-hidden="true" /> : typeof icon === "string" ? null : icon}
+      {Icon ? <Icon size={15} aria-hidden="true" /> : typeof resolvedIcon === "string" ? null : resolvedIcon}
       {iconOnly ? <span className="sr-only">{children}</span> : children}
     </button>
   );

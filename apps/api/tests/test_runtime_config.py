@@ -43,6 +43,7 @@ def test_production_api_accepts_isolated_qr_gateway_contract():
         whatsapp_provider="qr_linked_device",
         whatsapp_qr_gateway_url="https://qr.example.test",
         whatsapp_qr_gateway_shared_secret="s" * 32,
+        clamav_host="clamav",
     )
     assert config.whatsapp_provider == "qr_linked_device"
 

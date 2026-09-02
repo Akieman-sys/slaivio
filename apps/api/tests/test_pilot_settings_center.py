@@ -44,17 +44,26 @@ def test_whatsapp_selection_uses_connected_portfolio_numbers_and_is_audited():
     assert "pilot_whatsapp_number_not_connected" in repository
 
 
-def test_pilot_settings_ui_uses_five_clear_business_sections():
+def test_pilot_settings_ui_separates_channels_ai_privacy_and_notifications():
     page = read("apps/web/dashboard/components/settings/pilot-settings-page.tsx")
-    for label in ("Entreprise", "Responsable", "Identifiants", "WhatsApp & IA", "Connaissances"):
+    for label in (
+        "Entreprise",
+        "Responsable",
+        "Identifiants",
+        "Canaux",
+        "Intelligence artificielle",
+        "Connaissances",
+        "Confidentialité & données",
+        "Notifications",
+    ):
         assert label in page
     for mode in ("Suggestion uniquement", "Automatique contrôlé", "IA en pause"):
         assert mode in page
     for hidden_term in ("Workspaces", "Rôles & permissions", "Clé API", "Journal d’audit", "meta_phone_number_id", "UUID"):
         assert hidden_term not in page
-    assert "Connecter WhatsApp" in page
-    assert "launchMetaEmbeddedSignup" in page
-    assert "Aucun mot de passe ni jeton technique" in page
+    assert "Lier un compte WhatsApp" in page
+    assert "startPilotWhatsappQR" in page
+    assert "mode « appareil lié »" in page
 
 
 def test_pilot_route_is_reversible_and_knowledge_defaults_are_effective():

@@ -42,7 +42,7 @@ def test_meta_embedded_signup_is_available_without_exposing_tokens_in_ui():
     assert "meta_embedded_signup_config_id" in backend
     assert "WA_EMBEDDED_SIGNUP" in frontend
     assert "override_default_response_type" in frontend
-    assert "Connecter WhatsApp" in settings
+    assert "Lier un compte WhatsApp" in settings
     assert "access_token" not in frontend
 
 

@@ -23,12 +23,12 @@ const buttonVariants: Record<ButtonVariant, string> = {
 export function OperationButton({
   variant = "secondary",
   className = "",
-  type = "button",
+  type,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return (
     <button
-      type={type}
+      type={type || (props.onClick ? "button" : "submit")}
       data-ui="operation-button"
       data-variant={variant}
       className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}

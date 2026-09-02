@@ -15,10 +15,13 @@ function PageState({ icon, title, description, action }: StateProps & { icon: Re
 }
 
 export function LoadingState({ label = "Chargement des données…" }: { label?: string }) {
-  return <div data-ui="loading-state" className="grid min-h-[280px] place-items-center bg-white p-6" role="status" aria-live="polite">
-    <div className="flex flex-col items-center text-center">
-      <span className="flex h-8 items-center gap-1" aria-hidden>{[0, 1, 2].map((item) => <span key={item} className="h-2 w-2 animate-bounce rounded-full bg-[#12c76f]" style={{ animationDelay: `${item * 120}ms` }} />)}</span>
-      <p className="mt-3 text-[13px] font-medium text-[#65707b]">{label}</p>
+  return <div data-ui="loading-state" className="min-h-[280px] bg-white p-6" role="status" aria-live="polite" aria-label={label}>
+    <span className="sr-only">{label}</span>
+    <div className="animate-pulse space-y-5" aria-hidden>
+      <div className="h-5 w-48 rounded-[5px] bg-[#e7ebed]"/>
+      <div className="h-3 w-[min(420px,75%)] rounded-[5px] bg-[#edf0f1]"/>
+      <div className="grid gap-3 sm:grid-cols-3"><div className="h-20 rounded-[8px] bg-[#edf0f1]"/><div className="h-20 rounded-[8px] bg-[#edf0f1]"/><div className="h-20 rounded-[8px] bg-[#edf0f1]"/></div>
+      <div className="space-y-2">{[0,1,2].map(item=><div key={item} className="h-12 rounded-[7px] bg-[#edf0f1]"/>)}</div>
     </div>
   </div>;
 }

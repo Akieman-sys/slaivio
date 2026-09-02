@@ -14,3 +14,10 @@ export async function switchTenant(orgId: string) {
   return response.data.active_tenant;
 }
 
+export async function createTenant(organizationName: string) {
+  const response = await api.post("/tenant/organizations", {
+    organization_name: organizationName,
+  });
+  return response.data;
+}
+

@@ -12,7 +12,7 @@ type Tenant = {
   role_code?: string | null;
 };
 
-export function OrganizationSwitcher({ collapsed = false }: { collapsed?: boolean }) {
+export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }: { collapsed?: boolean; menuPlacement?: "up" | "down" }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
@@ -83,7 +83,7 @@ export function OrganizationSwitcher({ collapsed = false }: { collapsed?: boolea
       </button>
 
       {open && (
-        <div className={`absolute z-50 w-[248px] overflow-hidden rounded-[7px] border border-[#d2d5d8] bg-white shadow-[0_14px_38px_rgba(15,23,42,.16)] ${collapsed ? "bottom-0 left-[48px]" : "bottom-[52px] left-0"}`}>
+        <div className={`absolute z-50 w-[248px] overflow-hidden rounded-[7px] border border-[#d2d5d8] bg-white shadow-[0_14px_38px_rgba(15,23,42,.16)] ${collapsed ? "bottom-0 left-[48px]" : menuPlacement === "down" ? "left-0 top-[52px]" : "bottom-[52px] left-0"}`}>
           <div className="flex h-10 items-center border-b border-[#eceeed] px-3 text-[12px] font-medium text-[#5f6670]">
             Changer d’agence
             <button type="button" onClick={() => setOpen(false)} className="ml-auto rounded p-1 hover:bg-[#f0f1f1]" aria-label="Fermer">

@@ -81,6 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     [permissions, permissionsAvailable],
   );
 
+  const pilotPrimaryRoutes = useMemo(() => {
+    const primaryHrefs = new Set(["/app/dossiers", "/app/inbox", "/app/followups", "/app/knowledge"]);
+    return groupedRoutes.flatMap((group) => group.routes).filter((route) => primaryHrefs.has(route.href));
+  }, [groupedRoutes]);
+
   const results = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("fr");
     const routes = [...searchableAppRoutes, ...utilityRoutes].filter((route) =>
@@ -93,6 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [query, permissions, permissionsAvailable]);
 
   useEffect(() => {
+    if (pilot) {
+      setSidebarCollapsed(false);
+      return;
+    }
     const savedCollapsed = window.localStorage.getItem("slaivio.sidebar.collapsed");
     const savedGroups = window.localStorage.getItem("slaivio.sidebar.groups");
     setSidebarCollapsed(savedCollapsed === "1");
@@ -103,9 +112,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         setOpenGroups(Object.fromEntries(appNavigation.map((group) => [group.label, group.label === selected])));
       } catch { /* Ignore stale preferences. */ }
     }
-  }, []);
+  }, [pilot]);
 
   useEffect(() => {
+    if (pilot) return;
     const activeGroup = groupedRoutes.find((group) =>
       group.routes.some((route) => pathname === route.href || pathname.startsWith(`${route.href}/`)),
     );
@@ -114,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const next = Object.fromEntries(groupedRoutes.map((group) => [group.label, group.label === activeGroup.label]));
       return Object.keys(next).every((key) => current[key] === next[key]) ? current : next;
     });
-  }, [groupedRoutes, pathname]);
+  }, [groupedRoutes, pathname, pilot]);
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {
@@ -178,22 +188,41 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={`fixed inset-0 z-40 bg-black/25 lg:hidden ${mobileOpen ? "block" : "hidden"}`}
       />
 
-      <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
+      <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${pilot ? "lg:w-[80px]" : sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${pilot ? "px-4 lg:justify-center lg:px-0" : sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
           <Link href="/app" className="flex items-center" onClick={() => setMobileOpen(false)}>
-            <SlaivioBrand compact iconOnly={sidebarCollapsed} />
+            {pilot ? (
+              <>
+                <span className="hidden lg:block"><SlaivioBrand compact iconOnly /></span>
+                <span className="lg:hidden"><SlaivioBrand compact /></span>
+              </>
+            ) : <SlaivioBrand compact iconOnly={sidebarCollapsed} />}
           </Link>
           <button onClick={() => setMobileOpen(false)} aria-label="Fermer" className="ml-auto rounded-[4px] p-1.5 text-[#555] hover:bg-[#f0f1f1] lg:hidden">
             <X size={17} />
           </button>
-          <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:fixed lg:left-[44px] lg:top-[14px] lg:z-[60] lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
+          {!pilot && <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} title={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"} className={`ml-auto hidden h-8 w-8 place-items-center rounded-[5px] text-[#656c74] hover:bg-[#f0f1f1] lg:grid ${sidebarCollapsed ? "lg:fixed lg:left-[44px] lg:top-[14px] lg:z-[60] lg:ml-0 lg:border lg:border-[#dfe1e3] lg:bg-white lg:shadow-sm" : ""}`}>
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </button>
+          </button>}
         </div>
 
-        <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
-          <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
-          {groupedRoutes.map((group) => group.collapsible === false && group.routes[0] ? (
+        <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${pilot ? "px-3 lg:px-2" : sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
+          {pilot ? (
+            <div className="space-y-1">
+              <PilotRailLink href="/app" icon={<Home size={19} />} active={pathname === "/app"} label="Accueil" />
+              {pilotPrimaryRoutes.map((route) => (
+                <PilotRailLink
+                  key={route.href}
+                  href={route.href}
+                  icon={<route.icon size={19} />}
+                  active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
+                  label={route.label}
+                />
+              ))}
+            </div>
+          ) : <>
+            <SidebarLink href="/app" icon={<Home size={18} />} active={pathname === "/app"} label="Accueil" collapsed={sidebarCollapsed} />
+            {groupedRoutes.map((group) => group.collapsible === false && group.routes[0] ? (
             <div key={group.label} className="mt-1">
               <SidebarLink
                 href={group.routes[0].href}
@@ -223,21 +252,30 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ))}
               </div>
             </section>
-          ))}
+            ))}
+          </>}
         </nav>
 
-        <div className={`shrink-0 border-t border-[#e3e4e5] ${sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
+        <div className={`shrink-0 border-t border-[#e3e4e5] ${pilot ? "p-3 lg:p-2" : sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
           {!permissionsLoading && !permissionsAvailable && (
-            <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
+            <div className={`mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800 ${pilot ? "lg:hidden" : ""}`}>
               Les droits n’ont pas pu être chargés. Les API continuent de protéger les actions.
             </div>
           )}
-          <OrganizationSwitcher collapsed={sidebarCollapsed} />
+          {pilot ? (
+            <>
+              <div className="lg:hidden"><OrganizationSwitcher /></div>
+              <div className="hidden space-y-1 lg:block">
+                <PilotRailButton label="Alertes" icon={<Bell size={19} />} active={floatingPanel === "notifications"} onClick={() => togglePanel("notifications")} />
+                <AccountTrigger rail onClick={() => togglePanel("account")} />
+              </div>
+            </>
+          ) : <OrganizationSwitcher collapsed={sidebarCollapsed} />}
         </div>
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header data-ui="topbar" className="slaivio-topbar relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4">
+        <header data-ui="topbar" className={`slaivio-topbar relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4 ${pilot ? "lg:hidden" : ""}`}>
           <button onClick={() => setMobileOpen(true)} aria-label="Ouvrir la navigation" className="mr-2 rounded-[5px] p-2 text-[#5f666e] hover:bg-[#f0f1f1] lg:hidden">
             <Menu size={19} />
           </button>
@@ -254,16 +292,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="ml-auto flex items-center gap-1.5">
             {!pilot && <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />}
-            <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />
-            {!pilot && <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />}
+            {!pilot && <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />}
+            <HeaderButton label="Notifications" icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
             <AccountTrigger onClick={() => togglePanel("account")} />
           </div>
-
-          {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
-          {floatingPanel === "help" && <div className="absolute right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
-          {!pilot && floatingPanel === "notifications" && <div className="absolute right-[48px] top-[52px] z-50"><NotificationsMenu close={() => setFloatingPanel(null)} /></div>}
-          {floatingPanel === "account" && <div className="absolute right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
         </header>
+
+        {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
+        {floatingPanel === "help" && <div className="fixed right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "notifications" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-[72px] lg:left-[88px] lg:right-auto lg:top-auto" : "right-[48px] top-[52px]"}`}><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "account" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-3 lg:left-[88px] lg:right-auto lg:top-auto" : "right-3 top-[52px]"}`}><AccountMenu close={() => setFloatingPanel(null)} /></div>}
 
         {pilot && <PilotOfflineIndicator />}
         <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
@@ -315,6 +353,35 @@ function SidebarLink({ href, icon, active, label, collapsed = false, nested = fa
   );
 }
 
+function PilotRailLink({ href, icon, active, label }: { href: string; icon: ReactNode; active: boolean; label: string }) {
+  return (
+    <Link
+      data-ui="sidebar-link"
+      data-active={active ? "true" : "false"}
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={`group flex min-h-[42px] items-center gap-2.5 rounded-[7px] px-2.5 text-[14px] lg:min-h-[58px] lg:flex-col lg:justify-center lg:gap-1 lg:px-1 lg:text-[10px] ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "font-[460] text-[#4b545c] hover:bg-[#f2f4f4] hover:text-[#20252b]"}`}
+    >
+      <span className={active ? "text-[#16855f]" : "text-[#656c74] group-hover:text-[#3f474f]"}>{icon}</span>
+      <span className="truncate lg:w-full lg:text-center lg:leading-3">{label}</span>
+    </Link>
+  );
+}
+
+function PilotRailButton({ label, icon, active, onClick }: { label: string; icon: ReactNode; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-expanded={active}
+      className={`flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] px-1 text-[10px] leading-3 ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "text-[#4b545c] hover:bg-[#f2f4f4]"}`}
+    >
+      {icon}<span>{label}</span>
+    </button>
+  );
+}
+
 function HeaderButton({ label, icon, onClick, active, showLabel = false }: { label: string; icon: ReactNode; onClick: () => void; active: boolean; showLabel?: boolean }) {
   return (
     <button type="button" onClick={onClick} aria-label={label} aria-expanded={active} className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-[5px] px-2 text-[13px] ${active ? "bg-[#eceeef]" : "hover:bg-[#f0f1f1]"}`}>
@@ -323,19 +390,20 @@ function HeaderButton({ label, icon, onClick, active, showLabel = false }: { lab
   );
 }
 
-function AccountTrigger({ onClick }: { onClick: () => void }) {
+function AccountTrigger({ onClick, rail = false }: { onClick: () => void; rail?: boolean }) {
   if (!clerkEnabled) {
-    return <FallbackAccountTrigger onClick={onClick} />;
+    return <FallbackAccountTrigger onClick={onClick} rail={rail} />;
   }
-  return <ClerkAccountTrigger onClick={onClick} />;
+  return <ClerkAccountTrigger onClick={onClick} rail={rail} />;
 }
 
-function ClerkAccountTrigger({ onClick }: { onClick: () => void }) {
+function ClerkAccountTrigger({ onClick, rail }: { onClick: () => void; rail: boolean }) {
   const { user } = useUser();
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Compte";
   return (
-    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5">
-      <UserAvatar imageUrl={user?.imageUrl} name={name} size={32} />
+    <button type="button" onClick={onClick} aria-label="Compte" className={rail ? "flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] text-[10px] leading-3 text-[#4b545c] hover:bg-[#f2f4f4]" : "ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5"}>
+      <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5"><UserAvatar imageUrl={user?.imageUrl} name={name} size={32} /></span>
+      {rail && <span>Compte</span>}
     </button>
   );
 }
@@ -355,10 +423,11 @@ function ClerkAccountMenu({ close }: { close: () => void }) {
   return <AccountMenuContent close={close} name={name} email={email} imageUrl={user?.imageUrl} logout={() => signOut({ redirectUrl: "/sign-in" })} />;
 }
 
-function FallbackAccountTrigger({ onClick }: { onClick: () => void }) {
+function FallbackAccountTrigger({ onClick, rail }: { onClick: () => void; rail: boolean }) {
   return (
-    <button type="button" onClick={onClick} aria-label="Compte" className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5">
-      <UserRound size={16} aria-hidden="true" />
+    <button type="button" onClick={onClick} aria-label="Compte" className={rail ? "flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] text-[10px] leading-3 text-[#4b545c] hover:bg-[#f2f4f4]" : "ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5"}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5"><UserRound size={16} aria-hidden="true" /></span>
+      {rail && <span>Compte</span>}
     </button>
   );
 }
@@ -374,14 +443,16 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
 
   if (pilot) {
     return (
-      <div className="w-[300px] overflow-hidden rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
+      <div className="w-[300px] rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
         <div className="flex items-center gap-3 px-4 py-4">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={imageUrl} name={name} size={40} /></div>
           <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
         </div>
         <MenuDivider />
-        <MenuLink href="/app/settings" icon={<UserRound size={15} />} label="Compte et responsable" close={close} />
-        <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres de l’entreprise" close={close} />
+        <div className="px-3 py-1"><OrganizationSwitcher menuPlacement="down" /></div>
+        <MenuDivider />
+        <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres" close={close} />
+        <MenuLink href="/app/support" icon={<CircleHelp size={15} />} label="Aide et support" close={close} />
         <MenuDivider />
         <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
           <LogOut size={15} /> Se déconnecter
@@ -444,7 +515,7 @@ function HelpMenu({ close }: { close: () => void }) {
   );
 }
 
-function NotificationsMenu({ close }: { close: () => void }) {
+function NotificationsMenu({ close, pilot = false }: { close: () => void; pilot?: boolean }) {
   const [items, setItems] = useState<CenterItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -492,22 +563,28 @@ function NotificationsMenu({ close }: { close: () => void }) {
         ) : error ? <p className="p-6 text-center text-[12px] text-red-600">{error}</p> : !filtered.length ? (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center"><CheckCheck size={24} className="text-[#a1a7ad]" /><p className="mt-3 text-[13px] font-medium">Aucune notification {tab === "unread" ? "non lue" : "lue"}</p><p className="mt-1 text-[11px] leading-5 text-[#858b92]">Les mises à jour opérationnelles apparaîtront ici.</p></div>
         ) : filtered.map((item) => (
-          <Link key={`${item.source}-${item.id}`} href={notificationTarget(item)} onClick={() => markRead(item)} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
+          <Link key={`${item.source}-${item.id}`} href={notificationTarget(item, pilot)} onClick={() => markRead(item)} className="flex gap-3 border-b border-[#eceeef] px-4 py-3 hover:bg-[#f7f8f8]">
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.priority === "CRITICAL" ? "bg-red-500" : item.priority === "HIGH" ? "bg-amber-500" : "bg-[#5b55e7]"}`} />
             <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{item.title}</span><span className="mt-1 line-clamp-2 block text-[11px] leading-4 text-[#666e77]">{item.message}</span><span className="mt-1.5 block text-[10px] text-[#959ba1]">{new Date(item.created_at).toLocaleString("fr-FR")}</span></span>
           </Link>
         ))}
       </div>
       <div className="grid shrink-0 grid-cols-2 border-t border-[#e5e6e7] p-2">
-        <Link href="/app/notifications" onClick={close} className="flex h-8 items-center justify-center rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]">Tout afficher</Link>
-        <Link href="/app/notifications?preferences=1" onClick={close} className="flex h-8 items-center justify-center gap-1.5 rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]"><Settings size={13} />Préférences</Link>
+        <Link href={pilot ? "/app/inbox" : "/app/notifications"} onClick={close} className="flex h-8 items-center justify-center rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]">{pilot ? "Boîte de réception" : "Tout afficher"}</Link>
+        <Link href={pilot ? "/app/settings?section=communication" : "/app/notifications?preferences=1"} onClick={close} className="flex h-8 items-center justify-center gap-1.5 rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]"><Settings size={13} />Préférences</Link>
       </div>
     </div>
   );
 }
 
-function notificationTarget(item: CenterItem) {
-  const category = item.category.toUpperCase();
+function notificationTarget(item: CenterItem, pilot = false) {
+  const category = `${item.category ?? ""} ${item.title} ${item.message}`.toUpperCase();
+  if (pilot) {
+    if (category.includes("FOLLOWUP") || category.includes("RELANCE")) return "/app/followups";
+    if (category.includes("KNOWLEDGE") || category.includes("CONNAISS")) return "/app/knowledge";
+    if (category.includes("DOSSIER") || category.includes("CLIENT")) return "/app/dossiers";
+    return "/app/inbox";
+  }
   if (category.includes("PACKAGE")) return "/app/packages";
   if (category.includes("SHIPMENT")) return "/app/shipments";
   if (category.includes("PAYMENT") || category.includes("FINANCE")) return "/app/finance";

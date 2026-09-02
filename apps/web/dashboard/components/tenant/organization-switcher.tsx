@@ -13,7 +13,7 @@ type Tenant = {
   role_code?: string | null;
 };
 
-export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }: { collapsed?: boolean; menuPlacement?: "up" | "down" }) {
+export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up", header = false }: { collapsed?: boolean; menuPlacement?: "up" | "down"; header?: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
@@ -86,14 +86,14 @@ export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }
   }
 
   return (
-    <div ref={rootRef} className={`relative ${collapsed ? "lg:p-0" : ""}`}>
+    <div ref={rootRef} className={`relative ${collapsed ? "lg:p-0" : ""} ${header ? "w-[min(240px,42vw)]" : ""}`}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={loading || switching}
         aria-expanded={open}
         title={collapsed ? activeTenant?.organization_name || "Organisation" : undefined}
-        className={`flex min-h-11 w-full items-center rounded-[6px] border border-[#d8dadd] bg-white text-left shadow-[0_1px_1px_rgba(15,23,42,.03)] hover:bg-[#f7f7f6] disabled:opacity-60 ${collapsed ? "lg:justify-center lg:px-1" : "gap-2 px-3"}`}
+        className={`flex w-full items-center rounded-[6px] border border-[#d8dadd] bg-white text-left shadow-[0_1px_1px_rgba(15,23,42,.03)] hover:border-[#c7cbcf] hover:bg-[#f7f7f6] disabled:opacity-60 ${header ? "min-h-9 gap-2 px-3" : "min-h-11"} ${collapsed ? "lg:justify-center lg:px-1" : header ? "" : "gap-2 px-3"}`}
       >
         {collapsed && <Building2 size={17} className="hidden text-[#16855f] lg:block" />}
         <span className={`min-w-0 flex-1 ${collapsed ? "lg:hidden" : ""}`}>
@@ -105,7 +105,7 @@ export function OrganizationSwitcher({ collapsed = false, menuPlacement = "up" }
       </button>
 
       {open && (
-        <div className={`absolute z-50 w-[248px] overflow-hidden rounded-[7px] border border-[#d2d5d8] bg-white shadow-[0_14px_38px_rgba(15,23,42,.16)] ${collapsed ? "bottom-0 left-[48px]" : menuPlacement === "down" ? "left-0 top-[52px]" : "bottom-[52px] left-0"}`}>
+        <div className={`absolute z-50 w-[248px] overflow-hidden rounded-[7px] border border-[#d2d5d8] bg-white shadow-[0_14px_38px_rgba(15,23,42,.16)] ${collapsed ? "bottom-0 left-[48px]" : menuPlacement === "down" ? header ? "right-0 top-[44px]" : "left-0 top-[52px]" : "bottom-[52px] left-0"}`}>
           <div className="flex h-10 items-center border-b border-[#eceeed] px-3 text-[12px] font-medium text-[#5f6670]">
             Vos organisations
             <button type="button" onClick={() => setOpen(false)} className="ml-auto rounded p-1 hover:bg-[#f0f1f1]" aria-label="Fermer">

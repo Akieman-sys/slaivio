@@ -839,6 +839,15 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   line-height: 20px;
 }
 
+@media (min-width: 1024px) {
+  .slaivio-pilot .slaivio-sidebar [data-ui="sidebar-link"] {
+    min-height: 68px;
+    border-radius: 0;
+    font-size: 11px !important;
+    line-height: 14px;
+  }
+}
+
 .slaivio-sidebar [data-ui="sidebar-link"][data-active="true"] {
   font-weight: 630;
 }

@@ -196,12 +196,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={`fixed inset-0 z-40 bg-black/25 lg:hidden ${mobileOpen ? "block" : "hidden"}`}
       />
 
-      <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${pilot ? "lg:w-[80px]" : sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className={`flex h-[60px] shrink-0 items-center border-b border-[#e3e4e5] ${pilot ? "px-4 lg:justify-center lg:px-0" : sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}>
+      <aside data-ui="sidebar" className={`slaivio-sidebar fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-[#dfe1e3] bg-white transition-[width,transform] duration-200 lg:relative lg:z-auto lg:translate-x-0 ${pilot ? "lg:w-[88px]" : sidebarCollapsed ? "lg:w-[56px]" : "lg:w-[272px]"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className={`flex shrink-0 items-center ${pilot ? "h-[76px] px-4 lg:justify-center lg:px-0" : `h-[60px] border-b border-[#e3e4e5] ${sidebarCollapsed ? "lg:justify-center lg:px-1" : "px-4"}`}`}>
           <Link href="/app" className={`flex items-center ${!pilot&&sidebarCollapsed?"lg:hidden":""}`} onClick={() => setMobileOpen(false)}>
             {pilot ? (
               <>
-                <span className="hidden lg:block"><SlaivioBrand compact iconOnly /></span>
+                <span className="hidden lg:block"><SlaivioBrand compact iconOnly rail /></span>
                 <span className="lg:hidden"><SlaivioBrand compact /></span>
               </>
             ) : <SlaivioBrand compact iconOnly={sidebarCollapsed} />}
@@ -214,9 +214,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>}
         </div>
 
-        <nav className={`min-h-0 flex-1 overflow-y-auto py-2.5 lg:overflow-hidden ${pilot ? "px-3 lg:px-2" : sidebarCollapsed ? "lg:px-2" : "px-3"}`} aria-label="Navigation Slaivio">
+        <nav className={`min-h-0 flex-1 overflow-y-auto lg:overflow-hidden ${pilot ? "px-3 py-3 lg:px-0 lg:py-2" : `py-2.5 ${sidebarCollapsed ? "lg:px-2" : "px-3"}`}`} aria-label="Navigation Slaivio">
           {pilot ? (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <PilotRailLink href="/app" icon={<Home size={19} />} active={pathname === "/app"} label={dashboardLabel(locale, "Accueil", "/app")} />
               {pilotPrimaryRoutes.map((route) => (
                 <PilotRailLink
@@ -224,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={route.href}
                   icon={<route.icon size={19} />}
                   active={pathname === route.href || pathname.startsWith(`${route.href}/`)}
-                  label={dashboardLabel(locale, route.label, route.href)}
+                  label={pilotRouteLabel(locale, route.label, route.href)}
                 />
               ))}
             </div>
@@ -264,27 +264,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>}
         </nav>
 
-        <div className={`shrink-0 border-t border-[#e3e4e5] ${pilot ? "p-3 lg:p-2" : sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
+        {!pilot && <div className={`shrink-0 border-t border-[#e3e4e5] ${sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
           {!permissionsLoading && !permissionsAvailable && (
-            <div className={`mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800 ${pilot ? "lg:hidden" : ""}`}>
+            <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
               Les droits n’ont pas pu être chargés. Les API continuent de protéger les actions.
             </div>
           )}
-          {pilot ? (
-            <>
-              <div className="lg:hidden"><OrganizationSwitcher /></div>
-              <div className="hidden space-y-1 lg:block">
-                <PilotRailButton label="FR / EN" icon={<Languages size={19} />} active={floatingPanel === "language"} onClick={() => togglePanel("language")} />
-                <PilotRailButton label={dashboardLabel(locale, "Alertes")} icon={<Bell size={19} />} active={floatingPanel === "notifications"} onClick={() => togglePanel("notifications")} />
-                <AccountTrigger rail onClick={() => togglePanel("account")} />
-              </div>
-            </>
-          ) : <OrganizationSwitcher collapsed={sidebarCollapsed} />}
-        </div>
+          <OrganizationSwitcher collapsed={sidebarCollapsed} />
+        </div>}
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header data-ui="topbar" className={`slaivio-topbar relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-4 ${pilot ? "lg:hidden" : ""}`}>
+        <header data-ui="topbar" className="slaivio-topbar relative z-30 flex h-[60px] shrink-0 items-center border-b border-[#dfe1e3] bg-white px-3 sm:px-5 lg:px-8">
           <button onClick={() => setMobileOpen(true)} aria-label="Ouvrir la navigation" className="mr-2 rounded-[5px] p-2 text-[#5f666e] hover:bg-[#f0f1f1] lg:hidden">
             <Menu size={19} />
           </button>
@@ -300,6 +291,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>}
 
           <div className="ml-auto flex items-center gap-1.5">
+            {pilot && <OrganizationSwitcher header menuPlacement="down" />}
             {!pilot && <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />}
             {!pilot && <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />}
             <HeaderButton label={dashboardLabel(locale, "Langue")} icon={<Languages size={16} />} onClick={() => togglePanel("language")} active={floatingPanel === "language"} showLabel />
@@ -310,12 +302,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
         {floatingPanel === "help" && <div className="fixed right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
-        {floatingPanel === "notifications" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-[72px] lg:left-[88px] lg:right-auto lg:top-auto" : "right-[48px] top-[52px]"}`}><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
-        {floatingPanel === "language" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-[134px] lg:left-[88px] lg:right-auto lg:top-auto" : "right-[82px] top-[52px]"}`}><LanguageMenu close={() => setFloatingPanel(null)}/></div>}
-        {floatingPanel === "account" && <div className={`fixed z-50 ${pilot ? "right-3 top-[52px] lg:bottom-3 lg:left-[88px] lg:right-auto lg:top-auto" : "right-3 top-[52px]"}`}><AccountMenu close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "notifications" && <div className="fixed right-[48px] top-[52px] z-50"><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "language" && <div className="fixed right-[82px] top-[52px] z-50"><LanguageMenu close={() => setFloatingPanel(null)}/></div>}
+        {floatingPanel === "account" && <div className="fixed right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
 
         {pilot && <PilotOfflineIndicator />}
-        <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6]">{children}</main>
+        <main className={`slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6] ${pilot ? "px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10" : ""}`}>
+          {pilot ? <div className="mx-auto min-h-full w-full max-w-[1536px] overflow-hidden bg-white">{children}</div> : children}
+        </main>
       </section>
 
       {!pilot && searchOpen && (
@@ -371,26 +365,22 @@ function PilotRailLink({ href, icon, active, label }: { href: string; icon: Reac
       data-active={active ? "true" : "false"}
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`group flex min-h-[42px] items-center gap-2.5 rounded-[7px] px-2.5 text-[14px] lg:min-h-[58px] lg:flex-col lg:justify-center lg:gap-1 lg:px-1 lg:text-[10px] ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "font-[460] text-[#4b545c] hover:bg-[#f2f4f4] hover:text-[#20252b]"}`}
+      className={`group flex min-h-[42px] items-center gap-2.5 rounded-[7px] px-2.5 text-[14px] lg:min-h-[68px] lg:w-full lg:flex-col lg:justify-center lg:gap-1.5 lg:rounded-none lg:px-1 lg:text-[11px] ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "font-[460] text-[#4b545c] hover:bg-[#f2f4f4] hover:text-[#20252b]"}`}
     >
       <span className={active ? "text-[#16855f]" : "text-[#656c74] group-hover:text-[#3f474f]"}>{icon}</span>
-      <span className="truncate lg:w-full lg:text-center lg:leading-3">{label}</span>
+      <span className="truncate lg:w-full lg:whitespace-normal lg:px-1 lg:text-center lg:leading-[14px]">{label}</span>
     </Link>
   );
 }
 
-function PilotRailButton({ label, icon, active, onClick }: { label: string; icon: ReactNode; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-expanded={active}
-      className={`flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] px-1 text-[10px] leading-3 ${active ? "bg-[#e4f4ee] font-[630] text-[#145f49]" : "text-[#4b545c] hover:bg-[#f2f4f4]"}`}
-    >
-      {icon}<span>{label}</span>
-    </button>
-  );
+function pilotRouteLabel(locale: "fr" | "en", fallback: string, href: string) {
+  const labels: Record<string, { fr: string; en: string }> = {
+    "/app/dossiers": { fr: "Dossiers", en: "Cases" },
+    "/app/inbox": { fr: "Messages", en: "Messages" },
+    "/app/followups": { fr: "Relances", en: "Follow-ups" },
+    "/app/knowledge": { fr: "Savoirs", en: "Knowledge" },
+  };
+  return labels[href]?.[locale] || dashboardLabel(locale, fallback, href);
 }
 
 function HeaderButton({ label, icon, onClick, active, showLabel = false }: { label: string; icon: ReactNode; onClick: () => void; active: boolean; showLabel?: boolean }) {
@@ -468,8 +458,6 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={imageUrl} name={name} size={40} /></div>
           <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
         </div>
-        <MenuDivider />
-        <div className="px-3 py-1"><OrganizationSwitcher menuPlacement="down" /></div>
         <MenuDivider />
         <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres" close={close} />
         <button type="button" onClick={toggleTheme} className={menuClass}>{theme==="dark"?<Sun size={15}/>:<Moon size={15}/>} {theme==="dark"?"Mode clair":"Mode sombre"}</button>

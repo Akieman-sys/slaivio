@@ -99,9 +99,9 @@ export function PilotSettingsPage() {
   return <div className="min-h-full bg-[#f7f7f6]">
     <OperationPageHeader title="Paramètres" description="Configurez uniquement ce qui est nécessaire au fonctionnement quotidien de votre entreprise." actions={<OperationButton onClick={load}><RefreshCcw size={14}/>Actualiser</OperationButton>}/>
     <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[236px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-[#e1e4e6] bg-[#fafafa] px-3 py-5 lg:block">
-        <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#8a9299]">Configuration</p>
-        <nav className="grid gap-1">{sections.map(([key, label]) => <button key={key} type="button" onClick={() => choose(key)} className={`min-h-10 rounded-[7px] px-3 text-left text-[14px] font-medium transition ${section === key ? "bg-[#e7f5ef] text-[#126347]" : "text-[#46515a] hover:bg-[#eeeeed]"}`}>{label}</button>)}</nav>
+      <aside className="hidden border-r border-[#e1e4e6] bg-[#fafafa] py-5 lg:block">
+        <p className="px-5 pb-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#8a9299]">Configuration</p>
+        <nav className="grid">{sections.map(([key, label]) => <button key={key} type="button" onClick={() => choose(key)} className={`min-h-11 w-full border-l-2 px-5 text-left text-[14px] font-medium transition ${section === key ? "border-[#16855f] bg-[#e7f5ef] text-[#126347]" : "border-transparent text-[#46515a] hover:bg-[#eeeeed]"}`}>{label}</button>)}</nav>
       </aside>
       <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[920px]">

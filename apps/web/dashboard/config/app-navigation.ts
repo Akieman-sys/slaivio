@@ -56,11 +56,11 @@ export const pilotV1Navigation: readonly AppNavigationGroup[] = [
     ],
   },
   {
-    label: "Base de connaissances",
+    label: "Connaissances",
     icon: BookOpen,
     collapsible: false,
     routes: [
-      { label: "Base de connaissances", href: "/app/knowledge", icon: BookOpen, permission: "pilot.knowledge.read", keywords: ["connaissance", "question", "réponse", "information"] },
+      { label: "Connaissances", href: "/app/knowledge", icon: BookOpen, permission: "pilot.knowledge.read", keywords: ["connaissance", "question", "réponse", "information"] },
     ],
   },
   {

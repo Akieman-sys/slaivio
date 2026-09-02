@@ -42,7 +42,10 @@ def test_pilot_inbox_repository_is_tenant_scoped_and_uses_the_multi_client_model
     assert "insert into dossiers" not in repository
     assert "from dossier_clients relation" in messages
     assert "normalized_phone = :normalized_phone" in messages
-    assert "on conflict(org_id, idempotency_key)" in messages
+    assert "def find_client_by_phone" in messages
+    assert "def find_active_dossier" in messages
+    assert "insert into clients" not in messages
+    assert "insert into dossiers" not in messages
 
 
 def test_inbox_list_passes_only_the_active_tenant(monkeypatch):

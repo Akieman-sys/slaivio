@@ -37,10 +37,10 @@ export function OperationDrawerTabs({
           type="button"
           aria-current={value === item.key ? "page" : undefined}
           onClick={() => onChange(item.key)}
-          className={`inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-3.5 text-[14px] font-[580] transition-colors ${
+          className={`relative inline-flex h-10 items-center gap-1.5 whitespace-nowrap border-b-2 px-1 text-[14px] font-[580] transition-colors ${
             value === item.key
-              ? "border-[#ccd4da] bg-white text-[#20262c] shadow-sm"
-              : "border-transparent text-[#5d6873] hover:bg-[#eceff1] hover:text-[#20262c]"
+              ? "border-[#12ad64] text-[#126847]"
+              : "border-transparent text-[#6b747d] hover:border-[#cbd2d6] hover:text-[#20262c]"
           }`}
         >
           {item.label}
@@ -74,6 +74,8 @@ export function OperationDrawerAction({
   icon?: "edit" | "archive" | "restore" | ReactNode;
 }) {
   const Icon = icon === "edit" ? Edit3 : icon === "archive" ? Archive : icon === "restore" ? RotateCcw : null;
+  const textLabel = typeof children === "string" ? children : undefined;
+  const iconOnly = Boolean(icon && textLabel && ["Modifier", "Retirer", "Archiver", "Restaurer", "Supprimer"].includes(textLabel));
   const colors = intent === "primary"
     ? "border-[#0faf63] bg-[#12c76f] text-white hover:bg-[#0faf63]"
     : intent === "danger"
@@ -82,12 +84,14 @@ export function OperationDrawerAction({
   return (
     <button
       type="button"
-      data-ui="operation-drawer-action"
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold shadow-[0_1px_1px_rgba(15,23,42,.03)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${colors} ${className}`}
       {...props}
+      data-ui="operation-drawer-action"
+      aria-label={iconOnly ? textLabel : props["aria-label"]}
+      title={iconOnly ? textLabel : props.title}
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border text-[13px] font-semibold shadow-[0_1px_1px_rgba(15,23,42,.03)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${iconOnly ? "w-9 px-0" : "px-3"} ${colors} ${className}`}
     >
       {Icon ? <Icon size={15} aria-hidden="true" /> : typeof icon === "string" ? null : icon}
-      {children}
+      {iconOnly ? <span className="sr-only">{children}</span> : children}
     </button>
   );
 }
@@ -144,7 +148,7 @@ export function OperationDrawer({
   if (!open) return null;
   return (
     <div
-      className={`fixed inset-0 z-[65] bg-[#17212b]/35 backdrop-blur-[1px] transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[65] flex items-center justify-center bg-[#17212b]/35 p-3 backdrop-blur-[1px] transition-opacity duration-200 sm:p-6 ${visible ? "opacity-100" : "opacity-0"}`}
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) close();
       }}
@@ -152,9 +156,9 @@ export function OperationDrawer({
       aria-modal="true"
       aria-label={title}
     >
-      <aside
+      <section
         data-ui="operation-drawer"
-        className={`ml-auto flex h-full w-full ${width} flex-col border-l border-[#d8dce0] bg-white shadow-[-24px_0_56px_rgba(15,23,42,.18)] transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}
+        className={`flex max-h-[calc(100dvh-24px)] w-full ${width} flex-col overflow-hidden rounded-[12px] border border-[#d8dce0] bg-white shadow-[0_24px_72px_rgba(15,23,42,.22)] transition duration-200 ease-out sm:max-h-[calc(100dvh-48px)] ${visible ? "scale-100 opacity-100" : "scale-[.98] opacity-0"}`}
       >
         <header data-ui="operation-drawer-header" className="shrink-0 border-b border-[#dfe3e7] bg-white px-6 py-5">
           <div className="flex min-h-10 items-center gap-4">
@@ -187,8 +191,8 @@ export function OperationDrawer({
         </header>
         {tabs && (
           <div className={tabsVariant === "segmented"
-            ? "operation-drawer-segmented-tabs flex min-h-[58px] shrink-0 items-center gap-1.5 overflow-visible border-b border-[#dfe3e7] bg-[#f7f8f9] px-6 py-2.5"
-            : "operation-tabs flex min-h-[42px] shrink-0 items-end gap-1 overflow-visible border-b border-[#dfe1e3] px-5"}
+            ? "operation-drawer-segmented-tabs flex min-h-[52px] shrink-0 items-end gap-6 overflow-visible border-b border-[#dfe3e7] bg-white px-6"
+            : "operation-tabs flex min-h-[42px] shrink-0 items-end gap-6 overflow-visible border-b border-[#dfe1e3] px-5"}
           >
             {tabs}
           </div>
@@ -197,7 +201,7 @@ export function OperationDrawer({
           {children}
         </div>
         {footer && <footer className="operation-drawer-footer flex min-h-[68px] shrink-0 items-center justify-end gap-2.5 border-t border-[#dfe3e7] bg-[#fbfcfc] px-6 py-3.5">{footer}</footer>}
-      </aside>
+      </section>
     </div>
   );
 }

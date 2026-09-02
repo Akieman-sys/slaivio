@@ -327,10 +327,10 @@ def test_webhook_rejects_tampered_body(monkeypatch):
 
 def test_shared_inbound_pipeline_uses_database_idempotency(monkeypatch):
     normalized = normalize_wazzap_payload(_message_payload())
-    monkeypatch.setattr(shared_webhook, "get_or_create_client", lambda **kwargs: "client-1")
+    monkeypatch.setattr(shared_webhook, "find_client_by_phone", lambda **kwargs: "client-1")
     monkeypatch.setattr(
         shared_webhook,
-        "get_or_create_active_dossier",
+        "find_active_dossier",
         lambda **kwargs: "dossier-1",
     )
     monkeypatch.setattr(shared_webhook, "create_message", lambda **kwargs: None)
@@ -356,6 +356,44 @@ def test_shared_inbound_pipeline_uses_database_idempotency(monkeypatch):
         "message": "Message already processed",
         "dedupe_key": "wamid.test-001",
     }
+
+
+def test_shared_inbound_pipeline_keeps_unknown_contact_unattached(monkeypatch):
+    normalized = normalize_wazzap_payload(_message_payload())
+    captured = {}
+    monkeypatch.setattr(shared_webhook, "find_client_by_phone", lambda **kwargs: None)
+    monkeypatch.setattr(shared_webhook, "find_active_dossier", lambda **kwargs: None)
+
+    def create_message(**kwargs):
+        captured["message"] = kwargs
+        return {"id": "message-1"}
+
+    monkeypatch.setattr(shared_webhook, "create_message", create_message)
+    monkeypatch.setattr(shared_webhook, "insert_raw_message", lambda **kwargs: captured.setdefault("raw", kwargs))
+    monkeypatch.setattr(shared_webhook, "register_inbound", lambda **kwargs: captured.setdefault("conversation", kwargs))
+
+    def unexpected_side_effect(*args, **kwargs):
+        raise AssertionError("an unattached contact must not mutate CRM follow-ups or broadcasts")
+
+    monkeypatch.setattr(shared_webhook, "link_whatsapp_response", unexpected_side_effect)
+    monkeypatch.setattr(shared_webhook, "link_broadcast_reply", unexpected_side_effect)
+    monkeypatch.setattr(shared_webhook, "cancel_pending_followups_for_dossier", unexpected_side_effect)
+
+    result = asyncio.run(
+        shared_webhook.process_normalized_whatsapp_message(
+            normalized_message=normalized,
+            payload=_message_payload(),
+            org_id="org-pilot",
+            provider="WAZZAP",
+        )
+    )
+
+    assert captured["message"]["client_id"] is None
+    assert captured["message"]["dossier_id"] is None
+    assert captured["conversation"]["client_id"] is None
+    assert captured["conversation"]["dossier_id"] is None
+    assert result["client_id"] is None
+    assert result["dossier_id"] is None
 
 
 def test_wazzap_retry_does_not_broadcast_or_run_ai_twice(monkeypatch):

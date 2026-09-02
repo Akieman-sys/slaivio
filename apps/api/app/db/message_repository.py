@@ -11,8 +11,8 @@ def insert_raw_message(
     phone: str,
     text_msg: str,
     payload: dict,
-    client_id: str,
-    dossier_id: str,
+    client_id: str | None,
+    dossier_id: str | None,
 ):
     with engine.connect() as conn:
         conn.execute(
@@ -47,7 +47,8 @@ def insert_raw_message(
         conn.commit()
 
 
-def get_or_create_client(org_id: str, phone: str):
+def find_client_by_phone(org_id: str, phone: str):
+    """Return an existing client without turning an inbound contact into CRM data."""
     normalized_phone = "+" + "".join(character for character in phone if character.isdigit())
     with engine.connect() as conn:
         result = conn.execute(
@@ -69,36 +70,14 @@ def get_or_create_client(org_id: str, phone: str):
             },
         ).fetchone()
 
-        if result:
-            return result[0]
-
-        result = conn.execute(
-            text("""
-                insert into clients (
-                  org_id, phone, whatsapp_phone, normalized_phone,
-                  display_name, customer_type, lifecycle_status, source
-                ) values (
-                  :org_id, :phone, :phone, :normalized_phone,
-                  :phone, 'individual', 'lead', 'whatsapp'
-                )
-                on conflict(org_id, normalized_phone)
-                  where deleted_at is null and normalized_phone is not null
-                do update set whatsapp_phone = excluded.whatsapp_phone, updated_at = now()
-                returning id
-            """),
-            {
-                "org_id": org_id,
-                "phone": normalized_phone,
-                "normalized_phone": normalized_phone,
-            },
-        )
-
-        conn.commit()
-
-        return result.fetchone()[0]
+        return result[0] if result else None
 
 
-def get_or_create_active_dossier(org_id: str, client_id: str):
+def find_active_dossier(org_id: str, client_id: str | None):
+    """Return an existing dossier selected by the agency; never create one."""
+    if not client_id:
+        return None
+
     with engine.connect() as conn:
         result = conn.execute(
             text("""
@@ -120,47 +99,7 @@ def get_or_create_active_dossier(org_id: str, client_id: str):
             },
         ).fetchone()
 
-        if result:
-            return result[0]
-
-        result = conn.execute(
-            text("""
-                insert into dossiers (
-                    org_id,
-                    client_id,
-                    title,
-                    case_type,
-                    status_global,
-                    intake_status,
-                    validation_status,
-                    primary_channel,
-                    idempotency_key
-                )
-                values (
-                    :org_id,
-                    :client_id,
-                    'Conversation WhatsApp',
-                    'UNKNOWN',
-                    'LEAD',
-                    'PARTIAL',
-                    'PENDING',
-                    'whatsapp',
-                    'whatsapp-intake:' || :client_id || ':' || to_char(current_date, 'YYYYMM')
-                )
-                on conflict(org_id, idempotency_key)
-                  where idempotency_key is not null
-                do update set updated_at = now()
-                returning id
-            """),
-            {
-                "org_id": org_id,
-                "client_id": client_id,
-            },
-        )
-
-        conn.commit()
-
-        return result.fetchone()[0]
+        return result[0] if result else None
     
 
 def make_json_safe(value):
@@ -687,8 +626,8 @@ def update_dossier_final_pricing(
 
 def create_message(
     org_id: str,
-    dossier_id: str,
-    client_id: str,
+    dossier_id: str | None,
+    client_id: str | None,
     provider_message_id: str | None,
     from_phone: str,
     to_phone: str | None,

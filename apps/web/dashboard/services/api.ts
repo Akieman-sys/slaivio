@@ -10,6 +10,24 @@ let accessTokenProvider: AccessTokenProvider | null = null;
 export const SESSION_EXPIRED_EVENT = "slaivio:session-expired";
 export const API_MUTATION_FAILED_EVENT = "slaivio:api-mutation-failed";
 
+const apiDetailMessages: Record<string, string> = {
+  knowledge_antivirus_unavailable: "Le service de sécurité des fichiers est temporairement indisponible. Réessayez dans quelques instants.",
+  knowledge_antivirus_not_configured: "L’analyse de sécurité des fichiers n’est pas encore configurée sur cet environnement.",
+  knowledge_antivirus_invalid_response: "Le service de sécurité n’a pas pu confirmer le résultat de l’analyse.",
+  knowledge_ocr_not_configured: "La lecture des images et PDF n’est pas encore configurée sur cet environnement.",
+  knowledge_file_malware_detected: "Ce fichier a été bloqué par l’analyse de sécurité.",
+  invalid_knowledge_file: "Le fichier est vide, trop volumineux ou dans un format non accepté.",
+};
+
+export function apiErrorDetail(error: unknown): string {
+  if (!axios.isAxiosError(error)) return "";
+  const detail = error.response?.data?.detail;
+  const raw = Array.isArray(detail)
+    ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(" · ")
+    : typeof detail === "string" ? detail : "";
+  return apiDetailMessages[raw] || raw;
+}
+
 function normalizeApiBaseUrl(value?: string) {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -94,11 +112,12 @@ api.interceptors.response.use(
         const raw = Array.isArray(detail)
           ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(" · ")
           : typeof detail === "string" ? detail : "";
+        const detailMessage = apiDetailMessages[raw] || raw;
         const conflictMessage = raw === "workflow_execution_in_progress"
           ? "La création est déjà en cours. Patientez quelques instants avant de réessayer."
           : raw === "workflow_already_decided"
             ? "Cette action a déjà été traitée. Rechargez la page pour voir son état actuel."
-            : `Cette opération entre en conflit avec l’état actuel.${raw ? ` ${raw}` : ""}`;
+            : `Cette opération entre en conflit avec l’état actuel.${detailMessage ? ` ${detailMessage}` : ""}`;
         const message = !error.response
           ? "Le serveur est injoignable. Vérifiez le déploiement du backend."
           : error.response.status === 403
@@ -106,8 +125,8 @@ api.interceptors.response.use(
             : error.response.status === 409
               ? conflictMessage
               : error.response.status === 422
-                ? `Certaines données sont invalides ou incompatibles.${raw ? ` ${raw}` : ""}`
-                : raw || `L’opération a échoué (erreur ${error.response.status}).`;
+                ? `Certaines données sont invalides ou incompatibles.${detailMessage ? ` ${detailMessage}` : ""}`
+                : detailMessage || `L’opération a échoué (erreur ${error.response.status}).`;
         window.dispatchEvent(new CustomEvent(API_MUTATION_FAILED_EVENT, { detail: { message, status: error.response?.status } }));
       }
     }

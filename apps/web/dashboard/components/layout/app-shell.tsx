@@ -571,7 +571,7 @@ function NotificationsMenu({ close, pilot = false }: { close: () => void; pilot?
       </div>
       <div className="grid shrink-0 grid-cols-2 border-t border-[#e5e6e7] p-2">
         <Link href={pilot ? "/app/inbox" : "/app/notifications"} onClick={close} className="flex h-8 items-center justify-center rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]">{pilot ? "Boîte de réception" : "Tout afficher"}</Link>
-        <Link href={pilot ? "/app/settings?section=communication" : "/app/notifications?preferences=1"} onClick={close} className="flex h-8 items-center justify-center gap-1.5 rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]"><Settings size={13} />Préférences</Link>
+        <Link href={pilot ? "/app/settings?section=notifications" : "/app/notifications?preferences=1"} onClick={close} className="flex h-8 items-center justify-center gap-1.5 rounded-[5px] text-[11px] font-medium hover:bg-[#f0f1f1]"><Settings size={13} />Préférences</Link>
       </div>
     </div>
   );

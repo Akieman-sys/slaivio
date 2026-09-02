@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Check, Loader2, MessageCircle, RefreshCcw, ShieldCheck, Smartphone, UserRound, X } from "lucide-react";
+import { Check, Loader2, Mail, MessageCircle, Music2, RefreshCcw, ShieldCheck, Smartphone, Sparkles, UserRound, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
@@ -26,8 +26,11 @@ const sections = [
   ["company", "Entreprise"],
   ["responsible", "Responsable"],
   ["identifiers", "Identifiants"],
-  ["communication", "WhatsApp & IA"],
+  ["channels", "Canaux"],
+  ["ai", "IA"],
   ["knowledge", "Connaissances"],
+  ["privacy", "Confidentialité & données"],
+  ["notifications", "Notifications"],
 ] as const;
 type Section = (typeof sections)[number][0];
 const inputClass = "h-10 w-full rounded-[7px] border border-[#d5dade] bg-white px-3 text-[14px] text-[#293038] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
@@ -56,6 +59,7 @@ export function PilotSettingsPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const requested = params.get("section") as Section | null;
+    if (params.get("section") === "communication") { setSection("channels"); return; }
     if (requested && sections.some(([key]) => key === requested)) setSection(requested);
   }, [params]);
 
@@ -102,8 +106,11 @@ export function PilotSettingsPage() {
           {section === "company" && <CompanySettings data={data} run={run}/>} 
           {section === "responsible" && <ResponsibleSettings data={data}/>} 
           {section === "identifiers" && <IdentifierSettings data={data} run={run}/>} 
-          {section === "communication" && <CommunicationSettings data={data} run={run}/>} 
+          {section === "channels" && <CommunicationSettings data={data} run={run}/>}
+          {section === "ai" && <AISettings data={data} run={run}/>}
           {section === "knowledge" && <KnowledgeSettings data={data} run={run}/>} 
+          {section === "privacy" && <PrivacySettings/>}
+          {section === "notifications" && <NotificationSettings/>}
         </div>
       </main>
     </div>
@@ -199,15 +206,28 @@ function CommunicationSettings({data,run}:{data:PilotSettingsData;run:(action:()
   const connected=qrConnection?qrConnection.status==="CONNECTED":linkedNumber?.connection_status==="CONNECTED";
   const reconnecting=qrConnection?.status==="CONNECTING"||qrConnection?.status==="DISCONNECTED";
   const displayPhone=qrConnection?.display_phone_number||linkedNumber?.display_phone_number;
-  return <><SectionHeader title="WhatsApp & IA" description="Reliez le numéro WhatsApp de l’entreprise à SLAIVIO, puis choisissez comment l’IA doit assister les conversations."/><div className="grid gap-5">
+  return <><SectionHeader title="Canaux de communication" description="Connectez les canaux utilisés par l’entreprise pour recevoir et envoyer ses messages."/><div className="grid gap-5">
     {data.whatsapp_configuration.qr_linked_device_available&&<SettingsCard title="Connexion WhatsApp" description="Recevez et envoyez les messages de l’entreprise directement depuis la Boîte de réception SLAIVIO."><div className="grid gap-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-[10px] bg-[#e6f7ee] text-[#078349]"><MessageCircle size={24}/></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-[15px] font-semibold text-[#29323a]">WhatsApp</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${connected?"bg-[#dff5e9] text-[#087848]":"bg-[#eef1f2] text-[#657079]"}`}>{connected?"1/1":"0/1"}</span></div><p className="mt-1 text-[12px] leading-5 text-[#6f7a83]">Liez le téléphone de l’entreprise en scannant un QR code. Aucun identifiant technique n’est demandé.</p></div><PermissionGuard permission="pilot.whatsapp_qr.connect"><OperationButton variant={connected?"secondary":"primary"} onClick={()=>void openQR()}><Smartphone size={15}/>{connected?"Gérer la connexion":"Lier un compte WhatsApp"}</OperationButton></PermissionGuard></div>
       {connected&&<div className="flex items-start gap-3 rounded-[9px] border border-[#bfe4d0] bg-[#f0faf5] p-4"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#d8f2e4] text-[#078349]"><Check size={17}/></span><div className="min-w-0"><p className="text-[13px] font-semibold text-[#176142]">WhatsApp est actif</p><p className="mt-1 text-[12px] leading-5 text-[#527064]">{displayPhone?`${displayPhone} est connecté à SLAIVIO.`:"Le numéro connecté est prêt."} La connexion est restaurée automatiquement après une interruption du service.</p></div></div>}
       {!connected&&reconnecting&&<div className="flex items-start gap-3 rounded-[9px] border border-[#eadfbd] bg-[#fffbef] p-4"><Loader2 size={17} className="mt-0.5 shrink-0 animate-spin text-[#8a6b18]"/><div><p className="text-[13px] font-semibold text-[#6d5a22]">Reconnexion automatique en cours</p><p className="mt-1 text-[12px] leading-5 text-[#796b43]">SLAIVIO tente de rétablir la session sans demander un nouveau QR code.</p></div></div>}
     </div></SettingsCard>}
-    <SettingsCard title="Mode de réponse de l’IA" description="Le choix s’applique réellement et immédiatement à la Boîte de réception."><div className="grid gap-2">{(Object.keys(modeContent) as InboxAIMode[]).map(mode=><button key={mode} type="button" onClick={()=>mode!==data.ai.pilot_response_mode&&run(()=>updateInboxAIMode(mode),"Le mode de réponse de l’IA a été modifié.")} className={`flex gap-3 rounded-[8px] border p-4 text-left transition ${mode===data.ai.pilot_response_mode?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${mode===data.ai.pilot_response_mode?"bg-[#d7f1e4] text-[#087848]":"bg-[#f1f3f4] text-[#66717a]"}`}><Bot size={16}/></span><span className="min-w-0 flex-1"><strong className="text-[14px] text-[#303941]">{modeContent[mode].title}</strong><span className="mt-1 block text-[12px] leading-5 text-[#727d86]">{modeContent[mode].description}</span></span>{mode===data.ai.pilot_response_mode&&<Check size={16} className="mt-2 text-[#0b8e51]"/>}</button>)}</div></SettingsCard>
+    <UnavailableChannel name="Gmail" description="Centralisez les demandes reçues par email dans la même boîte de réception." icon={<Mail size={24}/>}/>
+    <UnavailableChannel name="TikTok" description="Recevez les conversations TikTok de l’entreprise dans SLAIVIO." icon={<Music2 size={24}/>}/>
   </div>{qrOpen&&<QRConnectionDialog connection={qrConnection} accepted={qrTerms} setAccepted={setQRTerms} busy={qrBusy} error={qrError} close={()=>!qrBusy&&setQROpen(false)} generate={()=>void generateQR()} disconnect={()=>void disconnectQR()}/>}</>;
 }
+
+function UnavailableChannel({name,description,icon}:{name:string;description:string;icon:React.ReactNode}) {
+  return <SettingsCard title={name}><div className="flex items-center gap-4"><span className="grid h-12 w-12 place-items-center rounded-[10px] bg-[#f1f3f4] text-[#65717a]">{icon}</span><div className="min-w-0 flex-1"><p className="text-[13px] leading-5 text-[#66717a]">{description}</p></div><OperationStatus label="Bientôt disponible" tone="neutral"/></div></SettingsCard>;
+}
+
+function AISettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {
+  const [test,setTest]=useState("");
+  return <><SectionHeader title="Intelligence artificielle" description="Définissez le comportement rédactionnel, puis vérifiez-le dans un espace de test avant utilisation."/><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><div className="grid gap-5"><SettingsCard title="Mode de réponse" description="Ce choix s’applique immédiatement à la Boîte de réception."><div className="grid gap-2">{(Object.keys(modeContent) as InboxAIMode[]).map(mode=><button key={mode} type="button" onClick={()=>mode!==data.ai.pilot_response_mode&&run(()=>updateInboxAIMode(mode),"Le mode de réponse de l’IA a été modifié.")} className={`flex gap-3 rounded-[8px] border p-4 text-left transition ${mode===data.ai.pilot_response_mode?"border-[#12ad64] bg-[#eff9f4]":"border-[#dce1e4] hover:bg-[#fafbfb]"}`}><span className={`mt-0.5 grid h-8 w-8 place-items-center rounded-full ${mode===data.ai.pilot_response_mode?"bg-[#d7f1e4] text-[#087848]":"bg-[#f1f3f4] text-[#66717a]"}`}><Sparkles size={16}/></span><span className="flex-1"><strong className="text-[14px] text-[#303941]">{modeContent[mode].title}</strong><span className="mt-1 block text-[12px] leading-5 text-[#727d86]">{modeContent[mode].description}</span></span>{mode===data.ai.pilot_response_mode&&<Check size={16} className="mt-2 text-[#0b8e51]"/>}</button>)}</div></SettingsCard><SettingsCard title="Instructions et style"><div className="grid gap-5"><Field label="Prompt système" hint="Règles permanentes propres à l’entreprise."><textarea className={`${inputClass} h-32 py-3`} placeholder="Ex. Répondre avec précision, ne jamais inventer un tarif…"/></Field><Field label="Style de communication"><select className={inputClass} defaultValue="PROFESSIONAL"><option value="PROFESSIONAL">Professionnel et chaleureux</option><option value="CONCISE">Concis et direct</option><option value="FORMAL">Formel</option></select></Field><div className="rounded-[8px] bg-[#f5f7f7] p-4"><div className="flex justify-between text-[12px]"><span>Score du prompt</span><strong>À configurer</strong></div><div className="mt-2 h-1.5 rounded-full bg-[#e1e5e7]"/></div></div></SettingsCard></div><SettingsCard title="Tester l’IA" description="Cet espace ne transmet aucun message au client."><div className="flex min-h-[420px] flex-col"><div className="flex-1 rounded-[8px] bg-[#f7f8f8] p-4 text-[13px] text-[#78828a]">Écrivez un message client pour prévisualiser le comportement configuré.</div><textarea value={test} onChange={event=>setTest(event.target.value)} className={`${inputClass} mt-4 h-24 py-3`} placeholder="Message de test…"/><OperationButton className="mt-3" variant="primary" disabled={!test.trim()}>Tester</OperationButton></div></SettingsCard></div></>;
+}
+
+function PrivacySettings(){return <><SectionHeader title="Confidentialité & données" description="Gérez les données personnelles, leur conservation et les demandes d’export ou de suppression."/><SettingsCard title="Contrôle des données"><div className="grid gap-3 text-[13px]"><p>Les données restent isolées par organisation et accessibles selon les permissions attribuées.</p><OperationButton>Demander un export des données</OperationButton><OperationButton variant="danger">Demander la suppression des données</OperationButton></div></SettingsCard></>}
+function NotificationSettings(){return <><SectionHeader title="Notifications" description="Choisissez les événements importants et les canaux utilisés pour prévenir l’équipe."/><SettingsCard title="Préférences"><p className="text-[13px] text-[#69747d]">Les préférences détaillées sont centralisées ici et non dans le menu de la cloche.</p></SettingsCard></>}
 
 function QRConnectionDialog({connection,accepted,setAccepted,busy,error,close,generate,disconnect}:{connection:PilotQRConnection|null;accepted:boolean;setAccepted:(value:boolean)=>void;busy:boolean;error:string;close:()=>void;generate:()=>void;disconnect:()=>void}) {
   const connected=connection?.status==="CONNECTED";

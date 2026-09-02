@@ -20,8 +20,8 @@ from app.services.intake_service import (
 )
 from app.db.message_repository import (
     insert_raw_message,
-    get_or_create_client,
-    get_or_create_active_dossier,
+    find_client_by_phone,
+    find_active_dossier,
     create_dossier_event,
     update_dossier_from_intent,
     get_organization,
@@ -90,20 +90,20 @@ async def process_normalized_whatsapp_message(
     if not org_id:
         raise ValueError("A verified organization is required before processing a message")
 
-    client_id = get_or_create_client(
+    client_id = find_client_by_phone(
         org_id=org_id,
         phone=normalized_message.from_phone,
     )
 
-    dossier_id = get_or_create_active_dossier(
+    dossier_id = find_active_dossier(
         org_id=org_id,
         client_id=client_id,
     )
 
     created_message = create_message(
         org_id=org_id,
-        dossier_id=str(dossier_id),
-        client_id=str(client_id),
+        dossier_id=str(dossier_id) if dossier_id else None,
+        client_id=str(client_id) if client_id else None,
         provider_message_id=normalized_message.provider_message_id,
         from_phone=normalized_message.from_phone,
         to_phone=normalized_message.to_phone,
@@ -146,20 +146,27 @@ async def process_normalized_whatsapp_message(
         dossier_id=str(dossier_id) if dossier_id else None,
     )
 
-    linked_followup = link_whatsapp_response(
-        org_id=org_id,
-        client_id=client_id,
-        dossier_id=dossier_id,
-        message_id=normalized_message.provider_message_id,
-        body=normalized_message.text_body or "",
-    )
-    linked_broadcast = link_broadcast_reply(org_id,client_id,normalized_message.text_body or "")
+    linked_followup = None
+    linked_broadcast = None
+    if client_id:
+        linked_followup = link_whatsapp_response(
+            org_id=org_id,
+            client_id=client_id,
+            dossier_id=dossier_id,
+            message_id=normalized_message.provider_message_id,
+            body=normalized_message.text_body or "",
+        )
+        linked_broadcast = link_broadcast_reply(
+            org_id, client_id, normalized_message.text_body or ""
+        )
 
-    cancelled_followups = cancel_pending_followups_for_dossier(
-        org_id=org_id,
-        dossier_id=dossier_id,
-        reason="linked_followup_response" if linked_followup else "client_replied",
-    )
+    cancelled_followups = []
+    if dossier_id:
+        cancelled_followups = cancel_pending_followups_for_dossier(
+            org_id=org_id,
+            dossier_id=dossier_id,
+            reason="linked_followup_response" if linked_followup else "client_replied",
+        )
 
     if cancelled_followups:
         create_dossier_event(
@@ -180,7 +187,7 @@ async def process_normalized_whatsapp_message(
         "status": "stored",
         "message_id": str(created_message["id"]),
         "org_id": org_id,
-        "client_id": str(client_id),
+        "client_id": str(client_id) if client_id else None,
         "dossier_id": str(dossier_id) if dossier_id else None,
         "cancelled_followups": cancelled_followups,
         "linked_followup": bool(linked_followup),

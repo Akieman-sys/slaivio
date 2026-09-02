@@ -504,6 +504,17 @@ def dossiers_show(dossier_id: str, include_archived: bool = False, tenant=Depend
     return {"status": "ok", "dossier": dossier, "data": dossier}
 
 
+@router.post(
+    "/dossiers/{dossier_id}/whatsapp-group/sync",
+    dependencies=[Depends(require_permission("dossiers.update"))],
+)
+def dossier_whatsapp_group_sync(dossier_id: str, tenant=Depends(get_current_tenant)):
+    if not get_dossier(tenant["org_id"], dossier_id, include_archived=False):
+        raise HTTPException(status_code=404, detail="dossier_not_found")
+    result = sync_dossier_whatsapp_group(tenant["org_id"], dossier_id)
+    return {"status": "ok", "whatsapp_group": result}
+
+
 @router.get(
     "/dossiers/{dossier_id}/timeline",
     dependencies=[Depends(require_permission("dossiers.read"))],

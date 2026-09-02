@@ -121,7 +121,8 @@ def test_inbox_workspace_migration_and_ai_override_are_real():
     assert "ai_mode_override" in sql
     assert "('CONTROLLED_AUTO','PAUSED')" in sql
     assert "effective_ai_mode" in repository
-    assert "coalesce(assignment.ai_mode_override" in repository
+    assert "AI_OVERRIDE_SQL" in repository
+    assert "to_jsonb(assignment)->>'ai_mode_override'" in repository
     assert '/inbox/conversations/{phone}/ai-mode' in api
     assert 'require_permission("inbox.ai.manage")' in api
     assert "effective_ai_mode(org_id, client_phone)" in ai

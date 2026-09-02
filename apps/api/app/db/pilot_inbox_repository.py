@@ -4,6 +4,8 @@ from app.db.database import engine
 
 
 PHONE_SQL = "regexp_replace(coalesce({value}, ''), '[^0-9]', '', 'g')"
+AI_OVERRIDE_SQL = "nullif(to_jsonb(assignment)->>'ai_mode_override', '')"
+AI_DEFAULT_SQL = "coalesce(nullif(to_jsonb(ai)->>'pilot_response_mode', ''), 'SUGGESTION_ONLY')"
 
 
 def _rows(result):
@@ -50,7 +52,7 @@ def list_conversations(
         conditions.append("coalesce(assignment.requires_attention, false)")
     elif view == "ai":
         conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
-        conditions.append("coalesce(assignment.ai_mode_override, ai.pilot_response_mode, 'SUGGESTION_ONLY') = 'CONTROLLED_AUTO'")
+        conditions.append(f"coalesce({AI_OVERRIDE_SQL}, {AI_DEFAULT_SQL}) = 'CONTROLLED_AUTO'")
     elif view == "waiting":
         conditions.append("coalesce(assignment.status, 'OPEN') <> 'CLOSED'")
         conditions.append("(coalesce(assignment.unread_count, 0) > 0 or coalesce(assignment.requires_attention, false) or (assignment.id is null and conversation.last_direction = 'inbound'))")
@@ -106,8 +108,8 @@ def list_conversations(
           coalesce(assignment.queue_name, 'UNASSIGNED') queue_name,
           coalesce(assignment.priority, 'NORMAL') priority,
           assignment.row_version,
-          assignment.ai_mode_override,
-          coalesce(assignment.ai_mode_override, ai.pilot_response_mode, 'SUGGESTION_ONLY') effective_ai_mode,
+          {AI_OVERRIDE_SQL} ai_mode_override,
+          coalesce({AI_OVERRIDE_SQL}, {AI_DEFAULT_SQL}) effective_ai_mode,
           client.id client_id,
           client.client_reference,
           coalesce(
@@ -311,7 +313,11 @@ def update_ai_mode(org_id: str, phone: str, mode: str | None, actor_id: str):
 def effective_ai_mode(org_id: str, phone: str) -> str | None:
     with engine.connect() as conn:
         return conn.execute(text("""
-          select coalesce(assignment.ai_mode_override, settings.pilot_response_mode)
+          select coalesce(
+            nullif(to_jsonb(assignment)->>'ai_mode_override', ''),
+            nullif(to_jsonb(settings)->>'pilot_response_mode', ''),
+            'SUGGESTION_ONLY'
+          )
           from ai_settings settings
           left join conversation_assignments assignment
             on assignment.org_id=settings.org_id and assignment.client_phone=:phone

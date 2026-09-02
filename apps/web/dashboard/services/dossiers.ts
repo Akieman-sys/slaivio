@@ -69,6 +69,11 @@ export type DossierRecord = {
   assigned_at: string | null;
   assigned_by: string | null;
   due_at: string | null;
+  whatsapp_group_status?: "DISABLED" | "WAITING_FOR_PARTICIPANT" | "CREATING" | "CONNECTED" | "FAILED";
+  whatsapp_group_jid?: string | null;
+  whatsapp_group_created_at?: string | null;
+  whatsapp_group_last_error?: string | null;
+  whatsapp_group_enabled?: boolean;
   message_count: number;
   event_count: number;
   package_count: number;
@@ -296,6 +301,13 @@ export async function restoreDossier(id: string, rowVersion: number) {
 
 export async function getDossier(id: string, includeArchived = false) {
   return (await api.get<{ status: "ok"; dossier: DossierRecord }>(`/dossiers/${id}`, { params: { include_archived: includeArchived } })).data.dossier;
+}
+
+export async function syncDossierWhatsappGroup(id: string) {
+  return (await api.post<{
+    status: "ok";
+    whatsapp_group: { status: string; reason?: string; group_jid?: string };
+  }>(`/dossiers/${id}/whatsapp-group/sync`)).data.whatsapp_group;
 }
 
 export async function createDossier(payload: DossierPayload) {

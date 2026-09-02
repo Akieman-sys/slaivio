@@ -9,8 +9,9 @@ from app.services.whatsapp_qr_gateway_client import qr_gateway_request
 def _context(org_id: str, dossier_id: str) -> dict | None:
     with engine.connect() as conn:
         row = conn.execute(text("""
-          select d.id::text,d.dossier_reference,d.title,d.whatsapp_group_jid,
-                 o.whatsapp_group_on_dossier_create,
+          select d.id::text,d.dossier_reference,d.title,
+                 to_jsonb(d)->>'whatsapp_group_jid' whatsapp_group_jid,
+                 coalesce((to_jsonb(o)->>'whatsapp_group_on_dossier_create')::boolean,false) whatsapp_group_on_dossier_create,
                  connection.id::text connection_id
           from dossiers d
           join organizations o on o.id=d.org_id

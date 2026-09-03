@@ -98,7 +98,7 @@
   --app-text-muted: #69727c;
   --app-green: #12c76f;
   --app-green-dark: #087a46;
-  --pilot-canvas: var(--sl-color-canvas);
+  --pilot-canvas: #ffffff;
   --pilot-surface: var(--sl-color-surface);
   --pilot-surface-subtle: var(--sl-color-surface-subtle);
   --pilot-border: var(--sl-color-border);
@@ -629,6 +629,21 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
+/* Keep every dashboard surface keyboard- and wheel-scrollable while hiding
+   browser chrome that creates nested bars around pages and tab strips. */
+.slaivio-app-shell,
+.slaivio-app-shell * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.slaivio-app-shell::-webkit-scrollbar,
+.slaivio-app-shell *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* Pilot V1 visual contract. All visible product surfaces inherit these
    tokens; feature pages should compose shared operation primitives instead
    of introducing local typography, borders or button treatments. */
@@ -652,8 +667,37 @@ div.min-h-full.bg-\[\#f7f7f6\] > main > section.overflow-hidden {
 }
 
 .slaivio-pilot .slaivio-operations {
-  background: var(--pilot-canvas);
+  background: #ffffff;
   color: var(--pilot-text);
+}
+
+.slaivio-pilot [data-ui="operation-page-header"] {
+  border-bottom-color: transparent;
+}
+
+.slaivio-pilot .pilot-settings-content {
+  display: grid;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .slaivio-pilot .pilot-settings-content {
+    grid-template-columns: 220px minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+
+  .slaivio-pilot .pilot-settings-content > header {
+    grid-column: 1;
+  }
+
+  .slaivio-pilot .pilot-settings-content > :not(header):not([data-ui="settings-notice"]) {
+    grid-column: 2;
+  }
+
+  .slaivio-pilot .pilot-settings-content > [data-ui="settings-notice"] {
+    grid-column: 1 / -1;
+  }
 }
 
 .slaivio-pilot .slaivio-sidebar [data-ui="sidebar-group-label"] {

@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 import { PermissionGuard } from "@/components/permissions/permission-guard";
-import { OperationPageHeader } from "@/components/ui/operation-page-header";
+import { OperationPageHeader, OperationTabs } from "@/components/ui/operation-page-header";
 import { OperationButton, OperationStatus } from "@/components/ui/operation-controls";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
+import { dashboardLabel, useDashboardLocale } from "@/components/i18n/dashboard-language";
 import { updateInboxAIMode, type InboxAIMode } from "@/services/inbox";
 import {
   getPilotSettings,
@@ -41,6 +42,7 @@ type Section = (typeof sections)[number][0];
 const inputClass = "h-10 w-full rounded-[7px] border border-[#d5dade] bg-white px-3 text-[14px] text-[#293038] outline-none transition focus:border-[#12a865] focus:ring-2 focus:ring-[#12c76f]/10";
 
 export function PilotSettingsPage() {
+  const locale = useDashboardLocale();
   const router = useRouter();
   const params = useSearchParams();
   const [section, setSection] = useState<Section>("company");
@@ -96,18 +98,15 @@ export function PilotSettingsPage() {
   if (loading && !data) return <LoadingState label="Chargement des paramètres…" />;
   if (!data) return <ErrorState title="Paramètres indisponibles" description={error} retry={load} />;
 
-  return <div className="min-h-full bg-[#f7f7f6]">
-    <OperationPageHeader title="Paramètres" description="Configurez uniquement ce qui est nécessaire au fonctionnement quotidien de votre entreprise." actions={<OperationButton onClick={load}><RefreshCcw size={14}/>Actualiser</OperationButton>}/>
-    <div className="grid min-h-[calc(100vh-132px)] lg:grid-cols-[236px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-[#e1e4e6] bg-[#fafafa] py-5 lg:block">
-        <p className="px-5 pb-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#8a9299]">Configuration</p>
-        <nav className="grid">{sections.map(([key, label]) => <button key={key} type="button" onClick={() => choose(key)} className={`min-h-11 w-full border-l-2 px-5 text-left text-[14px] font-medium transition ${section === key ? "border-[#16855f] bg-[#e7f5ef] text-[#126347]" : "border-transparent text-[#46515a] hover:bg-[#eeeeed]"}`}>{label}</button>)}</nav>
-      </aside>
-      <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[920px]">
-          <label className="mb-5 grid gap-2 text-[13px] font-semibold text-[#4b5660] lg:hidden">Section<select className={inputClass} value={section} onChange={(event) => choose(event.target.value as Section)}>{sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          {notice && <div className="mb-5 rounded-[8px] border border-[#bfe6d2] bg-[#f0faf5] px-4 py-3 text-[13px] text-[#176142]">{notice}</div>}
-          {error && <div className="mb-5 rounded-[8px] border border-[#efd0cc] bg-[#fff6f5] px-4 py-3 text-[13px] text-[#9d352d]">{error}</div>}
+  return <div className="min-h-full bg-white">
+    <OperationPageHeader title={dashboardLabel(locale, "Paramètres")} description={dashboardLabel(locale, "Configurez uniquement ce qui est nécessaire au fonctionnement quotidien de votre entreprise.")} actions={<OperationButton onClick={load}><RefreshCcw size={14}/>{dashboardLabel(locale, "Actualiser")}</OperationButton>}/>
+    <OperationTabs>
+      {sections.map(([key, label]) => <button data-ui="operation-tab" aria-current={section === key ? "page" : undefined} key={key} type="button" onClick={() => choose(key)} className={`h-12 shrink-0 border-b-2 px-3 text-[13px] font-medium transition ${section === key ? "border-[#16855f] text-[#126347]" : "border-transparent text-[#68727c] hover:text-[#252c32]"}`}>{dashboardLabel(locale, label)}</button>)}
+    </OperationTabs>
+      <main className="min-w-0 px-5 py-8 sm:px-7 lg:px-10">
+        <div className="pilot-settings-content mx-auto max-w-[1280px]">
+          {notice && <div data-ui="settings-notice" className="mb-5 rounded-[8px] border border-[#bfe6d2] bg-[#f0faf5] px-4 py-3 text-[13px] text-[#176142]">{notice}</div>}
+          {error && <div data-ui="settings-notice" className="mb-5 rounded-[8px] border border-[#efd0cc] bg-[#fff6f5] px-4 py-3 text-[13px] text-[#9d352d]">{error}</div>}
           {section === "company" && <CompanySettings data={data} run={run}/>} 
           {section === "responsible" && <ResponsibleSettings data={data}/>} 
           {section === "identifiers" && <IdentifierSettings data={data} run={run}/>} 
@@ -118,20 +117,22 @@ export function PilotSettingsPage() {
           {section === "notifications" && <NotificationSettings/>}
         </div>
       </main>
-    </div>
   </div>;
 }
 
 function SectionHeader({title, description}:{title:string;description:string}) {
-  return <header className="mb-6 border-b border-[#e2e5e7] pb-5"><h2 className="text-[21px] font-semibold tracking-[-.015em] text-[#252c32]">{title}</h2><p className="mt-1.5 max-w-[680px] text-[13px] leading-5 text-[#69747d]">{description}</p></header>;
+  const locale = useDashboardLocale();
+  return <header className="mb-6 lg:mb-0 lg:pr-8"><h2 className="text-[17px] font-semibold tracking-[-.015em] text-[#252c32]">{dashboardLabel(locale, title)}</h2><p className="mt-1.5 max-w-[260px] text-[13px] leading-5 text-[#69747d]">{dashboardLabel(locale, description)}</p></header>;
 }
 
 function SettingsCard({title, description, children}:{title:string;description?:string;children:React.ReactNode}) {
-  return <section className="overflow-hidden rounded-[10px] border border-[#dfe3e6] bg-white shadow-[0_1px_2px_rgba(15,23,42,.025)]"><header className="border-b border-[#e6e9eb] px-5 py-4"><h3 className="text-[15px] font-semibold text-[#30383f]">{title}</h3>{description && <p className="mt-1 text-[12px] leading-5 text-[#77818a]">{description}</p>}</header><div className="p-5">{children}</div></section>;
+  const locale = useDashboardLocale();
+  return <section data-ui="settings-card" className="overflow-hidden rounded-[9px] bg-white"><header className="pb-4"><h3 className="text-[15px] font-semibold text-[#30383f]">{dashboardLabel(locale, title)}</h3>{description && <p className="mt-1 text-[12px] leading-5 text-[#77818a]">{dashboardLabel(locale, description)}</p>}</header><div>{children}</div></section>;
 }
 
 function Field({label, hint, children}:{label:string;hint?:string;children:React.ReactNode}) {
-  return <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#404b54]">{label}</span>{children}{hint && <span className="text-[12px] leading-5 text-[#7a858e]">{hint}</span>}</label>;
+  const locale = useDashboardLocale();
+  return <label className="grid gap-2"><span className="text-[13px] font-semibold text-[#404b54]">{dashboardLabel(locale, label)}</span>{children}{hint && <span className="text-[12px] leading-5 text-[#7a858e]">{dashboardLabel(locale, hint)}</span>}</label>;
 }
 
 function CompanySettings({data,run}:{data:PilotSettingsData;run:(action:()=>Promise<unknown>,message:string)=>Promise<void>}) {

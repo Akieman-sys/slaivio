@@ -101,9 +101,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [query, permissions, permissionsAvailable]);
 
   useEffect(() => {
+    if (pilot) {
+      document.documentElement.dataset.theme = "light";
+      return;
+    }
     const theme = window.localStorage.getItem("slaivio.theme") || "light";
     document.documentElement.dataset.theme = theme;
-  }, []);
+  }, [pilot]);
 
   useEffect(() => {
     if (pilot) {
@@ -189,7 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`slaivio-app-shell flex h-dvh overflow-hidden bg-[#f5f6f6] text-[#25292e] ${pilot ? "slaivio-pilot" : ""}`}>
+    <div className={`slaivio-app-shell flex h-dvh overflow-hidden bg-white text-[#25292e] ${pilot ? "slaivio-pilot" : ""}`}>
       <button
         aria-label="Fermer la navigation"
         onClick={() => setMobileOpen(false)}
@@ -264,6 +268,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>}
         </nav>
 
+        {pilot && <div className="mt-auto flex shrink-0 items-center gap-1 px-3 pb-3 lg:grid lg:px-0 lg:pb-2">
+          <PilotRailButton label={dashboardLabel(locale, "Notifications")} icon={<Bell size={19} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
+          <AccountTrigger onClick={() => togglePanel("account")} rail />
+        </div>}
+
         {!pilot && <div className={`shrink-0 border-t border-[#e3e4e5] ${sidebarCollapsed ? "lg:p-1.5" : "p-3"}`}>
           {!permissionsLoading && !permissionsAvailable && (
             <div className="mb-2 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
@@ -295,20 +304,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             {!pilot && <HeaderButton label="Assistant" icon={<Sparkles size={16} />} onClick={() => router.push("/app/assistant")} active={pathname.startsWith("/app/assistant")} showLabel />}
             {!pilot && <HeaderButton label="Aide" icon={<CircleHelp size={16} />} onClick={() => togglePanel("help")} active={floatingPanel === "help"} showLabel />}
             <HeaderButton label={dashboardLabel(locale, "Langue")} icon={<Languages size={16} />} onClick={() => togglePanel("language")} active={floatingPanel === "language"} showLabel />
-            <HeaderButton label={dashboardLabel(locale, "Notifications")} icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />
-            <AccountTrigger onClick={() => togglePanel("account")} />
+            {!pilot && <HeaderButton label={dashboardLabel(locale, "Notifications")} icon={<Bell size={16} />} onClick={() => togglePanel("notifications")} active={floatingPanel === "notifications"} />}
+            {!pilot && <AccountTrigger onClick={() => togglePanel("account")} />}
           </div>
         </header>
 
         {floatingPanel && <button aria-label="Fermer le menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setFloatingPanel(null)} />}
         {floatingPanel === "help" && <div className="fixed right-[82px] top-[52px] z-50"><HelpMenu close={() => setFloatingPanel(null)} /></div>}
-        {floatingPanel === "notifications" && <div className="fixed right-[48px] top-[52px] z-50"><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "notifications" && <div className={`fixed z-50 ${pilot ? "bottom-[70px] left-3 lg:left-[96px]" : "right-[48px] top-[52px]"}`}><NotificationsMenu pilot={pilot} close={() => setFloatingPanel(null)} /></div>}
         {floatingPanel === "language" && <div className="fixed right-[82px] top-[52px] z-50"><LanguageMenu close={() => setFloatingPanel(null)}/></div>}
-        {floatingPanel === "account" && <div className="fixed right-3 top-[52px] z-50"><AccountMenu close={() => setFloatingPanel(null)} /></div>}
+        {floatingPanel === "account" && <div className={`fixed z-50 ${pilot ? "bottom-3 left-3 lg:left-[96px]" : "right-3 top-[52px]"}`}><AccountMenu close={() => setFloatingPanel(null)} /></div>}
 
         {pilot && <PilotOfflineIndicator />}
-        <main className={`slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f5f6f6] ${pilot ? "px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10" : ""}`}>
-          {pilot ? <div className="mx-auto min-h-full w-full max-w-[1536px] overflow-hidden bg-white">{children}</div> : children}
+        <main className="slaivio-operations min-h-0 min-w-0 flex-1 overflow-y-auto bg-white">
+          {pilot ? <div className="min-h-full w-full bg-white">{children}</div> : children}
         </main>
       </section>
 
@@ -373,6 +382,10 @@ function PilotRailLink({ href, icon, active, label }: { href: string; icon: Reac
   );
 }
 
+function PilotRailButton({ icon, active, label, onClick }: { icon: ReactNode; active: boolean; label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} aria-label={label} aria-expanded={active} title={label} className={`group flex h-11 w-11 items-center justify-center rounded-[7px] lg:h-[52px] lg:w-full ${active ? "bg-[#e4f4ee] text-[#145f49]" : "text-[#656c74] hover:bg-[#f2f4f4] hover:text-[#20252b]"}`}>{icon}</button>;
+}
+
 function pilotRouteLabel(locale: "fr" | "en", fallback: string, href: string) {
   const labels: Record<string, { fr: string; en: string }> = {
     "/app/dossiers": { fr: "Dossiers", en: "Cases" },
@@ -404,7 +417,6 @@ function ClerkAccountTrigger({ onClick, rail }: { onClick: () => void; rail: boo
   return (
     <button type="button" onClick={onClick} aria-label="Compte" className={rail ? "flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] text-[10px] leading-3 text-[#4b545c] hover:bg-[#f2f4f4]" : "ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5"}>
       <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-[12px] font-semibold text-white ring-1 ring-black/5"><UserAvatar imageUrl={user?.imageUrl} name={name} size={32} /></span>
-      {rail && <span>Compte</span>}
     </button>
   );
 }
@@ -419,7 +431,7 @@ function AccountMenu({ close }: { close: () => void }) {
 function ClerkAccountMenu({ close }: { close: () => void }) {
   const { user } = useUser();
   const { signOut } = useClerk();
-  const name = user?.fullName || user?.firstName || "Utilisateur Slaivio";
+  const name = user?.primaryEmailAddress?.emailAddress || user?.fullName || "Compte";
   const email = user?.primaryEmailAddress?.emailAddress || "";
   return <AccountMenuContent close={close} name={name} email={email} imageUrl={user?.imageUrl} logout={() => signOut({ redirectUrl: "/sign-in" })} />;
 }
@@ -428,22 +440,22 @@ function FallbackAccountTrigger({ onClick, rail }: { onClick: () => void; rail: 
   return (
     <button type="button" onClick={onClick} aria-label="Compte" className={rail ? "flex min-h-[58px] w-full flex-col items-center justify-center gap-1 rounded-[7px] text-[10px] leading-3 text-[#4b545c] hover:bg-[#f2f4f4]" : "ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5"}>
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#087a46] text-white ring-1 ring-black/5"><UserRound size={16} aria-hidden="true" /></span>
-      {rail && <span>Compte</span>}
     </button>
   );
 }
 
 function FallbackAccountMenu({ close }: { close: () => void }) {
-  return <AccountMenuContent close={close} name="Utilisateur Slaivio" email="Session locale" logout={() => { window.location.assign("/sign-in"); }} />;
+  return <AccountMenuContent close={close} name="Compte local" email="compte@local" logout={() => { window.location.assign("/sign-in"); }} />;
 }
 
 function LanguageMenu({close}:{close:()=>void}){
   const locale=useDashboardLocale();
   function choose(next:"fr"|"en"){setDashboardLocale(next);close()}
-  return <div className="w-[230px] rounded-[8px] border border-[#d1d5d8] bg-white p-1.5 shadow-[0_16px_44px_rgba(15,23,42,.18)]"><p className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7a838b]">Langue du tableau de bord</p>{([['fr','🇫🇷','Français'],['en','🇬🇧','English']] as const).map(([key,flag,label])=><button key={key} type="button" onClick={()=>choose(key)} className="flex h-10 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[13px] hover:bg-[#f2f4f4]"><span aria-hidden="true">{flag}</span><span className="flex-1">{label}</span>{locale===key&&<CheckCheck size={15} className="text-[#16855f]"/>}</button>)}</div>
+  return <div className="w-[230px] rounded-[8px] border border-[#d1d5d8] bg-white p-1.5 shadow-[0_16px_44px_rgba(15,23,42,.18)]"><p className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7a838b]">{dashboardLabel(locale,"Langue du tableau de bord")}</p>{([['fr','🇫🇷','Français'],['en','🇬🇧','English']] as const).map(([key,flag,label])=><button key={key} type="button" onClick={()=>choose(key)} className="flex h-10 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[13px] hover:bg-[#f2f4f4]"><span aria-hidden="true">{flag}</span><span className="flex-1">{label}</span>{locale===key&&<CheckCheck size={15} className="text-[#16855f]"/>}</button>)}</div>
 }
 
 function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: () => void; name: string; email: string; imageUrl?: string | null; logout: () => void | Promise<unknown> }) {
+  const locale = useDashboardLocale();
   const { permissions, available } = usePermissions();
   const canOpenPlatform = !available || permissions.some((permission) => permission.startsWith("platform."));
   const pilot = isPilotV1();
@@ -456,15 +468,14 @@ function AccountMenuContent({ close, name, email, imageUrl, logout }: { close: (
       <div className="w-[300px] rounded-[7px] border border-[#d1d4d7] bg-white shadow-[0_16px_44px_rgba(15,23,42,.18)]">
         <div className="flex items-center gap-3 px-4 py-4">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#087a46] text-sm font-semibold text-white"><UserAvatar imageUrl={imageUrl} name={name} size={40} /></div>
-          <div className="min-w-0"><div className="truncate text-[13px] font-semibold">{name}</div><div className="truncate text-[11px] text-[#737a82]">{email}</div></div>
+          <div className="min-w-0 flex-1 truncate text-[13px] font-medium">{email}</div>
         </div>
         <MenuDivider />
-        <MenuLink href="/app/settings" icon={<Settings size={15} />} label="Paramètres" close={close} />
-        <button type="button" onClick={toggleTheme} className={menuClass}>{theme==="dark"?<Sun size={15}/>:<Moon size={15}/>} {theme==="dark"?"Mode clair":"Mode sombre"}</button>
-        <MenuLink href="/app/support" icon={<CircleHelp size={15} />} label="Aide et support" close={close} />
+        <MenuLink href="/app/settings" icon={<Settings size={15} />} label={dashboardLabel(locale,"Paramètres")} close={close} />
+        <a href="mailto:support@slaivio.com?subject=Support%20Slaivio" onClick={close} className={menuClass}><CircleHelp size={15} /><span className="min-w-0"><span className="block">Support</span><span className="block text-[11px] text-[#737a82]">support@slaivio.com</span></span></a>
         <MenuDivider />
         <button type="button" onClick={async () => { close(); await logout(); }} className={menuClass}>
-          <LogOut size={15} /> Se déconnecter
+          <LogOut size={15} /> {dashboardLabel(locale,"Se déconnecter")}
         </button>
       </div>
     );

@@ -4,7 +4,7 @@ import { SignIn, SignUp, useUser } from "@clerk/nextjs";
 
 import { AuthSessionState } from "@/components/auth/auth-session-state";
 import { clerkAppearance } from "@/components/auth/clerk-appearance";
-import { LoadingState } from "@/components/ui/page-state";
+import { SlaivioBrand } from "@/components/ui/slaivio-brand";
 
 export function ClerkAuthPanel({ mode }: { mode: "sign-in" | "sign-up" }) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -28,7 +28,7 @@ function ClerkAuthPanelContent({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { isLoaded, isSignedIn } = useUser();
 
   if (!isLoaded) {
-    return <LoadingState label="Préparation de votre espace sécurisé…" />;
+    return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white" role="status" aria-label="Préparation de votre espace sécurisé"><SlaivioBrand /></div>;
   }
 
   if (isSignedIn) {

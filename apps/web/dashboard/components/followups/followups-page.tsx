@@ -8,6 +8,7 @@ import { OperationButton, OperationMetric, OperationMetricGrid, OperationStatus,
 import { OperationDrawer, OperationDrawerAction, OperationDrawerTabs } from "@/components/ui/operation-drawer";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { usePilotOffline } from "@/components/offline/pilot-offline-provider";
+import { dashboardLabel, useDashboardLocale } from "@/components/i18n/dashboard-language";
 import {
   confirmPilotFollowup, createPilotFollowup, getPilotFollowup, listPilotFollowups,
   pilotFollowupOptions, previewPilotFollowup, savePilotFollowupMessage, sendPilotFollowup, suggestPilotFollowupMessage,
@@ -18,12 +19,13 @@ const fieldClass="h-10 w-full rounded-[7px] border border-[#d5dade] bg-white px-
 const views=[["all","Toutes"],["drafts","Brouillons"],["confirm","À envoyer"],["pending","En cours"],["sent","Envoyées"],["failed","Échecs"]] as const;
 
 export function FollowupsPage(){
+  const locale=useDashboardLocale();
   const [items,setItems]=useState<PilotFollowupBatch[]>([]),[stats,setStats]=useState<Record<string,number>>({}),[view,setView]=useState("all"),[q,setQ]=useState(""),[loading,setLoading]=useState(true),[error,setError]=useState(""),[createOpen,setCreateOpen]=useState(false),[selected,setSelected]=useState<PilotFollowupBatch|null>(null);
   const load=useCallback(async()=>{setLoading(true);try{const data=await listPilotFollowups({view:view==="all"?undefined:view,q:q||undefined});setItems(data.items);setStats(data.stats);setError("");}catch{setError("Les relances ne peuvent pas être chargées pour le moment.");}finally{setLoading(false);}},[q,view]);
   useEffect(()=>{const timer=setTimeout(load,180);return()=>clearTimeout(timer);},[load]);
   async function open(item:PilotFollowupBatch){try{setSelected(await getPilotFollowup(item.id));}catch{setError("Cette relance ne peut pas être ouverte.");}}
-  return <div className="min-h-full bg-[#f7f7f6]">
-    <OperationPageHeader title="Relances" description="Préparez un message, vérifiez les destinataires puis confirmez l’envoi sur WhatsApp." actions={<OperationButton variant="primary" onClick={()=>setCreateOpen(true)}><Plus size={15}/>Nouvelle relance</OperationButton>}/>
+  return <div className="min-h-full bg-white">
+    <OperationPageHeader title={dashboardLabel(locale,"Relances")} description={dashboardLabel(locale,"Préparez un message, vérifiez les destinataires puis confirmez l’envoi sur WhatsApp.")} actions={<OperationButton variant="primary" onClick={()=>setCreateOpen(true)}><Plus size={15}/>{dashboardLabel(locale,"Nouvelle relance")}</OperationButton>}/>
     <OperationMetrics><OperationMetricGrid><OperationMetric label="Brouillons" value={stats.drafts||0}/><OperationMetric label="À envoyer" value={stats.to_confirm||0}/><OperationMetric label="En cours d’envoi" value={stats.pending||0}/><OperationMetric label="Avec erreur" value={stats.failed||0}/></OperationMetricGrid></OperationMetrics>
     <OperationTabs>{views.map(([key,label])=><OperationTab key={key} active={view===key} onClick={()=>setView(key)}>{label}</OperationTab>)}</OperationTabs>
     <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une relance"/>}><OperationButton onClick={load}>Actualiser</OperationButton></OperationToolbar>

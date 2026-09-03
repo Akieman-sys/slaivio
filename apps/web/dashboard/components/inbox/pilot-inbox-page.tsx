@@ -13,6 +13,7 @@ import { OperationButton, OperationStatus } from "@/components/ui/operation-cont
 import { OperationSearch } from "@/components/ui/operation-primitives";
 import { OperationPageHeader } from "@/components/ui/operation-page-header";
 import { EmptyState, LoadingState } from "@/components/ui/page-state";
+import { dashboardLabel, useDashboardLocale } from "@/components/i18n/dashboard-language";
 import { searchDossierClients, type DossierClientSearchResult } from "@/services/dossiers";
 import {
   generateInboxAISuggestion, getInboxAISettings, getInboxConversation, listInboxAIDrafts,
@@ -31,6 +32,7 @@ const filters: Array<{ id: InboxView; label: string }> = [
 ];
 
 export function PilotInboxPage() {
+  const locale = useDashboardLocale();
   const { online, cache, cached } = usePilotOffline();
   const [view, setView] = useState<InboxView>("all");
   const [query, setQuery] = useState("");
@@ -161,7 +163,7 @@ export function PilotInboxPage() {
   async function changeState(status: "OPEN" | "CLOSED", attention: boolean) { if (!detail) return; try { await updateInboxState(detail.phone, { status, requires_attention: attention }); setDetail(await getInboxConversation(detail.phone)); await loadList(true); setCloseRequested(false); } catch (cause) { setActionError(apiError(cause)); } }
 
   return <div className="flex min-h-0 flex-col bg-[#f7f8f8] text-[#25292e] lg:h-[calc(100vh-64px)]">
-    <OperationPageHeader title="Boîte de réception" description="Conversations WhatsApp, clients et dossiers réunis dans un espace de travail simple." actions={aiSettings && <AIModeControl settings={aiSettings} change={changeAgencyMode} />} />
+    <OperationPageHeader title={dashboardLabel(locale,"Boîte de réception")} description={dashboardLabel(locale,"Conversations WhatsApp, clients et dossiers réunis dans un espace de travail simple.")} actions={aiSettings && <AIModeControl settings={aiSettings} change={changeAgencyMode} />} />
     <main className="min-h-0 flex-1 p-3 sm:p-4"><section className="grid h-[calc(100vh-170px)] min-h-[620px] overflow-hidden rounded-[10px] border border-[#dfe3e6] bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)] lg:h-full lg:min-h-0 lg:grid-cols-[330px_minmax(420px,1fr)_300px] xl:grid-cols-[350px_minmax(480px,1fr)_320px]">
       <aside className={`${selectedPhone ? "hidden lg:flex" : "flex"} min-h-0 flex-col border-r border-[#e3e7ea]`}><div className="border-b border-[#e7eaed] p-3"><OperationSearch value={query} onChange={setQuery} placeholder="Nom, téléphone ou identifiant" /><div className="mt-3 flex gap-1 overflow-x-auto pb-0.5">{filters.map(filter => <button key={filter.id} onClick={() => setView(filter.id)} className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold ${view === filter.id ? "bg-[#24312b] text-white" : "bg-[#f0f2f2] text-[#626d75] hover:bg-[#e7ebea]"}`}>{filter.label}</button>)}</div></div>
         {checked.size > 0 && <div className="border-b border-[#e4e8ea] bg-[#f7faf8] p-3"><div className="flex items-center justify-between"><strong className="text-[12px]">{checked.size} sélectionnée{checked.size > 1 ? "s" : ""}</strong><button onClick={() => setChecked(new Set())} className="grid h-7 w-7 place-items-center rounded hover:bg-[#e9eeeb]"><X size={14} /></button></div><div className="mt-2 flex flex-wrap gap-2"><button onClick={bulkRead} className={miniAction}><CheckCheck size={13} />Marquer comme lu</button><PermissionGuard permission="inbox.ai.manage"><button disabled={modeBusy} onClick={() => bulkMode("PAUSED")} className={miniAction}><UserRound size={13} />Manuel</button><button disabled={modeBusy} onClick={() => bulkMode("CONTROLLED_AUTO")} className={miniAction}><Bot size={13} />IA</button></PermissionGuard></div></div>}

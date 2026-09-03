@@ -1,4 +1,7 @@
+"use client";
+
 import { AlertTriangle, Ban, Inbox, RotateCw } from "lucide-react";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 type StateProps = { title: string; description: string; action?: ReactNode };
@@ -43,7 +46,20 @@ export function TableSkeleton({ rows = 6, columns = 5, label = "Chargement du ta
 }
 
 export function ModulePageSkeleton() {
-  return <div className="min-h-full bg-[#f5f6f6]" role="status" aria-label="Ouverture du module">
+  const pathname = usePathname();
+
+  if (pathname.startsWith("/app/inbox")) {
+    return <div className="grid min-h-full grid-cols-1 bg-white lg:grid-cols-[320px_minmax(0,1fr)]" role="status" aria-label="Ouverture de la boîte de réception">
+      <div className="border-r border-[#edf0f2] p-5"><SkeletonLine className="h-7 w-40"/><SkeletonLine className="mt-5 h-9 w-full"/><div className="mt-5 space-y-4">{Array.from({length:7},(_,index)=><div key={index} className="flex gap-3"><SkeletonLine className="h-10 w-10 shrink-0 rounded-full"/><div className="flex-1"><SkeletonLine className="h-3 w-2/3"/><SkeletonLine className="mt-2 h-3 w-full"/></div></div>)}</div></div>
+      <div className="hidden p-8 lg:block"><div className="flex items-center gap-3"><SkeletonLine className="h-11 w-11 rounded-full"/><div><SkeletonLine className="h-4 w-40"/><SkeletonLine className="mt-2 h-3 w-24"/></div></div><div className="mx-auto mt-16 max-w-2xl space-y-5"><SkeletonLine className="ml-auto h-16 w-3/5"/><SkeletonLine className="h-20 w-2/3"/><SkeletonLine className="ml-auto h-14 w-1/2"/></div></div>
+    </div>;
+  }
+
+  if (pathname.startsWith("/app/settings")) {
+    return <div className="min-h-full bg-white" role="status" aria-label="Ouverture des paramètres"><div className="px-7 py-5"><SkeletonLine className="h-6 w-36"/><SkeletonLine className="mt-2 h-3 w-[min(520px,75%)]"/></div><div className="flex gap-7 border-b border-[#edf0f2] px-7">{Array.from({length:7},(_,index)=><SkeletonLine key={index} className="mb-3 h-3 w-20"/>)}</div><div className="grid gap-8 px-7 py-9 lg:grid-cols-[220px_minmax(0,1fr)]"><div><SkeletonLine className="h-5 w-28"/><SkeletonLine className="mt-3 h-3 w-full"/><SkeletonLine className="mt-2 h-3 w-3/4"/></div><div className="grid gap-5 sm:grid-cols-2">{Array.from({length:6},(_,index)=><div key={index}><SkeletonLine className="h-3 w-28"/><SkeletonLine className="mt-2 h-10 w-full"/></div>)}</div></div></div>;
+  }
+
+  return <div className="min-h-full bg-white" role="status" aria-label="Ouverture du module">
     <div className="border-b border-[#dfe3e7] bg-white px-5 py-4 sm:px-6"><SkeletonLine className="h-5 w-44" /><SkeletonLine className="mt-2 h-3 w-[min(440px,75%)]" /></div>
     <div className="flex h-11 items-end gap-5 border-b border-[#dfe3e7] bg-white px-5 sm:px-6">{["w-24", "w-20", "w-28", "w-20"].map((width, index) => <SkeletonLine key={index} className={`mb-3 h-3 ${width}`} />)}</div>
     <div className="border-b border-[#dfe3e7] bg-white px-5 py-4 sm:px-6"><div className="grid grid-cols-2 divide-x divide-y divide-[#eceff2] overflow-hidden rounded-[8px] border border-[#e2e6e9] md:grid-cols-4 md:divide-y-0">{Array.from({ length: 4 }, (_, index) => <div key={index} className="px-4 py-3.5"><SkeletonLine className="h-2.5 w-20" /><SkeletonLine className="mt-2 h-6 w-14" /></div>)}</div></div>

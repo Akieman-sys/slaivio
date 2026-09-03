@@ -12,7 +12,7 @@ export function SlaivioBrand({ compact = false, inverse = false, iconOnly = fals
         priority
         className={`${rail ? "h-[42px] w-[42px]" : compact ? "h-[30px] w-[30px]" : "h-[38px] w-[38px]"} shrink-0 object-contain`}
       />
-      {!iconOnly && <span className={`${compact ? "slaivio-brand-cycle text-[20px]" : "text-[27px]"} truncate font-semibold ${inverse ? "text-white" : "text-[#202428]"}`}>Slaivio</span>}
+      {!iconOnly && <span className={`${compact ? "text-[20px]" : "text-[27px]"} truncate font-semibold ${inverse ? "text-white" : "text-[#202428]"}`}>Slaivio</span>}
     </span>
   );
 }

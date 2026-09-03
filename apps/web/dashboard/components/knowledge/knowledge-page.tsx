@@ -10,6 +10,7 @@ import { OperationContent, OperationMetrics, OperationSearch, OperationToolbar }
 import { OperationButton, OperationField, OperationFilterPopover, OperationMetric, OperationMetricGrid, OperationStatus, OperationTab } from "@/components/ui/operation-controls";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/page-state";
 import { apiErrorDetail } from "@/services/api";
+import { dashboardLabel, useDashboardLocale } from "@/components/i18n/dashboard-language";
 import {
   createPilotKnowledge, getPilotKnowledge, getPilotKnowledgeStats, listPilotKnowledge,
   pilotKnowledgeAction, publishPilotKnowledge, updatePilotKnowledge, uploadPilotKnowledgeFile,
@@ -22,14 +23,15 @@ const views=[['all','Toutes'],['published','Publiées'],['drafts','Brouillons'],
 const knowledgeInterfaceVocabulary="Question ou sujet · Information officielle · Communicable aux clients · Interne uniquement · Date de prochaine vérification · Modification en brouillon · Texte détecté à vérifier";
 
 export function KnowledgePage(){
+  const locale=useDashboardLocale();
   const [items,setItems]=useState<PilotKnowledgeItem[]>([]),[stats,setStats]=useState<PilotKnowledgeStats|null>(null),[view,setView]=useState('all'),[q,setQ]=useState(''),[category,setCategory]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState(''),[createOpen,setCreateOpen]=useState(false),[selected,setSelected]=useState<PilotKnowledgeItem|null>(null),[editing,setEditing]=useState<PilotKnowledgeItem|null>(null),[archiving,setArchiving]=useState<PilotKnowledgeItem|null>(null),[busyId,setBusyId]=useState<string|null>(null);
   const load=useCallback(async()=>{setLoading(true);try{const [listing,summary]=await Promise.all([listPilotKnowledge({view:view==='all'?undefined:view,q:q||undefined,category:category||undefined}),getPilotKnowledgeStats()]);setItems(listing.items);setStats(summary);setError('');}catch{setError("La base de connaissances ne peut pas être chargée pour le moment.");}finally{setLoading(false);}},[category,q,view]);
   useEffect(()=>{const timer=setTimeout(load,180);return()=>clearTimeout(timer);},[load]);
   async function open(item:PilotKnowledgeItem){try{setSelected(await getPilotKnowledge(item.id));}catch{setError("Cette information ne peut pas être ouverte.");}}
   async function toggle(item:PilotKnowledgeItem){setBusyId(item.id);setError('');try{if(item.status==='PUBLISHED')await pilotKnowledgeAction(item.id,'unpublish',item.version);else await publishPilotKnowledge(item.id,item.version);await load();}catch{setError("Le statut de cette information n’a pas pu être modifié.");}finally{setBusyId(null);}}
   async function archive(){if(!archiving)return;setBusyId(archiving.id);try{await pilotKnowledgeAction(archiving.id,'archive',archiving.version);setArchiving(null);await load();}catch{setError("L’information n’a pas pu être archivée.");}finally{setBusyId(null);}}
-  return <div className="min-h-full bg-[#f7f7f6]" data-ui-contract={knowledgeInterfaceVocabulary}>
-    <OperationPageHeader title="Connaissances" description="Conservez les réponses officielles de votre entreprise et contrôlez exactement ce que l’IA peut communiquer aux clients." actions={<PermissionGuard permission="pilot.knowledge.manage"><OperationButton variant="primary" onClick={()=>setCreateOpen(true)}><Plus size={15}/>Ajouter une information</OperationButton></PermissionGuard>}/>
+  return <div className="min-h-full bg-white" data-ui-contract={knowledgeInterfaceVocabulary}>
+    <OperationPageHeader title={dashboardLabel(locale,"Connaissances")} description={dashboardLabel(locale,"Conservez les réponses officielles de votre entreprise et contrôlez exactement ce que l’IA peut communiquer aux clients.")} actions={<PermissionGuard permission="pilot.knowledge.manage"><OperationButton variant="primary" onClick={()=>setCreateOpen(true)}><Plus size={15}/>{dashboardLabel(locale,"Ajouter une information")}</OperationButton></PermissionGuard>}/>
     <OperationMetrics><OperationMetricGrid><OperationMetric label="Informations publiées" value={stats?.published||0}/><OperationMetric label="Brouillons" value={stats?.drafts||0}/><OperationMetric label="À vérifier" value={stats?.needs_review||0}/><OperationMetric label="Utilisables par l’IA" value={stats?.available_to_ai||0}/></OperationMetricGrid></OperationMetrics>
     <OperationTabs>{views.map(([key,label])=><OperationTab key={key} active={view===key} onClick={()=>setView(key)}>{label}</OperationTab>)}</OperationTabs>
     <OperationToolbar search={<OperationSearch value={q} onChange={setQ} placeholder="Rechercher une question ou une information"/>} filters={<OperationFilterPopover activeCount={category?1:0} onReset={()=>setCategory('')} title="Filtrer les informations"><OperationField label="Catégorie"><select className={fieldClass} value={category} onChange={event=>setCategory(event.target.value)}>{categories.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></OperationField></OperationFilterPopover>}><OperationButton onClick={load}>Actualiser</OperationButton></OperationToolbar>

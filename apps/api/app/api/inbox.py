@@ -45,7 +45,7 @@ def _translate_error(exc: ValueError):
 
 @router.get("/inbox/conversations", dependencies=[Depends(require_permission("inbox.read"))])
 def list_conversations(
-    view: str = Query(default="all", pattern="^(all|unread|attention|ai|waiting|open|closed)$"),
+    view: str = Query(default="all", pattern="^(all|unread|attention|ai|groups|private|waiting|open|closed)$"),
     q: str | None = Query(default=None, max_length=120),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=40, ge=1, le=100),

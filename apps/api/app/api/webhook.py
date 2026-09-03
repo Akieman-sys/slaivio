@@ -22,6 +22,7 @@ from app.db.message_repository import (
     insert_raw_message,
     find_client_by_phone,
     find_active_dossier,
+    find_dossier_by_whatsapp_group,
     create_dossier_event,
     update_dossier_from_intent,
     get_organization,
@@ -95,9 +96,10 @@ async def process_normalized_whatsapp_message(
         phone=normalized_message.from_phone,
     )
 
-    dossier_id = find_active_dossier(
-        org_id=org_id,
-        client_id=client_id,
+    dossier_id = (
+        find_dossier_by_whatsapp_group(org_id, normalized_message.conversation_jid)
+        if normalized_message.is_group
+        else find_active_dossier(org_id=org_id, client_id=client_id)
     )
 
     created_message = create_message(
@@ -118,6 +120,10 @@ async def process_normalized_whatsapp_message(
         whatsapp_number_id=whatsapp_number_id,
         waba_id=waba_id,
         number_role=number_role,
+        conversation_jid=normalized_message.conversation_jid,
+        sender_name=normalized_message.sender_name,
+        conversation_name=normalized_message.conversation_name,
+        is_group=normalized_message.is_group,
     )
 
     # PostgreSQL is the durable idempotency authority. In-memory deduplication
@@ -132,7 +138,7 @@ async def process_normalized_whatsapp_message(
 
     insert_raw_message(
         org_id=org_id,
-        phone=normalized_message.from_phone,
+        phone=normalized_message.conversation_jid or normalized_message.from_phone,
         text_msg=normalized_message.text_body or "",
         payload=payload,
         client_id=client_id,
@@ -141,14 +147,14 @@ async def process_normalized_whatsapp_message(
 
     register_inbound(
         org_id=org_id,
-        phone=normalized_message.from_phone,
-        client_id=str(client_id) if client_id else None,
+        phone=normalized_message.conversation_jid or normalized_message.from_phone,
+        client_id=str(client_id) if client_id and not normalized_message.is_group else None,
         dossier_id=str(dossier_id) if dossier_id else None,
     )
 
     linked_followup = None
     linked_broadcast = None
-    if client_id:
+    if client_id and not normalized_message.is_group:
         linked_followup = link_whatsapp_response(
             org_id=org_id,
             client_id=client_id,
@@ -161,7 +167,7 @@ async def process_normalized_whatsapp_message(
         )
 
     cancelled_followups = []
-    if dossier_id:
+    if dossier_id and not normalized_message.is_group:
         cancelled_followups = cancel_pending_followups_for_dossier(
             org_id=org_id,
             dossier_id=dossier_id,

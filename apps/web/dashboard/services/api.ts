@@ -46,6 +46,40 @@ export function setAccessTokenProvider(provider: AccessTokenProvider | null) {
   accessTokenProvider = provider;
 }
 
+function mutationSuccessMessage(method: string, rawUrl?: string, data?: unknown): string | null {
+  const url = String(rawUrl || "").split("?")[0];
+  const payload = data as { whatsapp_group?: { status?: string } } | undefined;
+
+  if (method === "POST" && url === "/clients") return "Client créé avec succès.";
+  if (method === "PATCH" && /^\/clients\/[^/]+$/.test(url)) return "Client modifié avec succès.";
+  if (method === "DELETE" && /^\/clients\/[^/]+$/.test(url)) return "Client archivé avec succès.";
+  if (method === "POST" && /^\/clients\/[^/]+\/restore$/.test(url)) return "Client restauré avec succès.";
+  if (method === "POST" && url === "/clients/import") return "Import des clients terminé.";
+
+  if (method === "POST" && url === "/dossiers") return "Dossier créé avec succès.";
+  if (method === "PATCH" && /^\/dossiers\/[^/]+$/.test(url)) return "Dossier modifié avec succès.";
+  if (method === "DELETE" && /^\/dossiers\/[^/]+$/.test(url)) return "Dossier archivé avec succès.";
+  if (method === "POST" && /^\/dossiers\/[^/]+\/restore$/.test(url)) return "Dossier restauré avec succès.";
+  if (method === "POST" && /^\/dossiers\/[^/]+\/clients\/new$/.test(url)) return "Client créé et ajouté au dossier avec succès.";
+  if (method === "POST" && /^\/dossiers\/[^/]+\/clients$/.test(url)) return "Client rattaché au dossier avec succès.";
+  if (method === "DELETE" && /^\/dossiers\/[^/]+\/clients\/[^/]+$/.test(url)) return "Client retiré du dossier.";
+  if (method === "POST" && /^\/dossiers\/[^/]+\/whatsapp-group\/sync$/.test(url)) {
+    return payload?.whatsapp_group?.status === "waiting_for_participant" ? null : "Groupe WhatsApp synchronisé avec succès.";
+  }
+
+  if (method === "POST" && url === "/followups") return "Relance créée avec succès.";
+  if (method === "PATCH" && /^\/followups\/[^/]+$/.test(url)) return "Relance modifiée avec succès.";
+  if (method === "POST" && /^\/followups\/[^/]+\/execute$/.test(url)) return "Relance envoyée avec succès.";
+  if (method === "POST" && url === "/knowledge/pilot") return "Connaissance créée avec succès.";
+  if (method === "PATCH" && /^\/knowledge\/pilot\/[^/]+$/.test(url)) return "Connaissance modifiée avec succès.";
+  if (method === "POST" && /^\/knowledge\/pilot\/[^/]+\/publish$/.test(url)) return "Connaissance publiée avec succès.";
+  if (["PATCH", "PUT"].includes(method) && url.startsWith("/organization/admin")) return "Paramètres de l’agence enregistrés.";
+
+  // Les lectures marquées, recherches, brouillons IA, tests et changements
+  // d'état déjà visibles à l'écran ne doivent pas déclencher de toast global.
+  return null;
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
@@ -79,10 +113,8 @@ api.interceptors.response.use(
     if (typeof window !== "undefined") {
       const method = String(response.config.method || "get").toUpperCase();
       if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-        const message = method === "POST" ? "Création ou action effectuée avec succès."
-          : method === "DELETE" ? "Suppression effectuée avec succès."
-            : "Modification enregistrée avec succès.";
-        window.dispatchEvent(new CustomEvent(API_MUTATION_SUCCEEDED_EVENT, { detail: { message } }));
+        const message = mutationSuccessMessage(method, response.config.url, response.data);
+        if (message) window.dispatchEvent(new CustomEvent(API_MUTATION_SUCCEEDED_EVENT, { detail: { message } }));
       }
     }
     return response;

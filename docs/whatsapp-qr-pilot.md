@@ -21,7 +21,11 @@ Références du moteur utilisé :
 
 ## Déploiement
 
-1. Exécuter `infra/sql/105_whatsapp_qr_linked_device.sql` après la migration 104.
+1. Exécuter les migrations `infra/sql/105_whatsapp_qr_linked_device.sql` à
+   `infra/sql/111_pilot_whatsapp_conversation_identity.sql` dans l’ordre. Les
+   migrations 110 et 111 sont idempotentes et doivent être appliquées avant le
+   nouveau backend : elles réparent le schéma de l’Inbox puis séparent les
+   groupes WhatsApp des conversations privées.
 2. Déployer `apps/whatsapp-qr-gateway` comme service privé Node 20 à partir de
    son `Dockerfile`.
 3. Générer deux secrets différents :
@@ -65,6 +69,11 @@ appels API ↔ gateway sont signés HMAC avec une durée de validité de cinq mi
 
 - connecter un numéro de test et vérifier `CONNECTED` dans Paramètres ;
 - recevoir un message dans la Boîte de réception ;
+- créer un dossier avec au moins un client disposant d’un numéro WhatsApp,
+  vérifier le statut `CONNECTED`, puis retrouver le groupe séparément dans la
+  Boîte de réception après son premier message ;
+- vérifier que chaque message de groupe affiche le nom et le numéro de son
+  expéditeur, sans fusionner sa conversation privée ;
 - répondre manuellement et vérifier la réception sur le téléphone ;
 - redémarrer le gateway et vérifier la reprise sans nouveau QR ;
 - déconnecter depuis SLAIVIO et vérifier que l’appareil disparaît de WhatsApp ;

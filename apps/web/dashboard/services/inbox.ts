@@ -1,6 +1,6 @@
 import { api } from "@/services/api";
 
-export type InboxView = "all" | "unread" | "attention" | "ai";
+export type InboxView = "all" | "groups" | "private" | "unread" | "attention" | "ai";
 export type InboxAIMode = "SUGGESTION_ONLY" | "CONTROLLED_AUTO" | "PAUSED";
 export type InboxAISettings = {
   enabled: boolean;
@@ -36,6 +36,11 @@ export type StoredInboxAIDraft = {
 };
 export type InboxConversation = {
   phone: string;
+  is_group: boolean;
+  conversation_name?: string | null;
+  participant_count: number;
+  last_sender_phone?: string | null;
+  last_sender_name?: string | null;
   last_message_at: string;
   last_inbound_at?: string | null;
   last_message?: string | null;
@@ -69,6 +74,10 @@ export type InboxMessage = {
   provider_message_id?: string | null;
   created_at: string;
   received_at?: string | null;
+  sender_phone?: string | null;
+  sender_name?: string | null;
+  conversation_jid?: string | null;
+  is_group?: boolean;
 };
 
 export type InboxClient = {
@@ -100,6 +109,11 @@ export type InboxAssignment = {
 
 export type InboxDetail = {
   phone: string;
+  is_group: boolean;
+  conversation_name?: string | null;
+  participant_count: number;
+  last_sender_phone?: string | null;
+  last_sender_name?: string | null;
   client?: InboxClient | null;
   assignment?: InboxAssignment | null;
   dossiers: InboxDossier[];

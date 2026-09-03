@@ -100,6 +100,24 @@ def find_active_dossier(org_id: str, client_id: str | None):
         ).fetchone()
 
         return result[0] if result else None
+
+
+def find_dossier_by_whatsapp_group(org_id: str, group_jid: str | None):
+    if not group_jid:
+        return None
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                select id
+                from dossiers
+                where org_id = :org_id
+                  and whatsapp_group_jid = :group_jid
+                  and archived_at is null
+                limit 1
+            """),
+            {"org_id": org_id, "group_jid": group_jid},
+        ).fetchone()
+        return result[0] if result else None
     
 
 def make_json_safe(value):
@@ -642,6 +660,10 @@ def create_message(
     whatsapp_number_id: str | None = None,
     waba_id: str | None = None,
     number_role: str | None = None,
+    conversation_jid: str | None = None,
+    sender_name: str | None = None,
+    conversation_name: str | None = None,
+    is_group: bool = False,
 ):
     with engine.connect() as conn:
         result = conn.execute(
@@ -663,7 +685,11 @@ def create_message(
                     provider_phone_number_id,
                     whatsapp_number_id,
                     waba_id,
-                    number_role
+                    number_role,
+                    conversation_jid,
+                    sender_name,
+                    conversation_name,
+                    is_group
                 )
                 values (
                     :org_id,
@@ -682,7 +708,11 @@ def create_message(
                     :provider_phone_number_id,
                     :whatsapp_number_id,
                     :waba_id,
-                    :number_role
+                    :number_role,
+                    :conversation_jid,
+                    :sender_name,
+                    :conversation_name,
+                    :is_group
                 )
                 on conflict (dedupe_key) do nothing
                 returning *
@@ -705,6 +735,10 @@ def create_message(
                 "whatsapp_number_id": whatsapp_number_id,
                 "waba_id": waba_id,
                 "number_role": number_role,
+                "conversation_jid": conversation_jid,
+                "sender_name": sender_name,
+                "conversation_name": conversation_name,
+                "is_group": is_group,
             },
         )
 

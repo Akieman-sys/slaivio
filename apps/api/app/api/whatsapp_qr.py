@@ -114,6 +114,10 @@ async def receive_qr_gateway_event(request: Request):
                 from_phone=str(payload["from_phone"]), to_phone=payload.get("to_phone"),
                 text_body=payload.get("text_body"), message_type=payload.get("message_type") or "text",
                 received_at=received_at, dedupe_key=str(payload.get("provider_message_id") or event_key),
+                conversation_jid=payload.get("group_jid"),
+                sender_name=payload.get("sender_name"),
+                conversation_name=payload.get("group_name"),
+                is_group=bool(payload.get("group_jid")),
             )
             number_id = connection.get("whatsapp_number_id") or updated.get("whatsapp_number_id")
             result = await process_normalized_whatsapp_message(
@@ -122,9 +126,15 @@ async def receive_qr_gateway_event(request: Request):
                 number_role="SUPPORT",
             )
             if result.get("status") != "duplicate":
+                conversation_key = normalized.conversation_jid or normalized.from_phone
                 await manager.broadcast_to_org(org_id, {"event": "NEW_MESSAGE", "org_id": org_id,
-                    "phone": normalized.from_phone, "message": normalized.text_body, "direction": "inbound"})
-                await run_pilot_inbox_ai(org_id, normalized.from_phone, normalized.text_body or "", "SUPPORT", f"whatsapp:{normalized.dedupe_key}")
+                    "phone": conversation_key, "sender_phone": normalized.from_phone,
+                    "sender_name": normalized.sender_name, "is_group": normalized.is_group,
+                    "message": normalized.text_body, "direction": "inbound"})
+                # Group discussions can involve several people and must remain
+                # under human control until group-aware AI policies exist.
+                if not normalized.is_group:
+                    await run_pilot_inbox_ai(org_id, normalized.from_phone, normalized.text_body or "", "SUPPORT", f"whatsapp:{normalized.dedupe_key}")
         finish_event(org_id, event_key, "PROCESSED")
         return {"status": "processed"}
     except Exception as exc:

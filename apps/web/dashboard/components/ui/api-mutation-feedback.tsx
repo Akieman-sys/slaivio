@@ -40,7 +40,7 @@ export function ApiMutationFeedback() {
   return (
     <div role="status" className={`fixed bottom-5 right-5 z-[100] flex max-w-[430px] items-start gap-3 rounded-lg border bg-white p-4 text-[13px] shadow-xl ${tone==="success"?"border-emerald-200 text-emerald-800":"border-red-200 text-red-800"}`}>
       {tone==="success"?<CheckCircle2 className="mt-0.5 shrink-0" size={18}/>:<AlertTriangle className="mt-0.5 shrink-0" size={18} />}
-      <div><b className={`block ${tone==="success"?"text-emerald-900":"text-red-900"}`}>{tone==="success"?"Action réussie":"Action non enregistrée"}</b><p className="mt-1 leading-5">{message}</p></div>
+      <div><b className={`block ${tone==="success"?"text-emerald-900":"text-red-900"}`}>{tone==="success"?"Terminé":"Échec de l’action"}</b><p className="mt-1 leading-5">{message}</p></div>
       <button onClick={() => setMessage("")} aria-label="Fermer" className="ml-auto"><X size={16} /></button>
     </div>
   );

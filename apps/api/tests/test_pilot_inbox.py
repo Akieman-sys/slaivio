@@ -151,3 +151,13 @@ def test_whatsapp_inbound_and_outbound_are_idempotent():
     assert "idempotent_replay" in outbound
     assert "pilot-inbox:{org_id}:{body.idempotency_key}" in replies
     assert "crypto.randomUUID()" in service
+
+
+def test_mutation_feedback_is_action_specific_and_silent_by_default():
+    api = read("apps/web/dashboard/services/api.ts")
+
+    assert "Client créé avec succès." in api
+    assert "Dossier créé avec succès." in api
+    assert "Groupe WhatsApp synchronisé avec succès." in api
+    assert "return null;" in api
+    assert "Création ou action effectuée avec succès." not in api

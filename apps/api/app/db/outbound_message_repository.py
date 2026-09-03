@@ -15,6 +15,8 @@ def create_outbound_message(
     number_role: str | None = None,
     send_status: str = "PENDING",
     dedupe_key: str | None = None,
+    conversation_jid: str | None = None,
+    is_group: bool = False,
 ):
     with engine.connect() as conn:
         row = conn.execute(
@@ -34,7 +36,9 @@ def create_outbound_message(
                     whatsapp_number_id,
                     waba_id,
                     number_role,
-                    send_status
+                    send_status,
+                    conversation_jid,
+                    is_group
                 )
                 values (
                     :org_id,
@@ -51,7 +55,9 @@ def create_outbound_message(
                     :whatsapp_number_id,
                     :waba_id,
                     :number_role,
-                    :send_status
+                    :send_status,
+                    :conversation_jid,
+                    :is_group
                 )
                 on conflict(dedupe_key) do nothing
                 returning *
@@ -68,6 +74,8 @@ def create_outbound_message(
                 "number_role": number_role,
                 "send_status": send_status,
                 "dedupe_key": dedupe_key,
+                "conversation_jid": conversation_jid,
+                "is_group": is_group,
             },
         ).fetchone()
 

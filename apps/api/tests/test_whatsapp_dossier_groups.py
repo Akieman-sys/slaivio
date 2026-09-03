@@ -24,6 +24,25 @@ def test_group_status_and_manual_sync_are_exposed_to_the_dashboard():
     assert 'require_permission("dossiers.update")' in api
     assert "WhatsappGroupPanel" in dashboard
     assert "Créer le groupe" in dashboard
+    assert "Ajouter un participant" in dashboard
+    assert "whatsapp_group_jid" in dashboard
+
+
+def test_group_conversation_identity_is_persisted_and_visible_in_the_inbox():
+    root = Path(__file__).parents[3]
+    migration = (root / "infra/sql/111_pilot_whatsapp_conversation_identity.sql").read_text(encoding="utf-8")
+    repository = (root / "apps/api/app/db/pilot_inbox_repository.py").read_text(encoding="utf-8")
+    gateway = (root / "apps/whatsapp-qr-gateway/src/session-manager.js").read_text(encoding="utf-8")
+    dashboard = (root / "apps/web/dashboard/components/inbox/pilot-inbox-page.tsx").read_text(encoding="utf-8")
+
+    for column in ("conversation_jid", "sender_name", "conversation_name", "is_group"):
+        assert f"add column if not exists {column}" in migration
+        assert column in repository
+    assert "from messages_raw raw" in migration
+    assert 'rawTarget.endsWith("@g.us")' in gateway
+    assert "item.pushName" in gateway
+    assert 'label: "Groupes"' in dashboard
+    assert "message.sender_phone" in dashboard
 
 
 def test_group_waits_until_a_client_is_explicitly_attached(monkeypatch):

@@ -76,6 +76,8 @@ async def send_reply(
         number_role=number.get("number_role"),
         send_status="PENDING",
         dedupe_key=(f"pilot-inbox:{org_id}:{body.idempotency_key}" if body.idempotency_key else None),
+        conversation_jid=phone if phone.endswith("@g.us") else None,
+        is_group=phone.endswith("@g.us"),
     )
 
     if outbound_message and outbound_message.get("idempotent_replay"):

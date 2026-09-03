@@ -136,14 +136,27 @@ export async function startSession(id, orgId) {
         );
         const preference = preferences.rows[0] || {};
         const isGroup = item.key.remoteJid?.endsWith("@g.us");
-        if (isGroup && !preference.group_replies_enabled) continue;
+        if (isGroup && !preference.group_replies_enabled) {
+          const managedGroup = await pool.query(
+            `select 1 from dossiers where org_id=$1 and whatsapp_group_jid=$2 and archived_at is null limit 1`,
+            [session.orgId, item.key.remoteJid],
+          );
+          if (!managedGroup.rowCount) continue;
+        }
         const sourceJid = jidNormalizedUser(isGroup ? item.key.participant : (item.key.remoteJidAlt || item.key.remoteJid || ""));
         const text = textFromMessage(item.message);
         const messageType = Object.keys(item.message)[0]?.replace("Message", "") || "unknown";
+        let groupName = null;
+        if (isGroup) {
+          try { groupName = (await socket.groupMetadata(item.key.remoteJid))?.subject || null; }
+          catch (error) { logger.warn({ error: error.message, groupJid: item.key.remoteJid }, "group_metadata_unavailable"); }
+        }
         if (preference.auto_mark_read) await socket.readMessages([item.key]);
         await notify(session, "MESSAGE_RECEIVED", { provider_message_id: item.key.id, from_phone: phoneFromJid(sourceJid),
           to_phone: phoneFromJid(socket.user?.id), text_body: text, message_type: messageType,
           group_jid: isGroup ? item.key.remoteJid : null,
+          group_name: groupName,
+          sender_name: item.pushName || null,
           received_at: new Date(Number(item.messageTimestamp || Date.now() / 1000) * 1000).toISOString() }, item.key.id);
       } catch (error) { logger.error({ error: error.message, connectionId: id }, "message_callback_failed"); }
     }
@@ -173,7 +186,8 @@ export function getSession(id) { return publicState(sessions.get(id)); }
 export async function sendMessage(id, to, message) {
   const session = sessions.get(id);
   if (!session?.socket || session.status !== "CONNECTED") throw new Error("whatsapp_qr_session_not_connected");
-  const jid = `${String(to).replace(/\D/g, "")}@s.whatsapp.net`;
+  const rawTarget = String(to || "").trim();
+  const jid = rawTarget.endsWith("@g.us") ? rawTarget : `${rawTarget.replace(/\D/g, "")}@s.whatsapp.net`;
   const result = await session.socket.sendMessage(jid, { text: message });
   return { success: true, provider_message_id: result?.key?.id || null };
 }

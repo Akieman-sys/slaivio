@@ -11,3 +11,7 @@ class NormalizedMessage(BaseModel):
     received_at: datetime
     source_channel: str = "whatsapp"
     dedupe_key: str
+    conversation_jid: str | None = None
+    sender_name: str | None = None
+    conversation_name: str | None = None
+    is_group: bool = False

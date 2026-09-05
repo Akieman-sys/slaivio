@@ -19,12 +19,19 @@ def _configuration(bucket_name: str | None = None) -> tuple[str, str, str]:
     )
 
 
-def upload_private_document(object_path: str, content: bytes, content_type: str, bucket_name: str | None = None) -> None:
+def upload_private_document(
+    object_path: str,
+    content: bytes,
+    content_type: str,
+    bucket_name: str | None = None,
+    *,
+    upsert: bool = False,
+) -> None:
     base_url, key, bucket = _configuration(bucket_name)
     try:
         response = httpx.post(
             f"{base_url}/storage/v1/object/{quote(bucket)}/{quote(object_path, safe='/')}",
-            headers={"Authorization": f"Bearer {key}", "apikey": key, "Content-Type": content_type, "x-upsert": "false"},
+            headers={"Authorization": f"Bearer {key}", "apikey": key, "Content-Type": content_type, "x-upsert": str(upsert).lower()},
             content=content,
             timeout=30,
         )

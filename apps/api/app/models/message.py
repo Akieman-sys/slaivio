@@ -15,3 +15,8 @@ class NormalizedMessage(BaseModel):
     sender_name: str | None = None
     conversation_name: str | None = None
     is_group: bool = False
+    sender_jid: str | None = None
+    media_object_path: str | None = None
+    media_mime_type: str | None = None
+    media_file_name: str | None = None
+    media_size_bytes: int | None = None

@@ -45,6 +45,25 @@ def test_group_conversation_identity_is_persisted_and_visible_in_the_inbox():
     assert "message.sender_phone" in dashboard
 
 
+def test_qr_inbox_filters_newsletters_and_persists_private_media():
+    root = Path(__file__).parents[3]
+    migration = (root / "infra/sql/112_pilot_whatsapp_inbox_media.sql").read_text(encoding="utf-8")
+    repository = (root / "apps/api/app/db/pilot_inbox_repository.py").read_text(encoding="utf-8")
+    gateway = (root / "apps/whatsapp-qr-gateway/src/session-manager.js").read_text(encoding="utf-8")
+    identity = (root / "apps/whatsapp-qr-gateway/src/message-identity.js").read_text(encoding="utf-8")
+    dashboard = (root / "apps/web/dashboard/components/inbox/pilot-inbox-page.tsx").read_text(encoding="utf-8")
+
+    for column in ("sender_jid", "media_object_path", "media_mime_type", "media_file_name"):
+        assert f"add column if not exists {column}" in migration
+        assert column in repository
+    assert "isJidNewsletter(remoteJid)" in gateway
+    assert "participantPn" in identity
+    assert "downloadMediaMessage" in gateway
+    assert "media_base64" in gateway
+    assert "<audio controls" in dashboard
+    assert "<Image unoptimized src={message.media_url}" in dashboard
+
+
 def test_group_waits_until_a_client_is_explicitly_attached(monkeypatch):
     monkeypatch.setattr(service, "_context", lambda *_: {
         "whatsapp_group_on_dossier_create": True,

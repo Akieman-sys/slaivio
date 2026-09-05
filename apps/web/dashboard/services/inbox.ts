@@ -76,8 +76,13 @@ export type InboxMessage = {
   received_at?: string | null;
   sender_phone?: string | null;
   sender_name?: string | null;
+  sender_jid?: string | null;
   conversation_jid?: string | null;
   is_group?: boolean;
+  media_url?: string | null;
+  media_mime_type?: string | null;
+  media_file_name?: string | null;
+  media_size_bytes?: number | null;
 };
 
 export type InboxClient = {

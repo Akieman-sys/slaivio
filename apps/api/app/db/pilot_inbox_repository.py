@@ -1,6 +1,7 @@
 from sqlalchemy import text
 
 from app.db.database import engine
+from app.services.dossier_document_storage import create_document_download_url
 
 
 PHONE_SQL = "regexp_replace(coalesce({value}, ''), '[^0-9]', '', 'g')"
@@ -109,6 +110,8 @@ def list_conversations(
           count(*) message_count
         from messages
         where org_id = :org_id
+          and coalesce(sender_jid, '') not like '%@newsletter'
+          and coalesce(conversation_jid, '') not like '%@newsletter'
         group by org_id, coalesce(nullif(conversation_jid, ''), case when direction = 'outbound' then to_phone else from_phone end)
       ), enriched as (
         select
@@ -218,7 +221,8 @@ def conversation_detail(org_id: str, phone: str, before=None, message_limit: int
           select * from (
             select id, direction, text_body, message_type, send_status, error_message,
                    provider_message_id, created_at, received_at, from_phone sender_phone,
-                   sender_name, conversation_jid, is_group
+                   sender_name, sender_jid, conversation_jid, is_group,
+                   media_object_path, media_mime_type, media_file_name, media_size_bytes
             from messages
             where org_id = :org_id
               and coalesce(nullif(conversation_jid, ''), case when direction='outbound' then to_phone else from_phone end) = :phone
@@ -231,6 +235,16 @@ def conversation_detail(org_id: str, phone: str, before=None, message_limit: int
         has_older_messages = len(messages) > message_limit
         if has_older_messages:
             messages = messages[1:]
+        for message in messages:
+            object_path = message.get("media_object_path")
+            message["media_url"] = None
+            if object_path:
+                try:
+                    message["media_url"] = create_document_download_url(object_path, expires_in=300)
+                except RuntimeError:
+                    # The text/caption must remain readable even if storage is
+                    # temporarily unavailable.
+                    pass
         dossiers = _rows(conn.execute(text("""
               select dossier.id, dossier.dossier_reference, dossier.title,
                      coalesce(relation.last_updated_at, dossier.updated_at) last_updated_at,

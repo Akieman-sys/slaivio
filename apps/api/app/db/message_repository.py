@@ -664,6 +664,11 @@ def create_message(
     sender_name: str | None = None,
     conversation_name: str | None = None,
     is_group: bool = False,
+    sender_jid: str | None = None,
+    media_object_path: str | None = None,
+    media_mime_type: str | None = None,
+    media_file_name: str | None = None,
+    media_size_bytes: int | None = None,
 ):
     with engine.connect() as conn:
         result = conn.execute(
@@ -689,7 +694,12 @@ def create_message(
                     conversation_jid,
                     sender_name,
                     conversation_name,
-                    is_group
+                    is_group,
+                    sender_jid,
+                    media_object_path,
+                    media_mime_type,
+                    media_file_name,
+                    media_size_bytes
                 )
                 values (
                     :org_id,
@@ -712,7 +722,12 @@ def create_message(
                     :conversation_jid,
                     :sender_name,
                     :conversation_name,
-                    :is_group
+                    :is_group,
+                    :sender_jid,
+                    :media_object_path,
+                    :media_mime_type,
+                    :media_file_name,
+                    :media_size_bytes
                 )
                 on conflict (dedupe_key) do nothing
                 returning *
@@ -739,6 +754,11 @@ def create_message(
                 "sender_name": sender_name,
                 "conversation_name": conversation_name,
                 "is_group": is_group,
+                "sender_jid": sender_jid,
+                "media_object_path": media_object_path,
+                "media_mime_type": media_mime_type,
+                "media_file_name": media_file_name,
+                "media_size_bytes": media_size_bytes,
             },
         )
 

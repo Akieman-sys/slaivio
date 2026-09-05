@@ -91,9 +91,12 @@ async def process_normalized_whatsapp_message(
     if not org_id:
         raise ValueError("A verified organization is required before processing a message")
 
-    client_id = find_client_by_phone(
-        org_id=org_id,
-        phone=normalized_message.from_phone,
+    # A WhatsApp LID is a private addressing identifier, not a phone number.
+    # Never use its digits to match a CRM client.
+    client_id = (
+        find_client_by_phone(org_id=org_id, phone=normalized_message.from_phone)
+        if normalized_message.from_phone.startswith("+")
+        else None
     )
 
     dossier_id = (
@@ -124,6 +127,11 @@ async def process_normalized_whatsapp_message(
         sender_name=normalized_message.sender_name,
         conversation_name=normalized_message.conversation_name,
         is_group=normalized_message.is_group,
+        sender_jid=normalized_message.sender_jid,
+        media_object_path=normalized_message.media_object_path,
+        media_mime_type=normalized_message.media_mime_type,
+        media_file_name=normalized_message.media_file_name,
+        media_size_bytes=normalized_message.media_size_bytes,
     )
 
     # PostgreSQL is the durable idempotency authority. In-memory deduplication

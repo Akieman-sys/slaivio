@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
+import base64
+import binascii
 import json
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,10 +20,45 @@ from app.db.whatsapp_qr_repository import (
 )
 from app.models.message import NormalizedMessage
 from app.services.pilot_inbound_ai_dispatch import run_pilot_inbox_ai
+from app.services.dossier_document_storage import upload_private_document
 from app.services.whatsapp_qr_gateway_client import qr_gateway_request, verify_gateway_signature
 
 
 router = APIRouter(tags=["whatsapp-qr"])
+
+_MAX_INBOUND_MEDIA_BYTES = 12 * 1024 * 1024
+_MEDIA_EXTENSIONS = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+    "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a",
+    "video/mp4": "mp4", "application/pdf": "pdf",
+}
+
+
+def _store_inbound_media(org_id: str, connection_id: str, payload: dict) -> dict:
+    encoded = payload.pop("media_base64", None)
+    if not encoded:
+        return {}
+    if not isinstance(encoded, str) or len(encoded) > (_MAX_INBOUND_MEDIA_BYTES * 4 // 3) + 16:
+        raise ValueError("qr_inbound_media_too_large")
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("qr_inbound_media_invalid") from exc
+    if not content or len(content) > _MAX_INBOUND_MEDIA_BYTES:
+        raise ValueError("qr_inbound_media_too_large")
+    mime_type = str(payload.get("media_mime_type") or "application/octet-stream").split(";", 1)[0].lower()
+    extension = _MEDIA_EXTENSIONS.get(mime_type, "bin")
+    message_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(payload.get("provider_message_id") or uuid.uuid4()))[:180]
+    object_path = f"whatsapp/{org_id}/{connection_id}/{message_id}.{extension}"
+    # Callback retries are idempotent: the same provider message replaces the
+    # same private object if persistence failed after a successful upload.
+    upload_private_document(object_path, content, mime_type, upsert=True)
+    return {
+        "media_object_path": object_path,
+        "media_mime_type": mime_type,
+        "media_file_name": str(payload.get("media_file_name") or f"media.{extension}")[:255],
+        "media_size_bytes": len(content),
+    }
 
 
 def _actor(manager: dict) -> str:
@@ -85,10 +123,13 @@ async def receive_qr_gateway_event(request: Request):
     connection = get_connection(org_id, connection_id)
     if not connection:
         raise HTTPException(404, "pilot_whatsapp_qr_connection_not_found")
-    if not store_event(org_id, connection_id, event_key, event_type, payload):
+    # Never copy binary base64 into audit/raw-payload tables.
+    media_base64 = payload.get("media_base64")
+    audit_payload = {key: value for key, value in payload.items() if key != "media_base64"}
+    if not store_event(org_id, connection_id, event_key, event_type, audit_payload):
         return {"status": "duplicate"}
     try:
-        updated = update_connection_from_gateway(connection_id, org_id, event_type, payload)
+        updated = update_connection_from_gateway(connection_id, org_id, event_type, audit_payload)
         if event_type == "CONNECTED":
             linked_jid = str(payload.get("linked_jid") or "").strip()
             phone = str(payload.get("phone_number") or "").strip()
@@ -104,6 +145,13 @@ async def receive_qr_gateway_event(request: Request):
         elif event_type in {"DISCONNECTED", "LOGGED_OUT", "FAILED"}:
             disable_linked_number(connection_id, org_id, event_type)
         elif event_type == "MESSAGE_RECEIVED":
+            if payload.get("is_newsletter"):
+                finish_event(org_id, event_key, "PROCESSED")
+                return {"status": "ignored", "reason": "whatsapp_newsletter"}
+            media_payload = dict(audit_payload)
+            if media_base64:
+                media_payload["media_base64"] = media_base64
+            media = _store_inbound_media(org_id, connection_id, media_payload)
             received = payload.get("received_at")
             try:
                 received_at = datetime.fromisoformat(str(received).replace("Z", "+00:00"))
@@ -111,17 +159,19 @@ async def receive_qr_gateway_event(request: Request):
                 received_at = datetime.now(timezone.utc)
             normalized = NormalizedMessage(
                 provider_message_id=payload.get("provider_message_id"),
-                from_phone=str(payload["from_phone"]), to_phone=payload.get("to_phone"),
+                from_phone=str(payload.get("from_phone") or payload.get("sender_jid") or "unknown"), to_phone=payload.get("to_phone"),
                 text_body=payload.get("text_body"), message_type=payload.get("message_type") or "text",
                 received_at=received_at, dedupe_key=str(payload.get("provider_message_id") or event_key),
                 conversation_jid=payload.get("group_jid"),
                 sender_name=payload.get("sender_name"),
                 conversation_name=payload.get("group_name"),
                 is_group=bool(payload.get("group_jid")),
+                sender_jid=payload.get("sender_jid"),
+                **media,
             )
             number_id = connection.get("whatsapp_number_id") or updated.get("whatsapp_number_id")
             result = await process_normalized_whatsapp_message(
-                normalized, payload, org_id=org_id, provider="QR_LINKED_DEVICE",
+                normalized, audit_payload, org_id=org_id, provider="QR_LINKED_DEVICE",
                 provider_phone_number_id=connection.get("linked_jid"), whatsapp_number_id=number_id,
                 number_role="SUPPORT",
             )

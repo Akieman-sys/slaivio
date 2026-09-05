@@ -1,17 +1,36 @@
-import makeWASocket, { DisconnectReason, jidNormalizedUser } from "@whiskeysockets/baileys";
+import makeWASocket, {
+  DisconnectReason, downloadMediaMessage, extractMessageContent, getContentType,
+  isJidNewsletter, isJidStatusBroadcast, jidNormalizedUser,
+} from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import pino from "pino";
 import { createPostgresAuthState } from "./auth-store.js";
 import { emitCallback } from "./callback.js";
 import { pool } from "./db.js";
+import { phoneFromJid, resolveSenderIdentity } from "./message-identity.js";
 
 const sessions = new Map();
 const logger = pino({ level: process.env.LOG_LEVEL || "info", redact: ["qr", "message", "payload"] });
+const MAX_INBOUND_MEDIA_BYTES = 12 * 1024 * 1024;
 
 const eventKey = (connectionId, type, suffix = crypto.randomUUID()) => `qr:${connectionId}:${type}:${suffix}`;
-const phoneFromJid = jid => `+${String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "")}`;
-const textFromMessage = message => message?.conversation || message?.extendedTextMessage?.text || message?.imageMessage?.caption || message?.videoMessage?.caption || message?.documentMessage?.caption || null;
+const messageContent = message => extractMessageContent(message) || message || {};
+const textFromMessage = message => {
+  const content = messageContent(message);
+  return content?.conversation || content?.extendedTextMessage?.text || content?.imageMessage?.caption || content?.videoMessage?.caption || content?.documentMessage?.caption || null;
+};
+const mediaMetadata = message => {
+  const content = messageContent(message);
+  const contentType = getContentType(content);
+  if (!["imageMessage", "audioMessage", "videoMessage", "documentMessage"].includes(contentType)) return null;
+  const media = content[contentType];
+  return {
+    messageType: contentType.replace("Message", ""),
+    mimeType: media?.mimetype || "application/octet-stream",
+    fileName: media?.fileName || null,
+  };
+};
 const reconnectDelay = attempt => Math.min(60_000, 2_000 * (2 ** Math.min(attempt, 5)));
 
 async function notify(session, eventType, payload = {}, suffix) {
@@ -59,8 +78,10 @@ export async function startSession(id, orgId) {
   const current = sessions.get(id);
   if (current?.starting || ["CONNECTED", "QR_READY", "CONNECTING"].includes(current?.status)) return publicState(current);
   const session = current || { id, orgId, status: "CONNECTING", qrDataUrl: null, qrExpiresAt: null,
-    socket: null, reconnectAttempts: 0, reconnectTimer: null, connectionWatchdog: null, intentionalLogout: false };
+    socket: null, reconnectAttempts: 0, reconnectTimer: null, connectionWatchdog: null, intentionalLogout: false,
+    lidPhoneMap: new Map() };
   session.orgId = orgId;
+  session.lidPhoneMap ||= new Map();
   session.starting = true;
   session.status = "CONNECTING";
   session.intentionalLogout = false;
@@ -87,6 +108,15 @@ export async function startSession(id, orgId) {
     socket.end(new Error("connection_timeout"));
   }, 45_000);
   socket.ev.on("creds.update", auth.saveCreds);
+  const rememberContact = contact => {
+    const lid = jidNormalizedUser(String(contact?.lid || (String(contact?.id || "").endsWith("@lid") ? contact.id : "")));
+    const jid = jidNormalizedUser(String(contact?.jid || (String(contact?.id || "").endsWith("@s.whatsapp.net") ? contact.id : "")));
+    if (lid && phoneFromJid(jid)) session.lidPhoneMap.set(lid, jid);
+  };
+  socket.ev.on("contacts.upsert", contacts => contacts.forEach(rememberContact));
+  socket.ev.on("contacts.update", contacts => contacts.forEach(rememberContact));
+  socket.ev.on("messaging-history.set", ({ contacts }) => (contacts || []).forEach(rememberContact));
+  socket.ev.on("chats.phoneNumberShare", ({ lid, jid }) => rememberContact({ lid, jid }));
   socket.ev.on("connection.update", async update => {
     try {
       if (update.qr) {
@@ -126,7 +156,8 @@ export async function startSession(id, orgId) {
     if (type !== "notify") return;
     for (const item of messages) {
       try {
-        if (!item.message || item.key.fromMe || item.key.remoteJid === "status@broadcast") continue;
+        const remoteJid = item.key.remoteJid || "";
+        if (!item.message || item.key.fromMe || isJidStatusBroadcast(remoteJid) || isJidNewsletter(remoteJid)) continue;
         const preferences = await pool.query(
           `select coalesce(number.auto_mark_read,false) auto_mark_read,
                   coalesce(number.group_replies_enabled,false) group_replies_enabled
@@ -143,20 +174,41 @@ export async function startSession(id, orgId) {
           );
           if (!managedGroup.rowCount) continue;
         }
-        const sourceJid = jidNormalizedUser(isGroup ? item.key.participant : (item.key.remoteJidAlt || item.key.remoteJid || ""));
+        let identity = resolveSenderIdentity(item.key, isGroup, session.lidPhoneMap);
         const text = textFromMessage(item.message);
-        const messageType = Object.keys(item.message)[0]?.replace("Message", "") || "unknown";
+        const media = mediaMetadata(item.message);
+        const messageType = media?.messageType || getContentType(messageContent(item.message))?.replace("Message", "") || "unknown";
         let groupName = null;
         if (isGroup) {
-          try { groupName = (await socket.groupMetadata(item.key.remoteJid))?.subject || null; }
+          try {
+            const metadata = await socket.groupMetadata(item.key.remoteJid);
+            groupName = metadata?.subject || null;
+            (metadata?.participants || []).forEach(rememberContact);
+            identity = resolveSenderIdentity(item.key, isGroup, session.lidPhoneMap);
+          }
           catch (error) { logger.warn({ error: error.message, groupJid: item.key.remoteJid }, "group_metadata_unavailable"); }
         }
+        let mediaBase64 = null;
+        if (media) {
+          try {
+            const buffer = await downloadMediaMessage(item, "buffer", {}, { logger, reuploadRequest: socket.updateMediaMessage });
+            if (buffer.length <= MAX_INBOUND_MEDIA_BYTES) mediaBase64 = buffer.toString("base64");
+            else logger.warn({ connectionId: id, messageId: item.key.id, size: buffer.length }, "inbound_media_too_large");
+          } catch (error) {
+            logger.warn({ error: error.message, connectionId: id, messageId: item.key.id }, "inbound_media_download_failed");
+          }
+        }
         if (preference.auto_mark_read) await socket.readMessages([item.key]);
-        await notify(session, "MESSAGE_RECEIVED", { provider_message_id: item.key.id, from_phone: phoneFromJid(sourceJid),
+        await notify(session, "MESSAGE_RECEIVED", { provider_message_id: item.key.id, from_phone: identity.phone,
+          sender_jid: identity.senderJid,
           to_phone: phoneFromJid(socket.user?.id), text_body: text, message_type: messageType,
           group_jid: isGroup ? item.key.remoteJid : null,
           group_name: groupName,
           sender_name: item.pushName || null,
+          is_newsletter: false,
+          media_base64: mediaBase64,
+          media_mime_type: media?.mimeType || null,
+          media_file_name: media?.fileName || null,
           received_at: new Date(Number(item.messageTimestamp || Date.now() / 1000) * 1000).toISOString() }, item.key.id);
       } catch (error) { logger.error({ error: error.message, connectionId: id }, "message_callback_failed"); }
     }

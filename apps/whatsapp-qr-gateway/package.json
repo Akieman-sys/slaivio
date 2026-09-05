@@ -6,7 +6,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node test/crypto.test.js && node test/signature.test.js"
+    "test": "node test/crypto.test.js && node test/signature.test.js && node test/message-identity.test.js"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
